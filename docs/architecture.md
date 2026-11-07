@@ -27,12 +27,9 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
 | `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ⏳ planejado   |
 | `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
-| `gateway`      | API Gateway (roteamento, validação de token, CORS)                       | ⏳ planejado   |
+| `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
 Frontend: `apps/web` (SPA React + TS) — ✅ implementado (login OAuth2 + PKCE).
-
-> O `gateway` entra quando houver serviços de recurso (accounts/transactions):
-> hoje a SPA fala direto com o `identity` para autenticar.
 
 ## Arquitetura hexagonal (ports & adapters)
 
@@ -118,6 +115,21 @@ Segurança e isolamento:
   Docker; `ValidIssuer` = issuer público). Audience `expense-tracking-api`, algoritmo RS256.
 - **Políticas de escopo**: leitura exige `expenses.read`; escrita exige `expenses.write`.
 - **Isolamento por dono**: toda consulta é filtrada pelo `sub` do token (um usuário só vê os próprios dados).
+
+## Gateway (YARP) — implementado
+
+Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy YARP.
+
+- Rota `/{**}` sob `/api/**` → cluster `accounts` (remove o prefixo `/api`): ex.
+  `GET /api/accounts` → `accounts` `/accounts`.
+- **Validação do token na borda** (mesma config JWT dos serviços) via policy `authenticated`:
+  sem token válido, o gateway responde 401 e nem encaminha.
+- **CORS centralizado** para a origem da SPA.
+- Escopo e isolamento por dono continuam sendo aplicados no serviço de destino (defesa em profundidade).
+
+Topologia: o `identity` permanece acessível diretamente (é o emissor dos tokens — o `iss`
+precisa bater com o issuer configurado). A SPA autentica no `identity` e chama as APIs de
+recurso através do gateway. Novos serviços (ex.: `transactions`) entram como novas rotas/clusters.
 
 ## Padrões do monorepo
 

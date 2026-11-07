@@ -25,6 +25,10 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
   </ItemGroup>
 
+  <ItemGroup Label="Gateway">
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+  </ItemGroup>
+
   <ItemGroup Label="ASP.NET Core / Auth">
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />

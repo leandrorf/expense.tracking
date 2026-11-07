@@ -86,6 +86,29 @@ services:
     networks:
       - expense-net
 
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    container_name: expense-gateway
+    depends_on:
+      identity:
+        condition: service_started
+      accounts:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
+      Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
+      Jwt__Audience: expense-tracking-api
+      Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
+      # Destino do cluster 'accounts' na rede interna.
+      ReverseProxy__Clusters__accounts__Destinations__accounts-1__Address: "http://accounts:8080/"
+    ports:
+      - "${GATEWAY_HTTP_PORT:-8080}:8080"
+    networks:
+      - expense-net
+
   web:
     build:
       context: ./apps/web

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Expense.Tracking.Gateway/Expense.Tracking.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Expense.Tracking.Gateway.IntegrationTests/Expense.Tracking.Gateway.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
