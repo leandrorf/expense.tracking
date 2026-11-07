@@ -107,3 +107,142 @@ button.ghost {
   font-size: 0.8rem;
   color: #64748b;
 }
+
+/* ---- App layout (autenticado) ---- */
+.app {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  flex-wrap: wrap;
+}
+
+.topbar .tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.tabs button {
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+}
+
+.tabs button.active {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.topbar .user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.content {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+}
+
+.content h2 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+
+/* ---- Forms em linha ---- */
+.row-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.row-form.wrap {
+  flex-wrap: wrap;
+}
+
+.row-form input,
+.row-form select,
+.filters select {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.row-form input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.row-form button {
+  white-space: nowrap;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+/* ---- Tabelas ---- */
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+table.data th,
+table.data td {
+  text-align: left;
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid #1f2b3e;
+}
+
+table.data th {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+table.data td.right,
+table.data th.right {
+  text-align: right;
+}
+
+table.data tr.inactive {
+  opacity: 0.45;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.link-danger {
+  background: transparent;
+  color: #f87171;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.link-danger:hover {
+  text-decoration: underline;
+  background: transparent;
+}

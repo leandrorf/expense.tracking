@@ -33,7 +33,7 @@ expense.tracking/
 │   │   └── tests/ UnitTests | IntegrationTests
 │   └── gateway/           # API Gateway (YARP) — IMPLEMENTADO
 └── apps/
-    └── web/               # SPA React + TS (login OAuth2 + PKCE) — IMPLEMENTADO
+    └── web/               # SPA React + TS (login + contas/cartões/lançamentos) — IMPLEMENTADO
 ```
 
 ## Pré-requisitos
@@ -66,8 +66,8 @@ Com o seed habilitado, são criados:
 - Cliente de serviço confidencial: `expense-tracking-service` / `dev-service-secret`
 - Usuário demo: `demo@expense.local` / `Password123!`
 
-Abra `http://localhost:5173`, clique em **Entrar**, autentique com o usuário demo e veja
-os dados do token em `/connect/userinfo`. Verificações rápidas:
+Abra `http://localhost:5173`, clique em **Entrar**, autentique com o usuário demo e use as
+abas **Lançamentos / Contas / Cartões** (a SPA chama as APIs pelo gateway). Verificações rápidas:
 
 ```bash
 curl http://localhost:5080/health
@@ -110,6 +110,6 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. Telas da SPA para gerenciar contas, cartões e lançamentos (consumindo as APIs pelo gateway)
-2. `reporting` (relatórios/consolidação de gastos por período, conta, categoria)
-3. Testes E2E de ponta a ponta entre serviços e SPA
+1. `reporting` (relatórios/consolidação de gastos por período, conta, categoria, PF vs PJ)
+2. Testes E2E de ponta a ponta (ex.: Cypress) cobrindo login + fluxo de lançamentos na SPA
+3. Alinhar o contrato de meios de pagamento entre `accounts` e `transactions`

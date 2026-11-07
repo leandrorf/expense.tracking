@@ -11,11 +11,13 @@ COPY . .
 ARG VITE_IDENTITY_AUTHORITY=http://localhost:5080
 ARG VITE_CLIENT_ID=expense-tracking-spa
 ARG VITE_REDIRECT_URI=http://localhost:5173/callback
-ARG VITE_SCOPE="openid profile expenses.read offline_access"
+ARG VITE_SCOPE="openid profile expenses.read expenses.write offline_access"
+ARG VITE_API_BASE_URL=http://localhost:8080
 ENV VITE_IDENTITY_AUTHORITY=$VITE_IDENTITY_AUTHORITY \
     VITE_CLIENT_ID=$VITE_CLIENT_ID \
     VITE_REDIRECT_URI=$VITE_REDIRECT_URI \
-    VITE_SCOPE=$VITE_SCOPE
+    VITE_SCOPE=$VITE_SCOPE \
+    VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build
 

@@ -29,7 +29,8 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
 | `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
-Frontend: `apps/web` (SPA React + TS) — ✅ implementado (login OAuth2 + PKCE).
+Frontend: `apps/web` (SPA React + TS) — ✅ login OAuth2 + PKCE **e** telas de contas,
+cartões e lançamentos (consome as APIs pelo gateway).
 
 ## Arquitetura hexagonal (ports & adapters)
 
@@ -88,7 +89,13 @@ CORS: o `identity` libera a origem da SPA (`Cors:AllowedOrigins`, default `http:
 para os endpoints chamados por `fetch` (`/oauth/token`, `/connect/userinfo`).
 
 A SPA implementa o PKCE e a troca de tokens **sem bibliotecas de terceiros** (Web Crypto API),
-guardando os tokens em `sessionStorage`.
+guardando os tokens em `sessionStorage`. As telas (contas, cartões, lançamentos) chamam as
+APIs de recurso pelo **gateway** (`VITE_API_BASE_URL`), anexando o `Bearer` e renovando o
+token automaticamente em caso de 401.
+
+> Nota de consistência: o catálogo `/payment-methods` (accounts) usa códigos snake_case
+> (`credit_card`), enquanto o `transactions` aceita os nomes do enum (`CreditCard`). A SPA
+> usa os nomes do enum ao criar lançamentos. Alinhar os dois contratos é um ajuste futuro.
 
 ### Simplificações atuais (a evoluir)
 
