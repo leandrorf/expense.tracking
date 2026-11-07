@@ -1,0 +1,7 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Expense.Tracking.Reporting.Domain\Expense.Tracking.Reporting.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

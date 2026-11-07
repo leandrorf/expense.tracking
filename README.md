@@ -31,6 +31,9 @@ expense.tracking/
 │   ├── transactions/      # Lançamentos de gastos (valida contas/cartões no accounts) — IMPLEMENTADO
 │   │   ├── src/ Domain | Application | Infrastructure | Api
 │   │   └── tests/ UnitTests | IntegrationTests
+│   ├── reporting/         # Consolidação de gastos (agregador) — IMPLEMENTADO
+│   │   ├── src/ Domain | Application | Infrastructure | Api
+│   │   └── tests/ UnitTests | IntegrationTests
 │   └── gateway/           # API Gateway (YARP) — IMPLEMENTADO
 └── apps/
     └── web/               # SPA React + TS (login + contas/cartões/lançamentos) — IMPLEMENTADO
@@ -54,6 +57,7 @@ Sobem os serviços:
 - **Identity** em `http://localhost:5080`
 - **Accounts** em `http://localhost:5090` (protegido por JWT; requer `Authorization: Bearer`)
 - **Transactions** em `http://localhost:5100` (protegido por JWT; valida contas/cartões no accounts)
+- **Reporting** em `http://localhost:5110` (consolidação; agrega transactions + accounts)
 - **Gateway** em `http://localhost:8080` (entrada única das APIs de recurso sob `/api/**`)
 - **SPA (web)** em `http://localhost:5173`
 
@@ -67,7 +71,7 @@ Com o seed habilitado, são criados:
 - Usuário demo: `demo@expense.local` / `Password123!`
 
 Abra `http://localhost:5173`, clique em **Entrar**, autentique com o usuário demo e use as
-abas **Lançamentos / Contas / Cartões** (a SPA chama as APIs pelo gateway). Verificações rápidas:
+abas **Resumo / Lançamentos / Contas / Cartões** (a SPA chama as APIs pelo gateway). Verificações rápidas:
 
 ```bash
 curl http://localhost:5080/health
@@ -110,6 +114,6 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. `reporting` (relatórios/consolidação de gastos por período, conta, categoria, PF vs PJ)
-2. Testes E2E de ponta a ponta (ex.: Cypress) cobrindo login + fluxo de lançamentos na SPA
-3. Alinhar o contrato de meios de pagamento entre `accounts` e `transactions`
+1. Testes E2E de ponta a ponta (ex.: Cypress) cobrindo login + lançamentos + resumo na SPA
+2. Alinhar o contrato de meios de pagamento entre `accounts` e `transactions`
+3. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)

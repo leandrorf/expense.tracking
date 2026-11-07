@@ -26,11 +26,11 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS                   | ✅ implementado |
 | `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
 | `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ✅ implementado |
-| `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
+| `reporting`    | Consolidação de gastos (serviço agregador sobre transactions + accounts) | ✅ implementado |
 | `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
-Frontend: `apps/web` (SPA React + TS) — ✅ login OAuth2 + PKCE **e** telas de contas,
-cartões e lançamentos (consome as APIs pelo gateway).
+Frontend: `apps/web` (SPA React + TS) — ✅ login OAuth2 + PKCE **e** telas de resumo,
+contas, cartões e lançamentos (consome as APIs pelo gateway).
 
 ## Arquitetura hexagonal (ports & adapters)
 
@@ -138,13 +138,26 @@ cartão chamando o `accounts` por HTTP, **encaminhando o token do usuário** (po
 Como o `accounts` filtra pelo dono do token, um 200 confirma existência **e** posse — sem acessar
 o banco de outro serviço. Nos testes, a porta é substituída por um fake.
 
+## Serviço `reporting` (agregador) — implementado
+
+Consolida gastos **sem banco próprio**: é um agregador que lê o `transactions` e o `accounts`
+por HTTP (encaminhando o token do usuário) e calcula os totais em memória.
+
+- `GET /reports/summary?accountId=&from=&to=` → total de gastos, receitas, saldo, contagem,
+  e quebras **por categoria**, **por escopo (PF/PJ)** e **por meio de pagamento**.
+- O cálculo (`SummaryCalculator`) é uma função pura no domínio — totalmente testável.
+- O mapa conta→escopo (PF/PJ) vem do `accounts`; os lançamentos, do `transactions`.
+
+> Como não há broker de eventos, optou-se por agregação sob demanda (em vez de read models
+> materializados por eventos). Evoluir para projeções via eventos é um passo futuro.
+
 ## Gateway (YARP) — implementado
 
 Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy YARP.
 
-- `/api/transactions/**` → cluster `transactions`; `/api/**` (demais) → cluster `accounts`
-  (remove o prefixo `/api`): ex. `GET /api/accounts` → `accounts` `/accounts`,
-  `GET /api/transactions` → `transactions` `/transactions`.
+- `/api/transactions/**` → `transactions`; `/api/reports/**` → `reporting`;
+  `/api/**` (demais) → `accounts`. Remove o prefixo `/api`: ex. `GET /api/accounts` →
+  `accounts` `/accounts`, `GET /api/reports/summary` → `reporting` `/reports/summary`.
 - **Validação do token na borda** (mesma config JWT dos serviços) via policy `authenticated`:
   sem token válido, o gateway responde 401 e nem encaminha.
 - **CORS centralizado** para a origem da SPA.

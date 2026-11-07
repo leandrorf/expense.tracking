@@ -9,16 +9,17 @@ import {
 } from './auth/oauth';
 import { AccountsView } from './views/AccountsView';
 import { CardsView } from './views/CardsView';
+import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'accounts' | 'cards' | 'transactions';
+type Tab = 'summary' | 'accounts' | 'cards' | 'transactions';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<UserInfo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('transactions');
+  const [tab, setTab] = useState<Tab>('summary');
 
   useEffect(() => {
     void bootstrap();
@@ -74,6 +75,9 @@ export function App() {
       <header className="topbar">
         <strong>Expense Tracking</strong>
         <nav className="tabs">
+          <button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>
+            Resumo
+          </button>
           <button className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
             Lançamentos
           </button>
@@ -93,6 +97,7 @@ export function App() {
       </header>
 
       <main className="content">
+        {tab === 'summary' && <SummaryView />}
         {tab === 'transactions' && <TransactionsView />}
         {tab === 'accounts' && <AccountsView />}
         {tab === 'cards' && <CardsView />}

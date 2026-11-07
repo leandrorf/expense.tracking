@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Adaptadores dirigidos (driven): clients HTTP para transactions e accounts. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Expense.Tracking.Reporting.Application\Expense.Tracking.Reporting.Application.csproj" />
+    <ProjectReference Include="..\Expense.Tracking.Reporting.Domain\Expense.Tracking.Reporting.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
