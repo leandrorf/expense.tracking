@@ -28,6 +28,9 @@ expense.tracking/
 │   ├── accounts/          # Contas PF/PJ + cartões + meios de pagamento — IMPLEMENTADO
 │   │   ├── src/ Domain | Application | Infrastructure | Api
 │   │   └── tests/ UnitTests | IntegrationTests
+│   ├── transactions/      # Lançamentos de gastos (valida contas/cartões no accounts) — IMPLEMENTADO
+│   │   ├── src/ Domain | Application | Infrastructure | Api
+│   │   └── tests/ UnitTests | IntegrationTests
 │   └── gateway/           # API Gateway (YARP) — IMPLEMENTADO
 └── apps/
     └── web/               # SPA React + TS (login OAuth2 + PKCE) — IMPLEMENTADO
@@ -50,6 +53,7 @@ Sobem os serviços:
 
 - **Identity** em `http://localhost:5080`
 - **Accounts** em `http://localhost:5090` (protegido por JWT; requer `Authorization: Bearer`)
+- **Transactions** em `http://localhost:5100` (protegido por JWT; valida contas/cartões no accounts)
 - **Gateway** em `http://localhost:8080` (entrada única das APIs de recurso sob `/api/**`)
 - **SPA (web)** em `http://localhost:5173`
 
@@ -106,7 +110,6 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. `transactions` (lançamentos de gastos, usando contas/cartões/meios de pagamento) — via gateway
-2. Telas da SPA para gerenciar contas e cartões (consumindo o `accounts` pelo gateway)
-3. `reporting` (relatórios/consolidação)
-4. Testes E2E de ponta a ponta entre serviços e SPA
+1. Telas da SPA para gerenciar contas, cartões e lançamentos (consumindo as APIs pelo gateway)
+2. `reporting` (relatórios/consolidação de gastos por período, conta, categoria)
+3. Testes E2E de ponta a ponta entre serviços e SPA

@@ -25,7 +25,7 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 |----------------|-------------------------------------------------------------------------|---------------|
 | `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS                   | ✅ implementado |
 | `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
-| `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ⏳ planejado   |
+| `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ✅ implementado |
 | `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
 | `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
@@ -116,12 +116,28 @@ Segurança e isolamento:
 - **Políticas de escopo**: leitura exige `expenses.read`; escrita exige `expenses.write`.
 - **Isolamento por dono**: toda consulta é filtrada pelo `sub` do token (um usuário só vê os próprios dados).
 
+## Serviço `transactions` (recurso) — implementado
+
+Núcleo do controle de gastos. Mesma divisão hexagonal, banco próprio `expense_transactions`,
+protegido por JWT Bearer (escopo + isolamento por dono).
+
+- **Lançamentos** (`/transactions`): valor (Money: positivo, 2 casas, ISO), tipo (gasto/receita),
+  meio de pagamento, categoria, data, observações; referencia `accountId` e, quando crédito, `creditCardId`.
+- **Regras**: cartão de crédito exige `creditCardId`; demais meios não aceitam cartão.
+- **Listagem com filtros**: por conta, categoria e período (`from`/`to`).
+
+**Comunicação entre serviços**: ao criar um lançamento, o `transactions` valida a conta e o
+cartão chamando o `accounts` por HTTP, **encaminhando o token do usuário** (porta `IAccountsClient`).
+Como o `accounts` filtra pelo dono do token, um 200 confirma existência **e** posse — sem acessar
+o banco de outro serviço. Nos testes, a porta é substituída por um fake.
+
 ## Gateway (YARP) — implementado
 
 Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy YARP.
 
-- Rota `/{**}` sob `/api/**` → cluster `accounts` (remove o prefixo `/api`): ex.
-  `GET /api/accounts` → `accounts` `/accounts`.
+- `/api/transactions/**` → cluster `transactions`; `/api/**` (demais) → cluster `accounts`
+  (remove o prefixo `/api`): ex. `GET /api/accounts` → `accounts` `/accounts`,
+  `GET /api/transactions` → `transactions` `/transactions`.
 - **Validação do token na borda** (mesma config JWT dos serviços) via policy `authenticated`:
   sem token válido, o gateway responde 401 e nem encaminha.
 - **CORS centralizado** para a origem da SPA.

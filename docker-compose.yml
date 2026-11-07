@@ -86,6 +86,53 @@ services:
     networks:
       - expense-net
 
+  transactions-db:
+    image: mysql:8.0
+    container_name: expense-transactions-db
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${TRANSACTIONS_DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${TRANSACTIONS_DB_NAME:-expense_transactions}
+      MYSQL_USER: ${TRANSACTIONS_DB_USER:-expense}
+      MYSQL_PASSWORD: ${TRANSACTIONS_DB_PASSWORD:-expense}
+    ports:
+      - "3309:3306"
+    volumes:
+      - transactions-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${TRANSACTIONS_DB_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - expense-net
+
+  transactions:
+    build:
+      context: .
+      dockerfile: services/transactions/Dockerfile
+    container_name: expense-transactions
+    depends_on:
+      transactions-db:
+        condition: service_healthy
+      identity:
+        condition: service_started
+      accounts:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TransactionsDb: "server=transactions-db;port=3306;database=${TRANSACTIONS_DB_NAME:-expense_transactions};user=${TRANSACTIONS_DB_USER:-expense};password=${TRANSACTIONS_DB_PASSWORD:-expense};"
+      Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
+      Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
+      Jwt__Audience: expense-tracking-api
+      Services__AccountsBaseUrl: "http://accounts:8080"
+      Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
+    ports:
+      - "${TRANSACTIONS_HTTP_PORT:-5100}:8080"
+    networks:
+      - expense-net
+
   gateway:
     build:
       context: .
@@ -96,14 +143,17 @@ services:
         condition: service_started
       accounts:
         condition: service_started
+      transactions:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
       Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
-      # Destino do cluster 'accounts' na rede interna.
+      # Destinos dos clusters na rede interna.
       ReverseProxy__Clusters__accounts__Destinations__accounts-1__Address: "http://accounts:8080/"
+      ReverseProxy__Clusters__transactions__Destinations__transactions-1__Address: "http://transactions:8080/"
     ports:
       - "${GATEWAY_HTTP_PORT:-8080}:8080"
     networks:
@@ -129,6 +179,7 @@ services:
 volumes:
   identity-db-data:
   accounts-db-data:
+  transactions-db-data:
 
 networks:
   expense-net:
