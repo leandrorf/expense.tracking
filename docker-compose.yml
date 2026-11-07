@@ -41,6 +41,51 @@ services:
     networks:
       - expense-net
 
+  accounts-db:
+    image: mysql:8.0
+    container_name: expense-accounts-db
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ACCOUNTS_DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${ACCOUNTS_DB_NAME:-expense_accounts}
+      MYSQL_USER: ${ACCOUNTS_DB_USER:-expense}
+      MYSQL_PASSWORD: ${ACCOUNTS_DB_PASSWORD:-expense}
+    ports:
+      - "3308:3306"
+    volumes:
+      - accounts-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${ACCOUNTS_DB_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - expense-net
+
+  accounts:
+    build:
+      context: .
+      dockerfile: services/accounts/Dockerfile
+    container_name: expense-accounts
+    depends_on:
+      accounts-db:
+        condition: service_healthy
+      identity:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__AccountsDb: "server=accounts-db;port=3306;database=${ACCOUNTS_DB_NAME:-expense_accounts};user=${ACCOUNTS_DB_USER:-expense};password=${ACCOUNTS_DB_PASSWORD:-expense};"
+      # Issuer publico (para validar o 'iss' do token) + metadados pela rede interna.
+      Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
+      Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
+      Jwt__Audience: expense-tracking-api
+      Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
+    ports:
+      - "${ACCOUNTS_HTTP_PORT:-5090}:8080"
+    networks:
+      - expense-net
+
   web:
     build:
       context: ./apps/web
@@ -49,7 +94,7 @@ services:
         VITE_IDENTITY_AUTHORITY: ${IDENTITY_ISSUER:-http://localhost:5080}
         VITE_CLIENT_ID: expense-tracking-spa
         VITE_REDIRECT_URI: "http://localhost:${WEB_HTTP_PORT:-5173}/callback"
-        VITE_SCOPE: "openid profile expenses.read offline_access"
+        VITE_SCOPE: "openid profile expenses.read expenses.write offline_access"
     container_name: expense-web
     depends_on:
       - identity
@@ -60,6 +105,7 @@ services:
 
 volumes:
   identity-db-data:
+  accounts-db-data:
 
 networks:
   expense-net:

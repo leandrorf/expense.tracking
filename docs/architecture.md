@@ -24,7 +24,7 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | Serviço        | Responsabilidade                                                        | Status        |
 |----------------|-------------------------------------------------------------------------|---------------|
 | `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS                   | ✅ implementado |
-| `accounts`     | Contas (PF/PJ), cartões de crédito, meios de pagamento                   | ⏳ planejado   |
+| `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
 | `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ⏳ planejado   |
 | `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
 | `gateway`      | API Gateway (roteamento, validação de token, CORS)                       | ⏳ planejado   |
@@ -101,6 +101,23 @@ guardando os tokens em `sessionStorage`.
 - A chave de assinatura é efêmera se `OAuth:SigningKey:PrivateKeyPem` não for configurada
   (apenas DEV). Em produção, injetar a chave via configuração/secret.
 - Tokens no `sessionStorage` (simples para DEV). Avaliar BFF/cookies httpOnly depois.
+
+## Serviço `accounts` (recurso) — implementado
+
+Primeiro serviço de recurso, protegido por **JWT Bearer** validado contra o JWKS do
+`identity`. Mesma divisão hexagonal. Banco próprio `expense_accounts` (container MySQL
+separado — um banco por serviço).
+
+- **Contas** (`/accounts`): PF/PJ, com validação de CPF/CNPJ coerente ao escopo, moeda ISO.
+- **Cartões de crédito** (`/credit-cards`): vinculados a uma conta, com ciclo (fechamento/vencimento) e limite.
+- **Meios de pagamento** (`/payment-methods`): catálogo (dinheiro, Pix, boleto, crédito, débito, transferência).
+
+Segurança e isolamento:
+
+- Validação do token via metadados OIDC do `identity` (`MetadataAddress` interno na rede
+  Docker; `ValidIssuer` = issuer público). Audience `expense-tracking-api`, algoritmo RS256.
+- **Políticas de escopo**: leitura exige `expenses.read`; escrita exige `expenses.write`.
+- **Isolamento por dono**: toda consulta é filtrada pelo `sub` do token (um usuário só vê os próprios dados).
 
 ## Padrões do monorepo
 

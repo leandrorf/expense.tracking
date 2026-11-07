@@ -13,7 +13,7 @@ export const authConfig: AuthConfig = {
   authority: import.meta.env.VITE_IDENTITY_AUTHORITY ?? 'http://localhost:5080',
   clientId: import.meta.env.VITE_CLIENT_ID ?? 'expense-tracking-spa',
   redirectUri: import.meta.env.VITE_REDIRECT_URI ?? 'http://localhost:5173/callback',
-  scope: import.meta.env.VITE_SCOPE ?? 'openid profile expenses.read offline_access',
+  scope: import.meta.env.VITE_SCOPE ?? 'openid profile expenses.read expenses.write offline_access',
 };
 
 interface TokenSet {

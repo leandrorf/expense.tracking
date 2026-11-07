@@ -22,7 +22,10 @@ expense.tracking/
 ├── docker-compose.yml / .env.example                   # MySQL + identity
 ├── docs/architecture.md
 ├── services/
-│   └── identity/          # Servidor OAuth2 (hexagonal) — IMPLEMENTADO
+│   ├── identity/          # Servidor OAuth2 (hexagonal) — IMPLEMENTADO
+│   │   ├── src/ Domain | Application | Infrastructure | Api
+│   │   └── tests/ UnitTests | IntegrationTests
+│   └── accounts/          # Contas PF/PJ + cartões + meios de pagamento — IMPLEMENTADO
 │       ├── src/ Domain | Application | Infrastructure | Api
 │       └── tests/ UnitTests | IntegrationTests
 └── apps/
@@ -42,9 +45,10 @@ cp .env.example .env          # ajuste as senhas
 docker compose up --build
 ```
 
-Sobem dois serviços:
+Sobem os serviços:
 
 - **Identity** em `http://localhost:5080`
+- **Accounts** em `http://localhost:5090` (protegido por JWT; requer `Authorization: Bearer`)
 - **SPA (web)** em `http://localhost:5173`
 
 Com o seed habilitado, são criados:
@@ -97,8 +101,8 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. `accounts` (contas PF/PJ, cartões, meios de pagamento) — primeiro serviço de recurso
-2. `gateway` (API Gateway) fronteando os serviços de recurso + validação de token
-3. `transactions` (lançamentos de gastos)
+1. `gateway` (API Gateway) fronteando os serviços de recurso + validação de token + CORS único
+2. `transactions` (lançamentos de gastos, usando contas/cartões/meios de pagamento)
+3. Telas da SPA para gerenciar contas e cartões (consumindo o `accounts`)
 4. `reporting` (relatórios/consolidação)
 5. Testes E2E de ponta a ponta entre serviços e SPA

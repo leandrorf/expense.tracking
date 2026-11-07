@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Nucleo do hexagono: entidades, value objects, regras e portas. Sem dependencias externas. -->
+
+</Project>

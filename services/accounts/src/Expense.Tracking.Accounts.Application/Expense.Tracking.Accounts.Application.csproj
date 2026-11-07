@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Casos de uso e portas (interfaces). Depende apenas do Domain. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Expense.Tracking.Accounts.Domain\Expense.Tracking.Accounts.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

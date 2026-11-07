@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Expense.Tracking.Accounts.Api\Expense.Tracking.Accounts.Api.csproj" />
+    <ProjectReference Include="..\..\src\Expense.Tracking.Accounts.Infrastructure\Expense.Tracking.Accounts.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Expense.Tracking.Accounts.Application\Expense.Tracking.Accounts.Application.csproj" />
+    <ProjectReference Include="..\..\src\Expense.Tracking.Accounts.Domain\Expense.Tracking.Accounts.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

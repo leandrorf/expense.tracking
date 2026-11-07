@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Expense.Tracking.Accounts.Api/Expense.Tracking.Accounts.Api.csproj" />
+    <Project Path="src/Expense.Tracking.Accounts.Application/Expense.Tracking.Accounts.Application.csproj" />
+    <Project Path="src/Expense.Tracking.Accounts.Domain/Expense.Tracking.Accounts.Domain.csproj" />
+    <Project Path="src/Expense.Tracking.Accounts.Infrastructure/Expense.Tracking.Accounts.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Expense.Tracking.Accounts.IntegrationTests/Expense.Tracking.Accounts.IntegrationTests.csproj" />
+    <Project Path="tests/Expense.Tracking.Accounts.UnitTests/Expense.Tracking.Accounts.UnitTests.csproj" />
+  </Folder>
+</Solution>
