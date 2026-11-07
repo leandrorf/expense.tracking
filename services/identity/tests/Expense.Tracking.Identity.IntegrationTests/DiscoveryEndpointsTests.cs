@@ -17,9 +17,11 @@ public sealed class DiscoveryEndpointsTests(IdentityApiFactory factory) : IClass
 
         var issuer = doc.GetProperty("issuer").GetString();
         Assert.False(string.IsNullOrWhiteSpace(issuer));
-        Assert.Equal($"{issuer}/oauth/token", doc.GetProperty("token_endpoint").GetString());
-        Assert.Equal($"{issuer}/oauth/authorize", doc.GetProperty("authorization_endpoint").GetString());
-        Assert.Equal($"{issuer}/.well-known/jwks.json", doc.GetProperty("jwks_uri").GetString());
+        // Os endpoints sao derivados da URL da requisicao (nao do issuer), para funcionar
+        // atras de rede/proxy; validamos apenas que terminam nos caminhos esperados.
+        Assert.EndsWith("/oauth/token", doc.GetProperty("token_endpoint").GetString()!);
+        Assert.EndsWith("/oauth/authorize", doc.GetProperty("authorization_endpoint").GetString()!);
+        Assert.EndsWith("/.well-known/jwks.json", doc.GetProperty("jwks_uri").GetString()!);
         Assert.Contains("authorization_code", doc.GetProperty("grant_types_supported").EnumerateArray().Select(e => e.GetString()));
     }
 

@@ -78,6 +78,15 @@ curl http://localhost:5080/health
 curl http://localhost:5080/.well-known/openid-configuration
 ```
 
+### Smoke test de ponta a ponta
+
+Com o stack no ar, valida o fluxo completo (login → authorize+PKCE → token → criar conta →
+lançar gasto → resumo), tudo pelo gateway:
+
+```bash
+node build/smoke-test.mjs
+```
+
 ## Desenvolvimento local do Identity (sem Docker)
 
 ```bash

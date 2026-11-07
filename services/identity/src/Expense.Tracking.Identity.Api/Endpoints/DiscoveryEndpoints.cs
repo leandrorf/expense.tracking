@@ -13,16 +13,20 @@ public static class DiscoveryEndpoints
     public static IEndpointRouteBuilder MapDiscoveryEndpoints(this IEndpointRouteBuilder app)
     {
         // Metadados do servidor de autorizacao (RFC 8414 / OpenID Connect Discovery).
-        app.MapGet("/.well-known/openid-configuration", (OAuthOptions options) =>
+        app.MapGet("/.well-known/openid-configuration", (HttpContext httpContext, OAuthOptions options) =>
         {
+            // O issuer e fixo (casa com o 'iss' do token). Os endpoints/jwks_uri sao derivados
+            // da URL da requisicao, para que chamadores internos (rede Docker) recebam URLs
+            // alcancaveis (ex.: http://identity:8080/...), enquanto o navegador recebe localhost.
             var issuer = options.Issuer.TrimEnd('/');
+            var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
             return Results.Json(new
             {
                 issuer,
-                authorization_endpoint = $"{issuer}/oauth/authorize",
-                token_endpoint = $"{issuer}/oauth/token",
-                jwks_uri = $"{issuer}/.well-known/jwks.json",
-                userinfo_endpoint = $"{issuer}/connect/userinfo",
+                authorization_endpoint = $"{baseUrl}/oauth/authorize",
+                token_endpoint = $"{baseUrl}/oauth/token",
+                jwks_uri = $"{baseUrl}/.well-known/jwks.json",
+                userinfo_endpoint = $"{baseUrl}/connect/userinfo",
                 response_types_supported = new[] { "code" },
                 grant_types_supported = new[]
                 {
