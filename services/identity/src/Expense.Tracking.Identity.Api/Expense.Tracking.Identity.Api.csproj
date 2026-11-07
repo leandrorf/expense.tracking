@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Adaptador dirigente (driving): endpoints HTTP + composition root. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Expense.Tracking.Identity.Application\Expense.Tracking.Identity.Application.csproj" />
+    <ProjectReference Include="..\Expense.Tracking.Identity.Infrastructure\Expense.Tracking.Identity.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

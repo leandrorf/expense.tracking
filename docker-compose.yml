@@ -1,0 +1,49 @@
+name: expense-tracking
+
+services:
+  identity-db:
+    image: mysql:8.0
+    container_name: expense-identity-db
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-expense_identity}
+      MYSQL_USER: ${MYSQL_USER:-expense}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-expense}
+    ports:
+      - "3307:3306"
+    volumes:
+      - identity-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - expense-net
+
+  identity:
+    build:
+      context: .
+      dockerfile: services/identity/Dockerfile
+    container_name: expense-identity
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__IdentityDb: "server=identity-db;port=3306;database=${MYSQL_DATABASE:-expense_identity};user=${MYSQL_USER:-expense};password=${MYSQL_PASSWORD:-expense};"
+      OAuth__Issuer: ${IDENTITY_ISSUER:-http://localhost:5080}
+      Seed__Enabled: ${IDENTITY_SEED_ENABLED:-true}
+    ports:
+      - "${IDENTITY_HTTP_PORT:-5080}:8080"
+    networks:
+      - expense-net
+
+volumes:
+  identity-db-data:
+
+networks:
+  expense-net:
+    driver: bridge
