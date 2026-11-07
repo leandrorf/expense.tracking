@@ -5,7 +5,6 @@ using Expense.Tracking.Identity.Application.Authorization;
 using Expense.Tracking.Identity.Application.OAuth;
 using Expense.Tracking.Identity.Domain.Clients;
 using Expense.Tracking.Identity.Domain.Common;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace Expense.Tracking.Identity.Api.Endpoints;
@@ -29,6 +28,14 @@ public static class OAuthEndpoints
             string? code_challenge,
             string? code_challenge_method) =>
         {
+            // Fluxo de navegador: sem sessao, redireciona para a tela de login do proprio IdP,
+            // preservando a URL de autorizacao em returnUrl.
+            if (httpContext.User.Identity?.IsAuthenticated != true)
+            {
+                var returnUrl = $"{httpContext.Request.Path}{httpContext.Request.QueryString}";
+                return Results.Redirect($"/account/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+            }
+
             var userIdValue = httpContext.User.FindFirstValue("sub");
             if (!Guid.TryParse(userIdValue, out var userId))
             {
@@ -55,8 +62,7 @@ public static class OAuthEndpoints
 
             var location = QueryHelpers.AddQueryString(redirect_uri, parameters);
             return Results.Redirect(location);
-        })
-        .RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = AuthenticationSetup.SessionScheme });
+        });
 
         // ---- Token endpoint (application/x-www-form-urlencoded) ----
         group.MapPost("/token", async (

@@ -41,6 +41,23 @@ services:
     networks:
       - expense-net
 
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_IDENTITY_AUTHORITY: ${IDENTITY_ISSUER:-http://localhost:5080}
+        VITE_CLIENT_ID: expense-tracking-spa
+        VITE_REDIRECT_URI: "http://localhost:${WEB_HTTP_PORT:-5173}/callback"
+        VITE_SCOPE: "openid profile expenses.read offline_access"
+    container_name: expense-web
+    depends_on:
+      - identity
+    ports:
+      - "${WEB_HTTP_PORT:-5173}:80"
+    networks:
+      - expense-net
+
 volumes:
   identity-db-data:
 

@@ -25,7 +25,8 @@ expense.tracking/
 │   └── identity/          # Servidor OAuth2 (hexagonal) — IMPLEMENTADO
 │       ├── src/ Domain | Application | Infrastructure | Api
 │       └── tests/ UnitTests | IntegrationTests
-└── apps/                  # (SPA React — planejado)
+└── apps/
+    └── web/               # SPA React + TS (login OAuth2 + PKCE) — IMPLEMENTADO
 ```
 
 ## Pré-requisitos
@@ -41,13 +42,19 @@ cp .env.example .env          # ajuste as senhas
 docker compose up --build
 ```
 
-O Identity sobe em `http://localhost:5080`. Com o seed habilitado, são criados:
+Sobem dois serviços:
+
+- **Identity** em `http://localhost:5080`
+- **SPA (web)** em `http://localhost:5173`
+
+Com o seed habilitado, são criados:
 
 - Cliente SPA público: `expense-tracking-spa` (redirect `http://localhost:5173/callback`)
 - Cliente de serviço confidencial: `expense-tracking-service` / `dev-service-secret`
 - Usuário demo: `demo@expense.local` / `Password123!`
 
-Verifique:
+Abra `http://localhost:5173`, clique em **Entrar**, autentique com o usuário demo e veja
+os dados do token em `/connect/userinfo`. Verificações rápidas:
 
 ```bash
 curl http://localhost:5080/health
@@ -77,10 +84,21 @@ dotnet ef migrations add <Nome> \
 
 As migrations são aplicadas automaticamente no startup da API (com retry).
 
+## Desenvolvimento local da SPA (sem Docker)
+
+```bash
+cd apps/web
+cp .env.example .env     # ajuste a authority/porta se necessário
+npm install
+npm run dev              # http://localhost:5173
+```
+
+Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
+
 ## Próximos passos
 
-1. `gateway` (API Gateway) + `apps/web` (SPA React consumindo o fluxo Authorization Code + PKCE)
-2. `accounts` (contas PF/PJ, cartões, meios de pagamento)
+1. `accounts` (contas PF/PJ, cartões, meios de pagamento) — primeiro serviço de recurso
+2. `gateway` (API Gateway) fronteando os serviços de recurso + validação de token
 3. `transactions` (lançamentos de gastos)
 4. `reporting` (relatórios/consolidação)
-5. Testes E2E de ponta a ponta entre serviços
+5. Testes E2E de ponta a ponta entre serviços e SPA

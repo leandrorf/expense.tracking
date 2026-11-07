@@ -29,7 +29,10 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `reporting`    | Consolidação e relatórios (read models)                                  | ⏳ planejado   |
 | `gateway`      | API Gateway (roteamento, validação de token, CORS)                       | ⏳ planejado   |
 
-Frontend: `apps/web` (SPA React) — ⏳ planejado.
+Frontend: `apps/web` (SPA React + TS) — ✅ implementado (login OAuth2 + PKCE).
+
+> O `gateway` entra quando houver serviços de recurso (accounts/transactions):
+> hoje a SPA fala direto com o `identity` para autenticar.
 
 ## Arquitetura hexagonal (ports & adapters)
 
@@ -76,13 +79,28 @@ Endpoints:
 | GET    | `/.well-known/jwks.json`               | Chaves públicas (JWKS)                  |
 | GET    | `/health`                              | Health check                            |
 
+### Fluxo de login no navegador (Authorization Code + PKCE)
+
+1. SPA gera `code_verifier` + `code_challenge` (S256) e redireciona para `/oauth/authorize`.
+2. Sem sessão, o `identity` redireciona para sua **própria tela de login** (`/account/login`).
+3. Usuário autentica → cookie de sessão → volta ao `/oauth/authorize` → emite o `code`.
+4. SPA recebe o `code` no `/callback`, troca por tokens em `/oauth/token` (com PKCE) via `fetch`.
+5. SPA chama `/connect/userinfo` com `Bearer` e renova via refresh token quando expira.
+
+CORS: o `identity` libera a origem da SPA (`Cors:AllowedOrigins`, default `http://localhost:5173`)
+para os endpoints chamados por `fetch` (`/oauth/token`, `/connect/userinfo`).
+
+A SPA implementa o PKCE e a troca de tokens **sem bibliotecas de terceiros** (Web Crypto API),
+guardando os tokens em `sessionStorage`.
+
 ### Simplificações atuais (a evoluir)
 
-- `/oauth/authorize` retorna erros como JSON em vez de redirecionar com `error=` ao
-  `redirect_uri`. Será refinado ao integrar a SPA (fluxo de navegador).
+- `/oauth/authorize` retorna erros de validação como JSON (não redireciona `error=` ao
+  `redirect_uri`); apenas o caso "sem sessão" redireciona para o login.
 - Não há tela de consentimento (clientes são first-party / auto-consentidos).
 - A chave de assinatura é efêmera se `OAuth:SigningKey:PrivateKeyPem` não for configurada
   (apenas DEV). Em produção, injetar a chave via configuração/secret.
+- Tokens no `sessionStorage` (simples para DEV). Avaliar BFF/cookies httpOnly depois.
 
 ## Padrões do monorepo
 

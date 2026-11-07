@@ -46,19 +46,46 @@ public static class AccountEndpoints
             }
 
             var user = result.Value;
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                new("sub", user.UserId.ToString()),
-                new(ClaimTypes.Name, user.DisplayName),
-                new(ClaimTypes.Email, user.Email)
-            };
-
-            var identity = new ClaimsIdentity(claims, AuthenticationSetup.SessionScheme);
-            await httpContext.SignInAsync(AuthenticationSetup.SessionScheme, new ClaimsPrincipal(identity));
+            await httpContext.SignInAsync(AuthenticationSetup.SessionScheme, CreatePrincipal(user));
 
             return Results.Ok(new { user.UserId, user.Email, user.DisplayName });
         });
+
+        // Tela de login (HTML) hospedada pelo IdP, usada pelo fluxo de navegador do /oauth/authorize.
+        group.MapGet("/login", (HttpContext httpContext, string? returnUrl) =>
+        {
+            if (httpContext.User.Identity?.IsAuthenticated == true)
+            {
+                return Results.Redirect(LoginPage.SafeReturnUrl(returnUrl));
+            }
+
+            return Results.Content(LoginPage.Render(returnUrl ?? "/"), "text/html; charset=utf-8");
+        });
+
+        // Submissao do formulario de login (form-urlencoded) -> sessao por cookie + redirect.
+        group.MapPost("/login/submit", async (
+            HttpContext httpContext,
+            AuthenticateUserHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var form = await httpContext.Request.ReadFormAsync(cancellationToken);
+            var returnUrl = LoginPage.SafeReturnUrl(form["returnUrl"].ToString());
+
+            var result = await handler.HandleAsync(
+                new AuthenticateUserCommand(form["email"].ToString(), form["password"].ToString()),
+                cancellationToken);
+
+            if (result.IsFailure)
+            {
+                return Results.Content(
+                    LoginPage.Render(returnUrl, "E-mail ou senha invalidos."),
+                    "text/html; charset=utf-8",
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            await httpContext.SignInAsync(AuthenticationSetup.SessionScheme, CreatePrincipal(result.Value));
+            return Results.Redirect(returnUrl);
+        }).DisableAntiforgery();
 
         group.MapPost("/logout", async (HttpContext httpContext) =>
         {
@@ -85,5 +112,18 @@ public static class AccountEndpoints
         });
 
         return app;
+    }
+
+    private static ClaimsPrincipal CreatePrincipal(AuthenticatedUser user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new("sub", user.UserId.ToString()),
+            new(ClaimTypes.Name, user.DisplayName),
+            new(ClaimTypes.Email, user.Email)
+        };
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, AuthenticationSetup.SessionScheme));
     }
 }
