@@ -145,8 +145,9 @@ public sealed class AccountsApiTests(AccountsApiFactory factory) : IClassFixture
         var methods = await client.GetFromJsonAsync<JsonElement>("/payment-methods");
         var codes = methods.EnumerateArray().Select(m => m.GetProperty("code").GetString()).ToArray();
 
-        Assert.Contains("pix", codes);
-        Assert.Contains("credit_card", codes);
-        Assert.Contains("boleto", codes);
+        // Codigo canonico = nome do enum (mesmo contrato do servico transactions).
+        Assert.Contains("Pix", codes);
+        Assert.Contains("CreditCard", codes);
+        Assert.Contains("Boleto", codes);
     }
 }

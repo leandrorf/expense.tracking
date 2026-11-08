@@ -8,7 +8,7 @@ boletos — em arquitetura de microserviços, com autenticação OAuth2 própria
 - **Banco:** MySQL 8 (um por serviço)
 - **Auth:** servidor OAuth2/OIDC próprio (sem bibliotecas de terceiros)
 - **Infra:** Docker + Docker Compose
-- **Testes:** xUnit (unitário) + WebApplicationFactory (integração)
+- **Testes:** xUnit (unitário) + WebApplicationFactory (integração) + Cypress (EndToEnd)
 
 Veja [`docs/architecture.md`](docs/architecture.md) para o desenho completo e o estado de
 cada serviço.
@@ -87,6 +87,24 @@ lançar gasto → resumo), tudo pelo gateway:
 node build/smoke-test.mjs
 ```
 
+### Testes EndToEnd (Cypress)
+
+Testes de ponta a ponta pela UI real da SPA: login OAuth2 + PKCE na tela do IdP (outra
+origem, via `cy.origin`), criação de conta, lançamento de gasto (Pix e cartão de crédito) e
+conferência do consolidado no Resumo. Exigem o **stack completo no ar**:
+
+```bash
+docker compose up --build -d        # sobe identity + serviços + gateway + web
+cd apps/web
+npm install                          # instala o Cypress (primeira vez)
+npm run e2e                          # headless (cypress run)
+npm run e2e:open                     # interativo (cypress open)
+```
+
+Portas/credenciais default (web 5173, identity 5080, usuário demo) são lidas do
+`cypress.config.ts` e podem ser sobrescritas por env (`E2E_BASE_URL`, `E2E_IDENTITY_URL`,
+`E2E_DEMO_EMAIL`, `E2E_DEMO_PASSWORD`).
+
 ## Desenvolvimento local do Identity (sem Docker)
 
 ```bash
@@ -123,6 +141,6 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. Testes E2E de ponta a ponta (ex.: Cypress) cobrindo login + lançamentos + resumo na SPA
-2. Alinhar o contrato de meios de pagamento entre `accounts` e `transactions`
-3. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)
+1. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)
+2. Pipeline de CI executando unitários + integração + E2E (Cypress) a cada push
+3. Observabilidade (logs estruturados + tracing distribuído entre serviços)

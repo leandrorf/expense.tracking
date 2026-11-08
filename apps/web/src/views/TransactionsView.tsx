@@ -2,17 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { transactionsApi } from '../api/transactions';
-import type { Account, CreditCard, Transaction } from '../api/types';
-
-// Valores = nomes do enum do servico transactions (o catalogo do accounts usa codigos snake_case).
-const PAYMENT_METHODS: { value: string; label: string; requiresCard: boolean }[] = [
-  { value: 'Cash', label: 'Dinheiro', requiresCard: false },
-  { value: 'Pix', label: 'Pix', requiresCard: false },
-  { value: 'Boleto', label: 'Boleto', requiresCard: false },
-  { value: 'CreditCard', label: 'Cartão de crédito', requiresCard: true },
-  { value: 'DebitCard', label: 'Cartão de débito', requiresCard: true },
-  { value: 'BankTransfer', label: 'Transferência', requiresCard: false },
-];
+import type { Account, CreditCard, PaymentMethod, Transaction } from '../api/types';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -21,6 +11,7 @@ function today(): string {
 export function TransactionsView() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +19,7 @@ export function TransactionsView() {
   const [filterAccount, setFilterAccount] = useState('');
 
   const [accountId, setAccountId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Pix');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -37,15 +28,21 @@ export function TransactionsView() {
   const [submitting, setSubmitting] = useState(false);
 
   const requiresCard = useMemo(
-    () => PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.requiresCard ?? false,
-    [paymentMethod],
+    () => paymentMethods.find((m) => m.code === paymentMethod)?.requiresCard ?? false,
+    [paymentMethods, paymentMethod],
   );
 
   async function loadRefData() {
-    const [accs, crds] = await Promise.all([accountsApi.list(), accountsApi.listCards()]);
+    const [accs, crds, methods] = await Promise.all([
+      accountsApi.list(),
+      accountsApi.listCards(),
+      accountsApi.paymentMethods(),
+    ]);
     setAccounts(accs);
     setCards(crds);
+    setPaymentMethods(methods);
     if (!accountId && accs.length > 0) setAccountId(accs[0].id);
+    setPaymentMethod((current) => current || methods[0]?.code || '');
   }
 
   async function loadTransactions() {
@@ -129,23 +126,23 @@ export function TransactionsView() {
       {accounts.length === 0 ? (
         <p className="muted">Crie uma conta antes de registrar lançamentos.</p>
       ) : (
-        <form className="row-form wrap" onSubmit={handleCreate}>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <form className="row-form wrap" onSubmit={handleCreate} data-cy="tx-form">
+          <select data-cy="tx-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
           </select>
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-            {PAYMENT_METHODS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
+          <select data-cy="tx-payment-method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+            {paymentMethods.map((m) => (
+              <option key={m.code} value={m.code}>
+                {m.name}
               </option>
             ))}
           </select>
           {requiresCard && (
-            <select value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)} required>
+            <select data-cy="tx-card" value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)} required>
               <option value="">Selecione o cartão…</option>
               {accountCards.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -154,11 +151,11 @@ export function TransactionsView() {
               ))}
             </select>
           )}
-          <input placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} required />
-          <input placeholder="Categoria" value={category} onChange={(e) => setCategory(e.target.value)} required />
-          <input placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          <input type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
-          <button className="primary" type="submit" disabled={submitting}>
+          <input data-cy="tx-description" placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} required />
+          <input data-cy="tx-category" placeholder="Categoria" value={category} onChange={(e) => setCategory(e.target.value)} required />
+          <input data-cy="tx-amount" placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <input data-cy="tx-date" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
+          <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>
             {submitting ? 'Salvando…' : 'Registrar'}
           </button>
         </form>
@@ -180,7 +177,7 @@ export function TransactionsView() {
       {transactions.length === 0 ? (
         <p className="muted">Nenhum lançamento.</p>
       ) : (
-        <table className="data">
+        <table className="data" data-cy="tx-table">
           <thead>
             <tr>
               <th>Data</th>
@@ -198,7 +195,7 @@ export function TransactionsView() {
                 <td>{t.occurredOn}</td>
                 <td>{t.description}</td>
                 <td>{t.category}</td>
-                <td>{PAYMENT_METHODS.find((m) => m.value === t.paymentMethod)?.label ?? t.paymentMethod}</td>
+                <td>{paymentMethods.find((m) => m.code === t.paymentMethod)?.name ?? t.paymentMethod}</td>
                 <td>{accountName(t.accountId)}</td>
                 <td className="right">
                   {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: t.currency })}

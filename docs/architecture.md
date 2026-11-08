@@ -12,7 +12,7 @@ dinheiro e boletos. Microserviços no backend, SPA no frontend, tudo em containe
 | Banco      | MySQL 8 (um banco por serviço)                         |
 | Auth       | OAuth2 próprio (sem IdentityServer/Keycloak)           |
 | Infra      | Docker + Docker Compose                                |
-| Testes     | xUnit (unitário) · WebApplicationFactory (integração)  |
+| Testes     | xUnit (unitário) · WebApplicationFactory (integração) · Cypress (EndToEnd) |
 
 > Observação: a stack-alvo pedida foi .NET 9, mas a máquina/CI tem o SDK **.NET 10**
 > (LTS). Adotamos .NET 10 por ser a versão instalada e mais recente.
@@ -93,9 +93,11 @@ guardando os tokens em `sessionStorage`. As telas (contas, cartões, lançamento
 APIs de recurso pelo **gateway** (`VITE_API_BASE_URL`), anexando o `Bearer` e renovando o
 token automaticamente em caso de 401.
 
-> Nota de consistência: o catálogo `/payment-methods` (accounts) usa códigos snake_case
-> (`credit_card`), enquanto o `transactions` aceita os nomes do enum (`CreditCard`). A SPA
-> usa os nomes do enum ao criar lançamentos. Alinhar os dois contratos é um ajuste futuro.
+> Contrato de meios de pagamento (unificado): o catálogo `/payment-methods` (accounts) expõe
+> como `code` o **nome do enum** (`CreditCard`, `Pix`, …) — o mesmo identificador que o
+> `transactions` aceita/devolve e sobre o qual o `reporting` agrupa. A SPA consome o catálogo
+> (não há mais lista fixa) e envia esse `code` ao criar lançamentos. O `name` do catálogo é só
+> o rótulo de exibição. Fonte única: `PaymentMethodInfo.Code => Method.ToString()`.
 
 ### Simplificações atuais (a evoluir)
 

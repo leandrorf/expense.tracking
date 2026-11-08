@@ -62,7 +62,7 @@ export function App() {
           <h1>Expense Tracking</h1>
           <p className="subtitle">Controle de gastos pessoal e empresarial</p>
           {message && <p className="error">{message}</p>}
-          <button className="primary" onClick={() => void beginLogin()}>
+          <button data-cy="login" className="primary" onClick={() => void beginLogin()}>
             Entrar com OAuth2 (PKCE)
           </button>
         </div>
@@ -75,22 +75,22 @@ export function App() {
       <header className="topbar">
         <strong>Expense Tracking</strong>
         <nav className="tabs">
-          <button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>
+          <button data-cy="tab-summary" className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>
             Resumo
           </button>
-          <button className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
+          <button data-cy="tab-transactions" className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
             Lançamentos
           </button>
-          <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
+          <button data-cy="tab-accounts" className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
             Contas
           </button>
-          <button className={tab === 'cards' ? 'active' : ''} onClick={() => setTab('cards')}>
+          <button data-cy="tab-cards" className={tab === 'cards' ? 'active' : ''} onClick={() => setTab('cards')}>
             Cartões
           </button>
         </nav>
         <div className="user">
-          <span title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
-          <button className="ghost" onClick={() => logout()}>
+          <span data-cy="session-active" title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
+          <button data-cy="logout" className="ghost" onClick={() => logout()}>
             Sair
           </button>
         </div>

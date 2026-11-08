@@ -1,5 +1,7 @@
-node_modules/
+# Saida de build do Vite (nao versionada)
 dist/
-.env
-.env.local
-*.local
+
+# Artefatos de execucao do Cypress (nao versionados)
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/

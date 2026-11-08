@@ -52,22 +52,23 @@ export function SummaryView() {
         <p>Carregando…</p>
       ) : summary ? (
         <>
-          <div className="cards-row">
-            <Stat label="Gastos" value={money(summary.totalExpense, summary.currency)} tone="expense" />
-            <Stat label="Receitas" value={money(summary.totalIncome, summary.currency)} tone="income" />
-            <Stat label="Saldo" value={money(summary.net, summary.currency)} tone={summary.net >= 0 ? 'income' : 'expense'} />
-            <Stat label="Lançamentos" value={String(summary.count)} />
+          <div className="cards-row" data-cy="summary-stats">
+            <Stat label="Gastos" value={money(summary.totalExpense, summary.currency)} tone="expense" cy="stat-expense" />
+            <Stat label="Receitas" value={money(summary.totalIncome, summary.currency)} tone="income" cy="stat-income" />
+            <Stat label="Saldo" value={money(summary.net, summary.currency)} tone={summary.net >= 0 ? 'income' : 'expense'} cy="stat-net" />
+            <Stat label="Lançamentos" value={String(summary.count)} cy="stat-count" />
           </div>
 
           <div className="breakdowns">
-            <Breakdown title="Por categoria" items={summary.byCategory} currency={summary.currency} money={money} />
+            <Breakdown title="Por categoria" items={summary.byCategory} currency={summary.currency} money={money} cy="by-category" />
             <Breakdown
               title="Por escopo (PF/PJ)"
               items={summary.byScope.map((s) => ({ key: SCOPE_LABEL[s.key] ?? s.key, total: s.total }))}
               currency={summary.currency}
               money={money}
+              cy="by-scope"
             />
-            <Breakdown title="Por meio de pagamento" items={summary.byPaymentMethod} currency={summary.currency} money={money} />
+            <Breakdown title="Por meio de pagamento" items={summary.byPaymentMethod} currency={summary.currency} money={money} cy="by-payment-method" />
           </div>
         </>
       ) : null}
@@ -75,9 +76,9 @@ export function SummaryView() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'expense' | 'income' }) {
+function Stat({ label, value, tone, cy }: { label: string; value: string; tone?: 'expense' | 'income'; cy?: string }) {
   return (
-    <div className="stat">
+    <div className="stat" data-cy={cy}>
       <span className="stat-label">{label}</span>
       <span className={`stat-value ${tone ?? ''}`}>{value}</span>
     </div>
@@ -89,14 +90,16 @@ function Breakdown({
   items,
   currency,
   money,
+  cy,
 }: {
   title: string;
   items: TotalByKey[];
   currency: string;
   money: (v: number, c: string) => string;
+  cy?: string;
 }) {
   return (
-    <div className="breakdown">
+    <div className="breakdown" data-cy={cy}>
       <h3>{title}</h3>
       {items.length === 0 ? (
         <p className="muted">—</p>

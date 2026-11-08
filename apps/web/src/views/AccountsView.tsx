@@ -62,23 +62,25 @@ export function AccountsView() {
     <section>
       <h2>Contas</h2>
 
-      <form className="row-form" onSubmit={handleCreate}>
+      <form className="row-form" onSubmit={handleCreate} data-cy="account-form">
         <input
+          data-cy="account-name"
           placeholder="Nome da conta"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
-        <select value={scope} onChange={(e) => setScope(e.target.value as 'Personal' | 'Business')}>
+        <select data-cy="account-scope" value={scope} onChange={(e) => setScope(e.target.value as 'Personal' | 'Business')}>
           <option value="Personal">Pessoal (PF)</option>
           <option value="Business">Empresa (PJ)</option>
         </select>
         <input
+          data-cy="account-taxid"
           placeholder={scope === 'Business' ? 'CNPJ (opcional)' : 'CPF (opcional)'}
           value={taxId}
           onChange={(e) => setTaxId(e.target.value)}
         />
-        <button className="primary" type="submit" disabled={submitting}>
+        <button data-cy="account-submit" className="primary" type="submit" disabled={submitting}>
           {submitting ? 'Criando…' : 'Adicionar'}
         </button>
       </form>
@@ -89,7 +91,7 @@ export function AccountsView() {
       ) : accounts.length === 0 ? (
         <p className="muted">Nenhuma conta ainda.</p>
       ) : (
-        <table className="data">
+        <table className="data" data-cy="accounts-table">
           <thead>
             <tr>
               <th>Nome</th>

@@ -75,27 +75,28 @@ export function CardsView() {
       {accounts.length === 0 ? (
         <p className="muted">Crie uma conta antes de cadastrar cartões.</p>
       ) : (
-        <form className="row-form wrap" onSubmit={handleCreate}>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <form className="row-form wrap" onSubmit={handleCreate} data-cy="card-form">
+          <select data-cy="card-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
           </select>
-          <input placeholder="Apelido" value={label} onChange={(e) => setLabel(e.target.value)} required />
-          <input placeholder="Bandeira" value={brand} onChange={(e) => setBrand(e.target.value)} />
+          <input data-cy="card-label" placeholder="Apelido" value={label} onChange={(e) => setLabel(e.target.value)} required />
+          <input data-cy="card-brand" placeholder="Bandeira" value={brand} onChange={(e) => setBrand(e.target.value)} />
           <input
+            data-cy="card-lastfour"
             placeholder="4 dígitos"
             value={lastFour}
             maxLength={4}
             onChange={(e) => setLastFour(e.target.value)}
             required
           />
-          <input placeholder="Limite" type="number" step="0.01" value={limit} onChange={(e) => setLimit(e.target.value)} required />
-          <input placeholder="Fecha" type="number" min={1} max={28} value={closingDay} onChange={(e) => setClosingDay(e.target.value)} />
-          <input placeholder="Vence" type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
-          <button className="primary" type="submit" disabled={submitting}>
+          <input data-cy="card-limit" placeholder="Limite" type="number" step="0.01" value={limit} onChange={(e) => setLimit(e.target.value)} required />
+          <input data-cy="card-closing" placeholder="Fecha" type="number" min={1} max={28} value={closingDay} onChange={(e) => setClosingDay(e.target.value)} />
+          <input data-cy="card-due" placeholder="Vence" type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
+          <button data-cy="card-submit" className="primary" type="submit" disabled={submitting}>
             {submitting ? 'Criando…' : 'Adicionar'}
           </button>
         </form>
@@ -107,7 +108,7 @@ export function CardsView() {
       ) : cards.length === 0 ? (
         <p className="muted">Nenhum cartão ainda.</p>
       ) : (
-        <table className="data">
+        <table className="data" data-cy="cards-table">
           <thead>
             <tr>
               <th>Apelido</th>
