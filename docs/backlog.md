@@ -54,9 +54,8 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 
 ---
 
-## 🟡 EPIC CI — Pipeline de Integração Contínua  · *In Progress*
+## 🟢 EPIC CI — Pipeline de Integração Contínua  · *Done*
 **Objetivo:** cada push roda a bateria de testes e barra merge quebrado.
-CI-1 e CI-2 entregues; CI-3 pendente de aplicação da branch protection (ver abaixo).
 
 - 🟢 **CI-1** Workflow de build + testes unitários + integração (xUnit) em cada push/PR.
   - *Dado* um push em qualquer branch, *quando* o CI roda, *então* compila a solução e executa todos os testes unit+integração, falhando o job se algum teste falhar.
@@ -66,9 +65,10 @@ CI-1 e CI-2 entregues; CI-3 pendente de aplicação da branch protection (ver ab
   - *Dado* um PR para `main`, *quando* o CI roda, *então* sobe o stack, aguarda health dos serviços e executa os specs Cypress headless, publicando artefatos (vídeos/prints) em falha.
   - Entregue em `.github/workflows/e2e.yml` (job `Cypress E2E`, `pull_request` → `main` + `workflow_dispatch`).
   - Estimativa: 8
-- 🟡 **CI-3** Branch protection / gate de PR exigindo CI verde.
+- 🟢 **CI-3** Branch protection / gate de PR exigindo CI verde.
   - *Dado* um PR, *quando* o CI não está verde, *então* o merge é bloqueado.
-  - Config pronta (ver `docs/backlog.md` / sessão): required status checks (`build & test (accounts|gateway|identity|reporting|transactions)` + `Cypress E2E`), `strict`, `enforce_admins`, sem force-push/deleção. **Pendente:** aplicar via `gh api -X PUT .../branches/main/protection` (bloqueado no auto-mode; precisa rodar manualmente).
+  - Aplicado como **Ruleset Active** no `main`: 6 required status checks (`build & test (accounts|gateway|identity|reporting|transactions)` + `Cypress E2E`), `strict` (up to date), `enforce_admins`, sem force-push/deleção.
+  - Procedência: configurado e confirmado na UI do GitHub pelo dono do repo; o token `gh` desta sessão é read-only e não inspeciona rulesets. Prova automática: os required checks aparecem no próximo PR para `main`.
   - Estimativa: 2
 
 ## 🔵 EPIC OBS — Observabilidade  · *To Do*
