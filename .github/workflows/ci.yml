@@ -1,0 +1,72 @@
+name: CI
+
+# CI-1: a cada push e pull request, compila e roda os testes (unit + integracao)
+# de todos os servicos. Qualquer teste que falhe reprova o job.
+on:
+  push:
+  pull_request:
+
+# Cancela execucoes antigas do mesmo ref quando chega um push novo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build & test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Nao aborta as demais matrizes quando um servico falha: o relatorio
+      # mostra todos os servicos com problema de uma vez.
+      fail-fast: false
+      matrix:
+        include:
+          - name: accounts
+            solution: services/accounts/Expense.Tracking.Accounts.slnx
+          - name: gateway
+            solution: services/gateway/Expense.Tracking.Gateway.slnx
+          - name: identity
+            solution: services/identity/Expense.Tracking.Identity.slnx
+          - name: reporting
+            solution: services/reporting/Expense.Tracking.Reporting.slnx
+          - name: transactions
+            solution: services/transactions/Expense.Tracking.Transactions.slnx
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Os testes de integracao usam EF InMemory + fakes; nao ha dependencia de
+      # MySQL ou de outros servicos, entao nenhum container e necessario.
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore "${{ matrix.solution }}"
+
+      - name: Build
+        run: dotnet build "${{ matrix.solution }}" --configuration Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test "${{ matrix.solution }}"
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=${{ matrix.name }}.trx"
+          --results-directory ./test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.name }}
+          path: ./test-results
+          if-no-files-found: ignore
