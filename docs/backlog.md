@@ -71,11 +71,12 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Procedência: configurado e confirmado na UI do GitHub pelo dono do repo; o token `gh` desta sessão é read-only e não inspeciona rulesets. Prova automática: os required checks aparecem no próximo PR para `main`.
   - Estimativa: 2
 
-## 🔵 EPIC OBS — Observabilidade  · *To Do*
+## 🟡 EPIC OBS — Observabilidade  · *In Progress*
 **Objetivo:** enxergar o que acontece entre os serviços.
 
-- 🔵 **OBS-1** Logs estruturados (JSON) com correlation id propagado pelo gateway.
+- 🟢 **OBS-1** Logs estruturados (JSON) com correlation id propagado pelo gateway.
   - *Dado* uma requisição pelo gateway, *quando* passa pelos serviços, *então* todos os logs carregam o mesmo correlation id.
+  - Entregue: logger JSON nativo (`AddJsonConsole`, `IncludeScopes`) + `ObservabilitySetup` por serviço. Middleware resolve o `X-Correlation-Id` (inbound → trace id → GUID), ecoa na resposta e injeta num log scope ambiente. Propagação: gateway reescreve o header antes do YARP; `transactions`/`reporting` usam `CorrelationIdForwardingHandler` (abstração `ICorrelationContext` + impl HttpContext, espelhando `IUserTokenAccessor`). Teste de integração no `accounts`. Branch `feature/obs-structured-logging`.
   - Estimativa: 5
 - 🔵 **OBS-2** Tracing distribuído (OpenTelemetry, `traceparent` W3C) entre gateway → accounts/transactions/reporting.
   - *Dado* um lançamento de gasto, *quando* o transactions chama o accounts, *então* o trace mostra o span pai e filho correlacionados.
