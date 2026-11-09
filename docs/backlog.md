@@ -67,7 +67,7 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Estimativa: 8
 - 🟢 **CI-3** Branch protection / gate de PR exigindo CI verde.
   - *Dado* um PR, *quando* o CI não está verde, *então* o merge é bloqueado.
-  - Aplicado como **Ruleset Active** no `main`: 6 required status checks (`build & test (accounts|gateway|identity|reporting|transactions)` + `Cypress E2E`), `strict` (up to date), `enforce_admins`, sem force-push/deleção.
+  - Aplicado como **Ruleset Active** no `main`: 6 required status checks (`build & test (accounts|gateway|identity|reporting|transactions)` + `Cypress E2E`), `strict` (up to date), sem force-push/deleção. **Bypass:** admin do repo (push direto do dono não é barrado — decisão consciente para projeto solo); o gate vale para PRs e demais atores.
   - Procedência: configurado e confirmado na UI do GitHub pelo dono do repo; o token `gh` desta sessão é read-only e não inspeciona rulesets. Prova automática: os required checks aparecem no próximo PR para `main`.
   - Estimativa: 2
 
