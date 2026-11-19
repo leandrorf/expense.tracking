@@ -13,11 +13,15 @@ public static class DependencyInjection
         var transactionsBaseUrl = configuration["Services:TransactionsBaseUrl"] ?? "http://localhost:5100";
         var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
 
+        services.AddTransient<CorrelationIdForwardingHandler>();
+
         services.AddHttpClient<ITransactionsClient, TransactionsHttpClient>(client =>
-            client.BaseAddress = ToBaseUri(transactionsBaseUrl));
+            client.BaseAddress = ToBaseUri(transactionsBaseUrl))
+            .AddHttpMessageHandler<CorrelationIdForwardingHandler>();
 
         services.AddHttpClient<IAccountsClient, AccountsHttpClient>(client =>
-            client.BaseAddress = ToBaseUri(accountsBaseUrl));
+            client.BaseAddress = ToBaseUri(accountsBaseUrl))
+            .AddHttpMessageHandler<CorrelationIdForwardingHandler>();
 
         services.AddScoped<GetSummaryHandler>();
 

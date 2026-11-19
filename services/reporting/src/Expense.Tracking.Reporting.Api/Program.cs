@@ -4,6 +4,7 @@ using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddStructuredLogging();
 
 const string SpaCorsPolicy = "spa";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -15,6 +16,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserTokenAccessor, HttpContextUserTokenAccessor>();
+builder.Services.AddScoped<ICorrelationContext, HttpContextCorrelationContext>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(SpaCorsPolicy, policy => policy
@@ -24,6 +26,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseCorrelationId();
 
 if (app.Environment.IsDevelopment())
 {

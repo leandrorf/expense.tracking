@@ -1,7 +1,9 @@
+using Expense.Tracking.Gateway.Setup;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddStructuredLogging();
 
 const string SpaCorsPolicy = "spa";
 const string AuthenticatedPolicy = "authenticated";
@@ -55,6 +57,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseCorrelationId();
 
 app.UseCors(SpaCorsPolicy);
 app.UseAuthentication();

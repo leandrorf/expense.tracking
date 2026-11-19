@@ -26,10 +26,12 @@ public static class DependencyInjection
         services.AddScoped<DeleteTransactionHandler>();
 
         var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
+        services.AddTransient<CorrelationIdForwardingHandler>();
         services.AddHttpClient<IAccountsClient, AccountsHttpClient>(client =>
         {
             client.BaseAddress = new Uri(accountsBaseUrl.EndsWith('/') ? accountsBaseUrl : accountsBaseUrl + "/");
-        });
+        })
+        .AddHttpMessageHandler<CorrelationIdForwardingHandler>();
 
         if (!services.Any(d => d.ServiceType == typeof(TimeProvider)))
         {

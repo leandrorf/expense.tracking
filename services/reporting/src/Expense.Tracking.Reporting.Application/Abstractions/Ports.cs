@@ -21,3 +21,9 @@ public interface IUserTokenAccessor
 {
     string? GetAccessToken();
 }
+
+/// <summary>Fornece o correlation id da request atual para propagar entre servicos (OBS-1).</summary>
+public interface ICorrelationContext
+{
+    string? CorrelationId { get; }
+}

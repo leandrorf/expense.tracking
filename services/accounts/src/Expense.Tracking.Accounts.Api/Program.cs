@@ -5,6 +5,7 @@ using Expense.Tracking.Accounts.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddStructuredLogging();
 
 const string SpaCorsPolicy = "spa";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -23,6 +24,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseCorrelationId();
 
 if (app.Environment.IsDevelopment())
 {
