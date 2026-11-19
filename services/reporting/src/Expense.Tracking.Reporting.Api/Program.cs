@@ -5,6 +5,7 @@ using Expense.Tracking.Reporting.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddStructuredLogging();
+builder.AddDistributedTracing();
 
 const string SpaCorsPolicy = "spa";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
