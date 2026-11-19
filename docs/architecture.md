@@ -169,6 +169,28 @@ Topologia: o `identity` permanece acessível diretamente (é o emissor dos token
 precisa bater com o issuer configurado). A SPA autentica no `identity` e chama as APIs de
 recurso através do gateway. Novos serviços (ex.: `transactions`) entram como novas rotas/clusters.
 
+## Observabilidade
+
+Cada serviço configura a observabilidade em `Api/Setup/ObservabilitySetup.cs` (uma cópia por
+serviço, sem biblioteca compartilhada).
+
+- **Logs estruturados (OBS-1):** JSON no console (`AddJsonConsole`, com scopes). Todo request
+  resolve um `X-Correlation-Id` (header recebido → trace id → GUID), ecoa o valor na resposta e o
+  injeta num log scope. O gateway reescreve o header antes do YARP; `transactions` e `reporting`
+  o repassam nos typed clients (`CorrelationIdForwardingHandler`).
+- **Tracing distribuído (OBS-2):** OpenTelemetry com spans de entrada (ASP.NET Core) e de saída
+  (HttpClient). O contexto viaja no header W3C `traceparent`: o YARP o propaga do gateway para o
+  serviço de destino e os typed clients, de `transactions`/`reporting` para `accounts`. Assim um
+  lançamento pela SPA vira um único trace `gateway → transactions → accounts`.
+  - Nome do serviço no trace: `expense-tracking-<serviço>`.
+  - Exportação OTLP só quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido. Sem ele (testes, CI,
+    `dotnet run`), o tracing segue ativo e o trace id continua alimentando o correlation id.
+  - `/health` fica fora dos traces, para o polling do Docker e do CI não gerar ruído.
+  - No Docker Compose, os spans vão para o **Jaeger** (`jaegertracing/jaeger`), com a UI em
+    `http://localhost:16686`. Os serviços não dependem dele para subir.
+- Quando o chamador não envia `X-Correlation-Id`, o correlation id dos logs é o próprio trace id,
+  o que liga uma linha de log ao trace no Jaeger.
+
 ## Padrões do monorepo
 
 - **Central Package Management** (`Directory.Packages.props`) fixa versões de pacotes.

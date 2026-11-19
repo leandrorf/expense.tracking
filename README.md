@@ -60,6 +60,8 @@ Sobem os serviços:
 - **Reporting** em `http://localhost:5110` (consolidação; agrega transactions + accounts)
 - **Gateway** em `http://localhost:8080` (entrada única das APIs de recurso sob `/api/**`)
 - **SPA (web)** em `http://localhost:5173`
+- **Jaeger** (tracing distribuído) em `http://localhost:16686`: os traces aparecem como
+  `expense-tracking-gateway`, `-transactions`, `-accounts` etc.
 
 As APIs de recurso podem ser acessadas direto (`:5090/accounts`) ou via gateway
 (`:8080/api/accounts`), sempre com `Authorization: Bearer <token>`.
@@ -141,6 +143,5 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)
-2. Pipeline de CI executando unitários + integração + E2E (Cypress) a cada push
-3. Observabilidade (logs estruturados + tracing distribuído entre serviços)
+1. Observabilidade: endpoints de métricas/health padronizados por serviço (OBS-3)
+2. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)

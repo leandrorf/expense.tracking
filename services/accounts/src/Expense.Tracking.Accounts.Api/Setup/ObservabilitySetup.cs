@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace Expense.Tracking.Accounts.Api.Setup;
 
@@ -12,6 +14,9 @@ namespace Expense.Tracking.Accounts.Api.Setup;
 public static class ObservabilitySetup
 {
     public const string CorrelationIdHeader = "X-Correlation-Id";
+    public const string ServiceName = "expense-tracking-accounts";
+    private const string OtlpEndpointKey = "OTEL_EXPORTER_OTLP_ENDPOINT";
+    private const string HealthPath = "/health";
     private const string EmptyTraceId = "00000000000000000000000000000000";
 
     public static WebApplicationBuilder AddStructuredLogging(this WebApplicationBuilder builder)
@@ -23,6 +28,37 @@ public static class ObservabilitySetup
             options.UseUtcTimestamp = true;
             options.JsonWriterOptions = new JsonWriterOptions { Indented = false };
         });
+        return builder;
+    }
+
+    /// <summary>
+    /// OBS-2: tracing distribuido com OpenTelemetry. Cria um span por request recebida
+    /// (ASP.NET Core) e um span filho por chamada HTTP de saida (HttpClient/YARP). O contexto
+    /// viaja no header W3C <c>traceparent</c>, entao gateway -> transactions -> accounts formam
+    /// um unico trace. Os spans so sao exportados (OTLP) quando
+    /// <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> esta configurado; sem ele (testes, dev local) o
+    /// tracing segue ativo e o trace id continua alimentando o correlation id e os logs.
+    /// </summary>
+    public static WebApplicationBuilder AddDistributedTracing(this WebApplicationBuilder builder)
+    {
+        var otlpEndpoint = builder.Configuration[OtlpEndpointKey];
+
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(ServiceName))
+            .WithTracing(tracing =>
+            {
+                tracing
+                    .AddAspNetCoreInstrumentation(options =>
+                        // Health checks (docker/CI) so gerariam ruido nos traces.
+                        options.Filter = context => !context.Request.Path.StartsWithSegments(HealthPath))
+                    .AddHttpClientInstrumentation();
+
+                if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+                {
+                    tracing.AddOtlpExporter();
+                }
+            });
+
         return builder;
     }
 

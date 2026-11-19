@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddStructuredLogging();
+builder.AddDistributedTracing();
 
 const string SpaCorsPolicy = "spa";
 const string AuthenticatedPolicy = "authenticated";

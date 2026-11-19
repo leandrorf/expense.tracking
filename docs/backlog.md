@@ -78,8 +78,10 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - *Dado* uma requisição pelo gateway, *quando* passa pelos serviços, *então* todos os logs carregam o mesmo correlation id.
   - Entregue: logger JSON nativo (`AddJsonConsole`, `IncludeScopes`) + `ObservabilitySetup` por serviço. Middleware resolve o `X-Correlation-Id` (inbound → trace id → GUID), ecoa na resposta e injeta num log scope ambiente. Propagação: gateway reescreve o header antes do YARP; `transactions`/`reporting` usam `CorrelationIdForwardingHandler` (abstração `ICorrelationContext` + impl HttpContext, espelhando `IUserTokenAccessor`). Teste de integração no `accounts`. Branch `feature/obs-structured-logging`.
   - Estimativa: 5
-- 🔵 **OBS-2** Tracing distribuído (OpenTelemetry, `traceparent` W3C) entre gateway → accounts/transactions/reporting.
+- 🟢 **OBS-2** Tracing distribuído (OpenTelemetry, `traceparent` W3C) entre gateway → accounts/transactions/reporting.
   - *Dado* um lançamento de gasto, *quando* o transactions chama o accounts, *então* o trace mostra o span pai e filho correlacionados.
+  - Entregue: OpenTelemetry 1.21 (ASP.NET Core + HttpClient) em `ObservabilitySetup.AddDistributedTracing` de cada serviço; nome `expense-tracking-<serviço>`; `/health` fora dos traces. Exportação OTLP só com `OTEL_EXPORTER_OTLP_ENDPOINT` (testes/CI não exportam). Jaeger 2.23 no compose (UI `:16686`). Teste de integração no `transactions` com accounts falso em Kestrel real prova pai/filho nos spans e no `traceparent` recebido. Validado ao vivo: smoke test + trace `gateway → transactions → accounts` no Jaeger. Branch `feature/obs-distributed-tracing`.
+  - Fora do escopo: spans de banco (instrumentação EF Core do OpenTelemetry ainda é beta) e métricas (OBS-3).
   - Estimativa: 8
 - 🔵 **OBS-3** Endpoints de métricas/health padronizados por serviço.
   - Estimativa: 3

@@ -33,6 +33,8 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       ConnectionStrings__IdentityDb: "server=identity-db;port=3306;database=${MYSQL_DATABASE:-expense_identity};user=${MYSQL_USER:-expense};password=${MYSQL_PASSWORD:-expense};"
       OAuth__Issuer: ${IDENTITY_ISSUER:-http://localhost:5080}
       Seed__Enabled: ${IDENTITY_SEED_ENABLED:-true}
@@ -75,6 +77,8 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       ConnectionStrings__AccountsDb: "server=accounts-db;port=3306;database=${ACCOUNTS_DB_NAME:-expense_accounts};user=${ACCOUNTS_DB_USER:-expense};password=${ACCOUNTS_DB_PASSWORD:-expense};"
       # Issuer publico (para validar o 'iss' do token) + metadados pela rede interna.
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
@@ -122,6 +126,8 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       ConnectionStrings__TransactionsDb: "server=transactions-db;port=3306;database=${TRANSACTIONS_DB_NAME:-expense_transactions};user=${TRANSACTIONS_DB_USER:-expense};password=${TRANSACTIONS_DB_PASSWORD:-expense};"
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
@@ -147,6 +153,8 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
@@ -174,6 +182,8 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
@@ -202,6 +212,18 @@ services:
       - identity
     ports:
       - "${WEB_HTTP_PORT:-5173}:80"
+    networks:
+      - expense-net
+
+  # OBS-2: backend de tracing distribuido. Recebe OTLP (gRPC 4317 / HTTP 4318) e expoe a UI.
+  # Os servicos nao dependem dele para subir: se estiver fora, os spans sao descartados.
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    container_name: expense-jaeger
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "${OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
     networks:
       - expense-net
 
