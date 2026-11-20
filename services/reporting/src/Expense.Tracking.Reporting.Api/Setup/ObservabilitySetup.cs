@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using Expense.Tracking.Reporting.Application.Projection;
 using OpenTelemetry.Trace;
 
 namespace Expense.Tracking.Reporting.Api.Setup;
@@ -63,7 +64,9 @@ public static class ObservabilitySetup
                     .AddAspNetCoreInstrumentation(options =>
                         // Health checks (docker/CI) so gerariam ruido nos traces.
                         options.Filter = context => !context.Request.Path.StartsWithSegments(HealthPath))
-                    .AddHttpClientInstrumentation();
+                    .AddHttpClientInstrumentation()
+                    // EVT-2: um span por lote da projecao, ligado aos traces de origem dos eventos.
+                    .AddSource(ProjectionTelemetry.SourceName);
 
                 if (exportEnabled)
                 {
