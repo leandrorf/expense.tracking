@@ -55,7 +55,8 @@ public sealed class AccountScopeBackfillTests(AccountScopeBackfillTests.Factory 
         Assert.Equal(new AccountScopeBackfillResult(1, 1), first);
         // A conta desconhecida volta a ser consultada (pode existir depois), mas nada se repete.
         Assert.Equal(new AccountScopeBackfillResult(0, 1), second);
-        Assert.Equal([businessAccount, unknownAccount], directory.Requested[0].Order());
+        // Conjunto de contas consultadas (a ordem segue os GUIDs, que sao aleatorios).
+        Assert.Equal(new[] { businessAccount, unknownAccount }.Order(), directory.Requested[0].Order());
 
         var resolved = Assert.Single(await db.OutboxEvents.AsNoTracking()
             .Where(e => e.EventType == TransactionAccountScopeResolved.Name).ToListAsync());
