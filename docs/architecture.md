@@ -30,7 +30,7 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
 Frontend: `apps/web` (SPA React + TS) — ✅ login OAuth2 + PKCE **e** telas de resumo,
-contas, cartões e lançamentos (consome as APIs pelo gateway).
+lançamentos, orçamentos, contas e cartões (consome as APIs pelo gateway).
 
 ## Arquitetura hexagonal (ports & adapters)
 

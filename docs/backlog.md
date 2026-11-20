@@ -239,7 +239,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     projeção (possivelmente defasada).
   - Cálculo do status como função pura no domínio (como o `SummaryCalculator`), com teste unitário.
   - Estimativa: 5 · **Must** · Dependências: BDG-2 (BDG-3 para a vigência)
-- 🔵 **BDG-5** Aba Orçamentos na SPA: cadastro, alteração e encerramento.
+- ✅ **BDG-5** Aba Orçamentos na SPA: cadastro, alteração e encerramento.
+  (`BudgetsView` + `api/budgets.ts`; acompanhamento visual do mês fica na BDG-6)
   - *Dado* o usuário logado, *quando* abre a aba **Orçamentos**, *então* vê os orçamentos separados em
     PF e PJ e um formulário com categoria, escopo, valor e mês de vigência.
   - *Dado* o formulário preenchido, *quando* salva, *então* o orçamento aparece na lista sem recarregar
