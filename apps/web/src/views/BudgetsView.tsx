@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { budgetsApi, type Budget, type BudgetScope } from '../api/budgets';
+import { budgetsApi, type Budget, type BudgetHealth, type BudgetMonth, type BudgetScope } from '../api/budgets';
 import { ApiError } from '../api/client';
 
 const SCOPES: { scope: BudgetScope; label: string }[] = [
@@ -11,6 +11,13 @@ const SCOPES: { scope: BudgetScope; label: string }[] = [
 function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Soma `delta` meses a um `yyyy-MM`. */
+function shiftMonth(month: string, delta: number): string {
+  const [year, m] = month.split('-').map(Number);
+  const date = new Date(year, m - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** `2026-12` → `12/2026`. */
@@ -26,9 +33,11 @@ function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro inesperado.';
 }
 
-/** BDG-5: cadastro, alteração de valor (a partir de um mês) e encerramento de orçamentos. */
+/** BDG-5/6: acompanhamento do mês, cadastro, alteração de valor (a partir de um mês) e encerramento. */
 export function BudgetsView() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  // Muda a cada alteração nos orçamentos, para o acompanhamento do mês buscar de novo.
+  const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -62,6 +71,7 @@ export function BudgetsView() {
     try {
       const created = await budgetsApi.create({ category, scope, amount: Number(amount), startMonth });
       setBudgets((current) => [...current, created]);
+      setRevision((r) => r + 1);
       setCategory('');
       setAmount('');
     } catch (err) {
@@ -73,6 +83,7 @@ export function BudgetsView() {
 
   function replace(updated: Budget) {
     setBudgets((current) => current.map((b) => (b.id === updated.id ? updated : b)));
+    setRevision((r) => r + 1);
   }
 
   return (
@@ -83,6 +94,9 @@ export function BudgetsView() {
         e acentos.
       </p>
 
+      <MonthTracking revision={revision} />
+
+      <h3 className="section-title">Cadastro</h3>
       <form className="row-form wrap" onSubmit={handleCreate} data-cy="budget-form" aria-label="Novo orçamento">
         <input
           data-cy="budget-category"
@@ -283,5 +297,143 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
         </tr>
       )}
     </>
+  );
+}
+
+const HEALTH: Record<BudgetHealth, { label: string; icon: string }> = {
+  OnTrack: { label: 'Dentro', icon: '✓' },
+  Warning: { label: 'Atenção', icon: '!' },
+  Exceeded: { label: 'Estourado', icon: '✕' },
+};
+
+const percentLabel = (value: number) => `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+
+/** BDG-6: limite, consumido, restante e situação de cada orçamento num mês, com navegação entre meses. */
+function MonthTracking({ revision }: { revision: number }) {
+  const [month, setMonth] = useState(currentMonth());
+  const [data, setData] = useState<BudgetMonth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    budgetsApi
+      .status(month)
+      .then((result) => !cancelled && setData(result))
+      .catch((err) => !cancelled && setError(messageOf(err)))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [month, revision]);
+
+  // Descarta resposta de outro mês enquanto a nova não chega.
+  const statuses = data?.month === month ? data.budgets : [];
+
+  return (
+    <div className="budget-month" data-cy="budget-month" aria-busy={loading}>
+      <div className="month-nav">
+        <button
+          type="button"
+          className="ghost small"
+          data-cy="budget-month-prev"
+          aria-label="Mês anterior"
+          onClick={() => setMonth((m) => shiftMonth(m, -1))}
+        >
+          ‹
+        </button>
+        <h3 data-cy="budget-month-label" aria-live="polite">
+          Acompanhamento de {monthLabel(month)}
+        </h3>
+        <button
+          type="button"
+          className="ghost small"
+          data-cy="budget-month-next"
+          aria-label="Próximo mês"
+          onClick={() => setMonth((m) => shiftMonth(m, 1))}
+        >
+          ›
+        </button>
+        {month !== currentMonth() && (
+          <button type="button" className="ghost small" data-cy="budget-month-current" onClick={() => setMonth(currentMonth())}>
+            mês atual
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && statuses.length === 0 ? (
+        <p>Carregando…</p>
+      ) : (
+        SCOPES.map(({ scope, label }) => {
+          const group = statuses.filter((s) => s.scope === scope);
+          return (
+            <div key={scope} className="budget-group" data-cy={`budget-status-${scope.toLowerCase()}`}>
+              <h4>{label}</h4>
+              {group.length === 0 ? (
+                <p className="muted">Nenhum orçamento {scope === 'Personal' ? 'PF' : 'PJ'} vale neste mês.</p>
+              ) : (
+                <ul className="budget-status-list">
+                  {group.map((s) => {
+                    const health = HEALTH[s.status];
+                    return (
+                      <li
+                        key={s.budgetId}
+                        className={`budget-status ${s.status.toLowerCase()}`}
+                        data-cy="budget-status-row"
+                        data-category={s.category}
+                        data-status={s.status}
+                      >
+                        <div className="budget-status-head">
+                          <strong>{s.category}</strong>
+                          <span className={`health-badge ${s.status.toLowerCase()}`} data-cy="budget-status-health">
+                            <span aria-hidden="true">{health.icon}</span> {health.label}
+                          </span>
+                        </div>
+                        <div
+                          className="progress"
+                          role="progressbar"
+                          aria-label={`Consumido de ${s.category}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.min(100, Math.round(s.percent))}
+                          aria-valuetext={percentLabel(s.percent)}
+                        >
+                          <div className="progress-fill" style={{ width: `${Math.min(100, s.percent)}%` }} />
+                        </div>
+                        <dl className="budget-status-figures">
+                          <div>
+                            <dt>Limite</dt>
+                            <dd data-cy="budget-status-limit">{money(s.limit, s.currency)}</dd>
+                          </div>
+                          <div>
+                            <dt>Consumido</dt>
+                            <dd data-cy="budget-status-spent">{money(s.spent, s.currency)}</dd>
+                          </div>
+                          <div>
+                            <dt>{s.remaining < 0 ? 'Passou' : 'Restante'}</dt>
+                            <dd data-cy="budget-status-remaining">{money(Math.abs(s.remaining), s.currency)}</dd>
+                          </div>
+                          <div>
+                            <dt>Uso</dt>
+                            <dd data-cy="budget-status-percent">{percentLabel(s.percent)}</dd>
+                          </div>
+                        </dl>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }

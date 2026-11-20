@@ -382,3 +382,127 @@ tr.budget-edit .row-form {
   background: #0f172a;
   color: #e2e8f0;
 }
+
+/* ---- Acompanhamento do mês (BDG-6) ---- */
+.budget-month {
+  margin-bottom: 1.75rem;
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.month-nav h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.section-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.budget-group h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.budget-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.budget-status {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  border-left: 4px solid #22c55e;
+}
+
+.budget-status.warning {
+  border-left-color: #f59e0b;
+}
+
+.budget-status.exceeded {
+  border-left-color: #ef4444;
+  border-left-width: 6px;
+}
+
+.budget-status-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.health-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+.health-badge.warning {
+  background: #78350f;
+  color: #fde68a;
+}
+
+.health-badge.exceeded {
+  background: #7f1d1d;
+  color: #fecaca;
+  text-transform: uppercase;
+}
+
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #22c55e;
+}
+
+.warning .progress-fill {
+  background: #f59e0b;
+}
+
+/* Listras além da cor: estourado é distinguível sem depender de matiz. */
+.exceeded .progress-fill {
+  background: repeating-linear-gradient(45deg, #ef4444 0 6px, #b91c1c 6px 12px);
+}
+
+.budget-status-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+}
+
+.budget-status-figures dt {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.budget-status-figures dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .budget-status-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

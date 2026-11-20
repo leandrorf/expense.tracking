@@ -29,8 +29,31 @@ export interface CreateBudgetInput {
   currency?: string;
 }
 
+/** Situação no mês: abaixo de 80%, de 80% a 100%, acima de 100%. */
+export type BudgetHealth = 'OnTrack' | 'Warning' | 'Exceeded';
+
+export interface BudgetStatus {
+  budgetId: string;
+  category: string;
+  scope: BudgetScope;
+  currency: string;
+  limit: number;
+  spent: number;
+  /** Negativo quando estourado (o quanto passou). */
+  remaining: number;
+  percent: number;
+  status: BudgetHealth;
+}
+
+export interface BudgetMonth {
+  month: string;
+  budgets: BudgetStatus[];
+}
+
 export const budgetsApi = {
   list: () => apiFetch<Budget[]>('/api/budgets'),
+
+  status: (month: string) => apiFetch<BudgetMonth>(`/api/budgets/status?month=${encodeURIComponent(month)}`),
 
   create: (input: CreateBudgetInput) =>
     apiFetch<Budget>('/api/budgets', { method: 'POST', body: JSON.stringify(input) }),

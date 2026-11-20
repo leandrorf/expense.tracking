@@ -250,7 +250,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     mudança.
   - Atributos `data-cy` em todos os elementos usados pelo E2E; acessível por teclado.
   - Estimativa: 5 · **Must** · Dependências: BDG-2, BDG-3
-- 🔵 **BDG-6** Acompanhamento visual do mês na aba Orçamentos.
+- ✅ **BDG-6** Acompanhamento visual do mês na aba Orçamentos.
+  (`MonthTracking` em `BudgetsView`, consumindo `GET /budgets/status?month=`)
   - *Dado* orçamentos PF e PJ no mês corrente, *quando* abro a aba, *então* cada um mostra limite,
     consumido, restante, percentual e uma barra de progresso, agrupados por escopo.
   - *Dado* um orçamento **Atenção** ou **Estourado**, *quando* a lista renderiza, *então* o status
