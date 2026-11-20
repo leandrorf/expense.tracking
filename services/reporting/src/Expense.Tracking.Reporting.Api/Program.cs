@@ -46,6 +46,7 @@ app.UseAuthorization();
 
 app.MapHealthEndpoints();
 app.MapReportsEndpoints();
+app.MapBudgetsEndpoints();
 
 await InitializeDatabaseAsync(app);
 

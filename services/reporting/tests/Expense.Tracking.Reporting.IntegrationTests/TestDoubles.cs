@@ -13,6 +13,7 @@ public sealed class TestAuthHandler(
 {
     public const string SchemeName = "Test";
     public const string SubHeader = "X-Test-Sub";
+    public const string ScopeHeader = "X-Test-Scope";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -21,7 +22,9 @@ public sealed class TestAuthHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var claims = new[] { new Claim("sub", sub.ToString()), new Claim("scope", "expenses.read") };
+        // Escopo padrao: so leitura. BDG-2: os testes de escrita mandam o escopo pelo header.
+        var scope = Request.Headers.TryGetValue(ScopeHeader, out var requested) ? requested.ToString() : "expenses.read";
+        var claims = new[] { new Claim("sub", sub.ToString()), new Claim("scope", scope) };
         var identity = new ClaimsIdentity(claims, SchemeName, "sub", roleType: null);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
