@@ -242,6 +242,15 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   `budget.currency_invalid`, `budget.month_before_start`; 409: `budget.duplicate`,
   `budget.closed`, `budget.already_closed`; 404: `budget.not_found`, inclusive para orçamento
   de outro usuário).
+- **Acompanhamento do mês (BDG-4)**: `GET /budgets/status?month=yyyy-MM` (`expenses.read` ou
+  `expenses.write`; `month` obrigatório) → `{month, budgets: [{budgetId, category, scope, currency,
+  limit, spent, remaining, percent, status}]}` para cada orçamento que vale no mês. O consumido
+  sai da **projeção** (mesma fonte e defasagem do Resumo; responde com o `transactions` fora): soma
+  dos gastos do dono no mês, com o mesmo escopo, moeda e categoria normalizada, em qualquer conta e
+  meio de pagamento, pela data do lançamento (compra no cartão conta no mês da compra). Receitas e
+  escopo desconhecido não contam. `remaining` fica negativo quando estoura. `status`: `OnTrack`
+  (< 80%), `Warning` (80% a 100%), `Exceeded` (> 100%), calculado por `BudgetStatusCalculator`
+  (função pura no domínio).
 - **Categoria normalizada** (`CategoryKey`): sem diferença de maiúsculas, acentos e espaços
   extras, calculada no domínio (os serviços rodam com `InvariantGlobalization`, então o mapeamento
   de acentos é explícito, sem `string.Normalize`).

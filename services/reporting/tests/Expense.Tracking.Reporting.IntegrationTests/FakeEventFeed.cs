@@ -18,7 +18,7 @@ public sealed class FakeEventFeed : IEventFeedClient
     public FeedEvent Registered(
         Guid transactionId, Guid ownerUserId, string? accountScope = "Personal", decimal amount = 100m,
         string category = "Alimentacao", Guid? accountId = null, string occurredOn = "2026-11-19",
-        string transactionType = "Expense", string paymentMethod = "Pix") =>
+        string transactionType = "Expense", string paymentMethod = "Pix", string currency = "BRL") =>
         Append(FeedEventTypes.TransactionRegistered, transactionId, ownerUserId, new
         {
             transactionId,
@@ -29,7 +29,7 @@ public sealed class FakeEventFeed : IEventFeedClient
             paymentMethod,
             category,
             amount,
-            currency = "BRL",
+            currency,
             occurredOn,
         });
 

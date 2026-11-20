@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<CreateBudgetHandler>();
         services.AddScoped<ListBudgetsHandler>();
         services.AddScoped<ChangeBudgetHandler>();
+        services.AddScoped<GetBudgetStatusHandler>();
         services.AddSingleton<ProjectionStatus>();
 
         var projection = new ProjectionOptions(
