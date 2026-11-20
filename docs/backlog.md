@@ -119,9 +119,193 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 
 ---
 
+## 🔵 EPIC BDG — Orçamentos por categoria e escopo (PF/PJ)  · *To Do*
+**Problema:** hoje o usuário só vê quanto **já gastou** (Resumo). Ele não tem como saber, durante o
+mês, se um gasto PF ou PJ está saindo do planejado, e só percebe o estouro depois de fechado o mês.
+**Objetivo (outcome):** para cada categoria que importa, o usuário define um limite mensal separado
+para PF e para PJ e acompanha, a qualquer momento do mês, quanto consumiu, quanto resta e quais
+orçamentos estouraram, sem misturar o dinheiro da empresa com o pessoal.
+**Métricas de sucesso:** (1) o usuário cadastra orçamentos para as categorias que mais gasta, nos
+dois escopos; (2) o status do mês bate com o Resumo do mesmo período para a mesma categoria e escopo
+(diferença zero, salvo a defasagem da projeção); (3) a jornada PF e a PJ passam no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → Domínio ("controle de gastos PF e PJ"; "escopo PF/PJ é
+dimensão de primeira classe em lançamentos e relatórios"; meios cartão, Pix, dinheiro,
+transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do dono do produto
+(2026-11-20).
+
+**Achados no código que moldam o épico:**
+- **Categoria é texto livre.** `Transaction.Category` é `string` obrigatória, só com `Trim()` e no
+  máximo 60 caracteres (`Transaction.CategoryMaxLength`). Não há enum, catálogo nem cadastro de
+  categorias; a SPA usa um `<input>` livre (`tx-category`). A categoria viaja assim no
+  `TransactionRegistered` e fica na projeção `projected_transactions.category`.
+- **O agrupamento atual é sensível a maiúsculas e acentos.** O `SummaryCalculator` agrupa com o
+  comparador padrão (ordinal): "Alimentação", "alimentação" e "Alimentacao" viram três linhas no
+  Resumo. Já um filtro feito no MySQL (collation padrão `utf8mb4_0900_ai_ci`) trataria as três como
+  iguais. O orçamento precisa de uma regra de correspondência explícita, no domínio, sem depender da
+  collation.
+- **Escopo PF/PJ** já está em cada linha da projeção (`AccountScope`); `Unknown` só sobra para conta
+  inexistente no `accounts` (EVT-4).
+- **Não há edição de lançamento** (só criar e excluir), então o consumido só muda por cadastro ou
+  exclusão, os dois já projetados.
+- **Moeda:** `Money` aceita qualquer ISO 4217, mas o Resumo assume uma moeda só (a primeira que
+  encontra).
+- **O Resumo não cruza categoria × escopo:** devolve `byCategory` e `byScope` separados. O consumo
+  de um orçamento precisa de uma consulta nova na projeção.
+
+**Decisões em aberto (precisam de aceite do dono antes da BDG-2):**
+1. **Onde mora o orçamento.** Opções: (a) no `reporting`, em tabelas próprias no
+   `expense_reporting`, ao lado da projeção; (b) serviço novo `budgets` com banco próprio;
+   (c) no `accounts`. *Recomendação: (a)*. O consumido sai da projeção sem chamada entre serviços e
+   sem um segundo consumidor do feed. A opção (b) é a mais limpa como contexto delimitado, mas exige
+   chamar o `reporting` na consulta ou virar o **segundo consumidor** do feed, gatilho que a
+   ADR-0001 lista para reabrir o transporte. A opção (c) não tem os lançamentos. A escolha muda o
+   papel do `reporting` (deixa de ser só modelo de leitura e passa a ter dado escrito pelo usuário),
+   então é decisão arquitetural: **registrar na ADR-0002 (BDG-1) antes da primeira história de
+   código.**
+2. **Período.** *Recomendação:* mês civil fixo, sem períodos personalizados. O orçamento é um limite
+   mensal **recorrente** que vale a partir de um mês de vigência; alterar o valor cria nova vigência
+   a partir do mês escolhido, preservando o limite dos meses anteriores. Alternativa mais simples:
+   o valor atual vale para todos os meses (o histórico muda junto).
+3. **Cálculo do consumido.** *Recomendação:* consulta à projeção do `reporting`: soma dos
+   lançamentos do tipo **gasto** (receitas não contam), do mesmo dono, escopo e moeda, com
+   `occurredOn` dentro do mês (**regime de competência**: compra no cartão conta na data da compra,
+   não na fatura), em **todas as contas** do escopo e em todos os meios de pagamento. Defasagem
+   aceita: a mesma do Resumo (margem do feed + polling).
+4. **Correspondência de categoria.** *Recomendação:* comparar por chave normalizada no domínio
+   (trim, espaços internos colapsados, sem diferença de maiúsculas nem de acentos), aplicada ao
+   orçamento e aos lançamentos. Um catálogo gerenciado de categorias (com renomear/mesclar) fica fora
+   do MVP; a BDG-7 reduz a digitação divergente sugerindo as categorias já usadas.
+5. **Alertas de estouro.** *Recomendação:* no MVP, **status calculado na leitura** (Dentro, Atenção
+   a partir de 80%, Estourado acima de 100%) e destaque visual na SPA. Notificação ativa (e-mail,
+   push) fica fora: não há infraestrutura de notificação no projeto e o briefing não pede.
+6. **Moeda.** *Recomendação:* o orçamento tem moeda (padrão BRL) e só soma lançamentos da mesma
+   moeda.
+7. **"Metas".** *Recomendação:* neste épico, meta = teto de gasto. Meta de economia ou de receita
+   fica como pergunta aberta ao dono, fora do MVP.
+
+- 🔵 **BDG-1** ADR-0002: onde mora o orçamento e regras do modelo.
+  - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa a análise de
+    opções, *então* a ADR-0002 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado),
+    e o PO ajusta as histórias seguintes ao que foi decidido.
+  - Conteúdo mínimo: serviço dono do orçamento e impacto na ADR-0001; período e vigência; regra de
+    correspondência de categoria; cálculo do consumido; rota no gateway e escopos OAuth
+    (reaproveitar `expenses.read`/`expenses.write`).
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **BDG-2** Definir e listar orçamentos mensais por categoria e escopo (API).
+  - *Dado* um usuário com o escopo `expenses.write`, *quando* define um orçamento "Alimentação",
+    escopo **PF**, R$ 1.500,00 a partir de 2026-12, *então* o orçamento é criado e aparece na
+    listagem dele, e de nenhum outro usuário.
+  - *Dado* um orçamento "Alimentação" PF vigente, *quando* o usuário define "Alimentação" **PJ**,
+    *então* os dois coexistem como orçamentos independentes.
+  - *Dado* um orçamento "Alimentação" PF vigente, *quando* o usuário tenta criar "alimentacao" PF,
+    *então* recebe um erro de conflito, porque a categoria normalizada é a mesma.
+  - *Dado* valor zero ou negativo, mais de 2 casas decimais, categoria vazia ou acima de 60
+    caracteres, escopo diferente de `Personal`/`Business`, ou mês inválido, *quando* tenta criar,
+    *então* recebe erro de validação no mesmo formato dos demais serviços.
+  - *Dado* um token sem `expenses.write`, *quando* tenta criar, *então* recebe 403; sem token, 401.
+  - Rota pelo gateway (ex.: `/api/budgets/**`) para o serviço decidido na BDG-1.
+  - Estimativa: 5 · **Must** · Dependências: BDG-1
+- 🔵 **BDG-3** Alterar o valor e encerrar um orçamento (API).
+  - *Dado* "Alimentação" PF de R$ 1.500,00 desde 2026-12, *quando* o usuário altera para
+    R$ 1.800,00 a partir de 2027-02, *então* dezembro e janeiro continuam com R$ 1.500,00 e fevereiro
+    em diante usa R$ 1.800,00.
+  - *Dado* um orçamento vigente, *quando* o usuário o encerra a partir de um mês, *então* ele deixa de
+    aparecer nos meses seguintes e continua nos anteriores.
+  - *Dado* um orçamento de outro usuário, *quando* tenta alterar ou encerrar, *então* recebe 404.
+  - Estimativa: 3 · **Must** · Dependências: BDG-2
+- 🔵 **BDG-4** Acompanhamento do mês: limite, consumido, restante e status (API).
+  - *Dado* "Alimentação" PF de R$ 1.000,00 em 2026-12 e gastos PF em "Alimentação" de R$ 300,00 no
+    **Pix**, R$ 200,00 em **dinheiro** e R$ 250,00 no **cartão de crédito**, em contas PF diferentes,
+    *quando* consulto o status de 2026-12, *então* o consumido é R$ 750,00, o restante R$ 250,00, 75%
+    e status **Dentro**.
+  - *Dado* "Fornecedores" PJ de R$ 5.000,00 e gastos PJ de R$ 3.000,00 em **boleto** e R$ 1.200,00 em
+    **transferência**, *quando* consulto o mês, *então* 84% e status **Atenção**.
+  - *Dado* um gasto que faz o consumido passar do limite, *quando* consulto o mês, *então* o status é
+    **Estourado** e o restante é negativo (o quanto passou).
+  - *Dado* um gasto PJ em "Alimentação", *quando* consulto o orçamento "Alimentação" PF, *então* ele
+    não entra no consumido (escopos nunca se misturam).
+  - *Dado* receitas, lançamentos de outro mês, de outra moeda ou com escopo `Unknown`, *quando*
+    consulto o mês, *então* nenhum deles entra no consumido.
+  - *Dado* um gasto lançado como "alimentação " (minúscula, espaço sobrando), *quando* consulto
+    "Alimentação" PF, *então* ele entra no consumido.
+  - *Dado* uma compra no cartão em 2026-12-28 com fatura em janeiro, *quando* consulto dezembro,
+    *então* ela conta em dezembro (data da compra).
+  - *Dado* um gasto excluído, *quando* a projeção processa a exclusão, *então* o consumido diminui.
+  - *Dado* o `transactions` fora do ar, *quando* consulto o status, *então* ele responde a partir da
+    projeção (possivelmente defasada).
+  - Cálculo do status como função pura no domínio (como o `SummaryCalculator`), com teste unitário.
+  - Estimativa: 5 · **Must** · Dependências: BDG-2 (BDG-3 para a vigência)
+- 🔵 **BDG-5** Aba Orçamentos na SPA: cadastro, alteração e encerramento.
+  - *Dado* o usuário logado, *quando* abre a aba **Orçamentos**, *então* vê os orçamentos separados em
+    PF e PJ e um formulário com categoria, escopo, valor e mês de vigência.
+  - *Dado* o formulário preenchido, *quando* salva, *então* o orçamento aparece na lista sem recarregar
+    a página; *dado* um conflito ou erro de validação, *então* a mensagem da API aparece junto ao
+    formulário.
+  - *Dado* um orçamento na lista, *quando* altera o valor ou encerra, *então* a lista reflete a
+    mudança.
+  - Atributos `data-cy` em todos os elementos usados pelo E2E; acessível por teclado.
+  - Estimativa: 5 · **Must** · Dependências: BDG-2, BDG-3
+- 🔵 **BDG-6** Acompanhamento visual do mês na aba Orçamentos.
+  - *Dado* orçamentos PF e PJ no mês corrente, *quando* abro a aba, *então* cada um mostra limite,
+    consumido, restante, percentual e uma barra de progresso, agrupados por escopo.
+  - *Dado* um orçamento **Atenção** ou **Estourado**, *quando* a lista renderiza, *então* o status
+    aparece em texto e em destaque visual (não só por cor).
+  - *Dado* a aba aberta, *quando* navego para o mês anterior ou o seguinte, *então* os valores e os
+    limites são os daquele mês.
+  - Estimativa: 3 · **Must** · Dependências: BDG-4, BDG-5
+- 🔵 **BDG-7** Sugerir as categorias já usadas (orçamento e lançamento).
+  - *Dado* lançamentos PF e PJ com categorias "Alimentação" e "Combustível", *quando* digito a
+    categoria no formulário de orçamento ou de lançamento, *então* as categorias já usadas pelo
+    usuário aparecem como sugestão, sem repetir variações de maiúscula/acento.
+  - *Dado* outro usuário, *quando* consulta as sugestões, *então* não vê as categorias deste.
+  - Continua permitindo categoria nova (texto livre); a lista sai da projeção.
+  - Estimativa: 3 · **Should** · Dependências: BDG-1 (independe das demais)
+- 🔵 **BDG-8** Gastos sem orçamento no mês.
+  - *Dado* gastos PJ em "Viagens" sem orçamento PJ para essa categoria, *quando* consulto o
+    acompanhamento do mês, *então* vejo o total "Sem orçamento" por escopo, com as categorias que o
+    compõem.
+  - Estimativa: 2 · **Should** · Dependências: BDG-4 (UI junto da BDG-6)
+- 🔵 **BDG-9** E2E Cypress: jornadas de orçamento PF e PJ.
+  - *Dado* um orçamento "Alimentação" PF, *quando* lanço um gasto PF no **Pix** que ultrapassa o
+    limite, *então* a aba Orçamentos mostra o consumido e o status **Estourado**.
+  - *Dado* um orçamento PJ, *quando* lanço um gasto PJ no **cartão de crédito**, *então* o consumido do
+    orçamento PJ sobe e o do PF da mesma categoria não muda.
+  - Espera a projeção como o `cy.waitForSummary` (sem `cy.wait` fixo); roda no job `Cypress E2E`.
+  - Estimativa: 5 · **Must** · Dependências: BDG-6
+- 🔵 **BDG-10** Limiar de "Atenção" configurável por orçamento.
+  - *Dado* um orçamento com limiar de 90%, *quando* o consumido chega a 85%, *então* o status é
+    **Dentro**; a 90%, **Atenção**.
+  - Estimativa: 2 · **Could** · Dependências: BDG-4
+
+**Fora do escopo (Won't, nesta versão):** notificação ativa de estouro (e-mail/push); orçamento
+por conta ou por cartão; períodos que não sejam o mês civil (semanal, anual, personalizado);
+catálogo gerenciado de categorias (renomear/mesclar); metas de economia ou de receita; conversão
+entre moedas.
+
+**Priorização (MoSCoW):** Must = BDG-1, 2, 3, 4, 5, 6, 9 (28 pts), o mínimo para definir, acompanhar
+e provar ponta a ponta nos dois escopos. Should = BDG-7, 8 (5 pts): a BDG-7 ataca o maior risco
+do épico (categoria livre divergente que some do consumido) e é barata. Could = BDG-10 (2 pts).
+Total: 35 pts.
+
+**Definition of Ready (por história):** decisões da BDG-1 aceitas; critérios de aceite revisados com
+QA; contrato da API (rota, payload, erros) descrito na história de backend antes da de frontend.
+
+**Definition of Done do épico:**
+- CI verde no PR: `build & test` dos serviços afetados e `Cypress E2E` (os 6 checks exigidos no
+  `main`; serviço novo, se a BDG-1 decidir por ele, entra na matriz e nos required checks).
+- Testes unitários do domínio (orçamento, vigência, normalização de categoria, cálculo de status).
+- Testes de integração (WebApplicationFactory): isolamento por dono (404 em recurso alheio), 401/403
+  por escopo, validações, conflito, consumido a partir da projeção (PF/PJ, todos os meios, exclusão).
+- E2E das jornadas PF e PJ (BDG-9) no job do CI; smoke test (`build/smoke-test.mjs`) cobrindo
+  criar orçamento e ler o status pelo gateway.
+- Migração EF no banco do serviço dono; logs, traces e métricas HTTP chegando pelo pipeline da OBS.
+- `docs/architecture.md`, a ADR-0002 e o histórico do `docs/PROMPT.md` atualizados; validado ao
+  vivo no `docker compose`.
+
+---
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
-- Orçamentos/metas por categoria e escopo (PF/PJ).
 - Importação de extrato/fatura (CSV/OFX).
 - Fechamento de fatura de cartão e previsão de caixa.
 - Exportação contábil (relatório PJ para o contador).
