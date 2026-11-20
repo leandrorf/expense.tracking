@@ -102,6 +102,25 @@ async function main() {
   const budgets = budgetsRes.status === 200 ? await budgetsRes.json() : [];
   ok(budgets.some((b) => b.id === budget.id), `GET /api/budgets lista o orcamento novo (status ${budgetsRes.status})`);
 
+  // 9) Vigência e encerramento (BDG-3): o valor muda a partir do mês seguinte e o orçamento é
+  // encerrado dois meses depois; cada mês mostra o valor que vale nele.
+  const monthAfter = (n) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+  const amountIn = async (month) => {
+    const res = await fetch(`${GATEWAY}/api/budgets?month=${month}`, { headers: auth });
+    return (await res.json()).find((b) => b.id === budget.id)?.amount;
+  };
+  const changeRes = await fetch(`${GATEWAY}/api/budgets/${budget.id}/amount`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ amount: 1800, fromMonth: monthAfter(1) }),
+  });
+  ok(changeRes.status === 200, `PUT /api/budgets/{id}/amount alterou o valor (status ${changeRes.status})`);
+  const closeRes = await fetch(`${GATEWAY}/api/budgets/${budget.id}/close`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ fromMonth: monthAfter(2) }),
+  });
+  ok(closeRes.status === 200, `POST /api/budgets/{id}/close encerrou o orcamento (status ${closeRes.status})`);
+  const timeline = [await amountIn(monthAfter(0)), await amountIn(monthAfter(1)), await amountIn(monthAfter(2))];
+  ok(timeline[0] === 1500 && timeline[1] === 1800 && timeline[2] === undefined,
+    `valor por mes respeita vigencia e encerramento (${JSON.stringify(timeline)})`);
+
   console.log(`\nRESULTADO: ${pass} passaram, ${fail} falharam`);
   process.exit(fail === 0 ? 0 : 1);
 }

@@ -11,21 +11,43 @@ namespace Expense.Tracking.Reporting.Api.Endpoints;
 /// <param name="Currency">Codigo ISO 4217; BRL se omitido.</param>
 public sealed record CreateBudgetRequest(string? Category, string? Scope, decimal Amount, string? StartMonth, string? Currency);
 
+/// <param name="FromMonth">Mes (<c>yyyy-MM</c>) a partir do qual o novo valor vale.</param>
+public sealed record ChangeBudgetAmountRequest(decimal Amount, string? FromMonth);
+
+/// <param name="FromMonth">Mes (<c>yyyy-MM</c>) a partir do qual o orcamento deixa de valer.</param>
+public sealed record CloseBudgetRequest(string? FromMonth);
+
 public static class BudgetsEndpoints
 {
+    private static readonly Error InvalidMonth =
+        Error.Validation("budget.month_invalid", "Mes invalido: use o formato 'yyyy-MM'.");
+
     public static IEndpointRouteBuilder MapBudgetsEndpoints(this IEndpointRouteBuilder app)
     {
-        // BDG-2 (ADR-0002): orcamentos mensais por categoria e escopo, sempre restritos ao dono.
+        // BDG-2/BDG-3 (ADR-0002): orcamentos mensais por categoria e escopo, sempre restritos ao dono.
         var group = app.MapGroup("/budgets").WithTags("Budgets");
 
-        group.MapGet("/", async (ClaimsPrincipal user, ListBudgetsHandler handler, CancellationToken ct) =>
+        // Sem ?month= lista todos (com o valor da vigencia mais recente); com mes, so os que valem
+        // nele, com o valor daquele mes.
+        group.MapGet("/", async (string? month, ClaimsPrincipal user, ListBudgetsHandler handler, CancellationToken ct) =>
         {
             if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
             {
                 return Results.Unauthorized();
             }
 
-            return Results.Ok(await handler.HandleAsync(ownerUserId, ct));
+            DateOnly? filter = null;
+            if (month is not null)
+            {
+                if (!TryParseMonth(month, out var parsed))
+                {
+                    return HttpResults.Problem(InvalidMonth);
+                }
+
+                filter = parsed;
+            }
+
+            return Results.Ok(await handler.HandleAsync(ownerUserId, filter, ct));
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
         group.MapPost("/", async (CreateBudgetRequest request, ClaimsPrincipal user, CreateBudgetHandler handler, CancellationToken ct) =>
@@ -42,9 +64,9 @@ public static class BudgetsEndpoints
                 return HttpResults.Problem(Error.Validation("budget.scope_invalid", "Escopo invalido: use 'Personal' ou 'Business'."));
             }
 
-            if (!DateOnly.TryParseExact(request.StartMonth, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var startMonth))
+            if (!TryParseMonth(request.StartMonth, out var startMonth))
             {
-                return HttpResults.Problem(Error.Validation("budget.month_invalid", "Mes de vigencia invalido: use o formato 'yyyy-MM'."));
+                return HttpResults.Problem(InvalidMonth);
             }
 
             var result = await handler.HandleAsync(
@@ -55,6 +77,43 @@ public static class BudgetsEndpoints
                 : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        group.MapPut("/{id:guid}/amount", async (
+            Guid id, ChangeBudgetAmountRequest request, ClaimsPrincipal user, ChangeBudgetHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseMonth(request.FromMonth, out var fromMonth))
+            {
+                return HttpResults.Problem(InvalidMonth);
+            }
+
+            var result = await handler.HandleAsync(new ChangeBudgetAmountCommand(id, ownerUserId, request.Amount, fromMonth), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapPost("/{id:guid}/close", async (
+            Guid id, CloseBudgetRequest request, ClaimsPrincipal user, ChangeBudgetHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseMonth(request.FromMonth, out var fromMonth))
+            {
+                return HttpResults.Problem(InvalidMonth);
+            }
+
+            var result = await handler.HandleAsync(new CloseBudgetCommand(id, ownerUserId, fromMonth), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         return app;
     }
+
+    private static bool TryParseMonth(string? value, out DateOnly month) =>
+        DateOnly.TryParseExact(value, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out month);
 }

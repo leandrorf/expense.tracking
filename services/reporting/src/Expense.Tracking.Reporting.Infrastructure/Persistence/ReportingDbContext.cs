@@ -44,7 +44,7 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.HasIndex(t => new { t.OwnerUserId, t.OccurredOn }).HasDatabaseName("ix_projected_transactions_owner_date");
         });
 
-        // BDG-2 (ADR-0002): dado escrito pelo usuario, fora da projecao.
+        // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.
         modelBuilder.Entity<Budget>(b =>
         {
             b.ToTable("budgets");
@@ -53,14 +53,31 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
             b.Property(x => x.Category).HasColumnName("category").HasMaxLength(Budget.CategoryMaxLength).IsRequired();
             b.Property(x => x.CategoryKey).HasColumnName("category_key").HasMaxLength(Budget.CategoryMaxLength).IsRequired();
+            b.Property(x => x.OpenCategoryKey).HasColumnName("open_category_key").HasMaxLength(Budget.CategoryMaxLength);
             b.Property(x => x.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(16).IsRequired();
-            b.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
             b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
             b.Property(x => x.StartMonth).HasColumnName("start_month").IsRequired();
+            b.Property(x => x.ClosedFromMonth).HasColumnName("closed_from_month");
             b.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
-            b.HasIndex(x => new { x.OwnerUserId, x.Scope, x.CategoryKey })
+            b.Ignore(x => x.Limits);
+            b.Ignore(x => x.LatestAmount);
+            // Um so orcamento ABERTO por dono + escopo + categoria (encerrados tem chave nula).
+            b.HasIndex(x => new { x.OwnerUserId, x.Scope, x.OpenCategoryKey })
                 .IsUnique()
-                .HasDatabaseName("ux_budgets_owner_scope_category");
+                .HasDatabaseName("ux_budgets_owner_scope_open_category");
+            b.HasIndex(x => new { x.OwnerUserId, x.Scope, x.CategoryKey })
+                .HasDatabaseName("ix_budgets_owner_scope_category");
+
+            b.OwnsMany<BudgetLimit>("_limits", l =>
+            {
+                l.ToTable("budget_limits");
+                l.WithOwner().HasForeignKey("BudgetId");
+                l.Property<Guid>("BudgetId").HasColumnName("budget_id");
+                l.Property(x => x.EffectiveFrom).HasColumnName("effective_from").IsRequired();
+                l.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+                l.HasKey("BudgetId", nameof(BudgetLimit.EffectiveFrom));
+            });
+            b.Navigation("_limits").AutoInclude();
         });
 
         modelBuilder.Entity<ProjectionCheckpoint>(b =>

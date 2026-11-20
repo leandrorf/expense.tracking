@@ -225,15 +225,30 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
 
 - Ficam no `reporting`, na tabela `budgets` do `expense_reporting`. São **dado escrito pelo
   usuário**, fora da projeção: reconstruir a projeção (zerar o checkpoint) não pode apagá-los.
-- `GET /budgets` (`expenses.read` ou `expenses.write`) lista os orçamentos do dono;
-  `POST /budgets` (`expenses.write`) cria `{category, scope, amount, startMonth: "yyyy-MM",
-  currency?}` (moeda padrão BRL) e responde 201. Erros no formato `ProblemDetails` com `title` =
-  código estável (`budget.category_invalid`, `budget.amount_invalid`, `budget.scope_invalid`,
-  `budget.month_invalid`, `budget.currency_invalid`, `budget.duplicate` → 409).
+- `GET /budgets?month=yyyy-MM` (`expenses.read` ou `expenses.write`): sem `month`, lista todos os
+  orçamentos do dono (inclusive encerrados) com o valor da vigência mais recente; com `month`, só
+  os que valem naquele mês, com o valor daquele mês. Cada item traz `limits` (vigências) e
+  `closedFromMonth`.
+- `POST /budgets` (`expenses.write`) cria `{category, scope, amount, startMonth: "yyyy-MM",
+  currency?}` (moeda padrão BRL) e responde 201.
+- **Vigência (BDG-3)**: `PUT /budgets/{id}/amount {amount, fromMonth}` muda o valor a partir de um
+  mês; os meses anteriores ficam como estavam e vigências posteriores a `fromMonth` são
+  substituídas. Tabela `budget_limits` (uma linha por vigência).
+- **Encerramento (BDG-3)**: `POST /budgets/{id}/close {fromMonth}`: o orçamento deixa de valer a
+  partir desse mês (tem de ser depois do início) e continua nos anteriores. Depois disso a mesma
+  categoria aceita um orçamento novo que comece no mês do encerramento ou depois.
+- Erros no formato `ProblemDetails` com `title` = código estável (`budget.category_invalid`,
+  `budget.amount_invalid`, `budget.scope_invalid`, `budget.month_invalid`,
+  `budget.currency_invalid`, `budget.month_before_start`; 409: `budget.duplicate`,
+  `budget.closed`, `budget.already_closed`; 404: `budget.not_found`, inclusive para orçamento
+  de outro usuário).
 - **Categoria normalizada** (`CategoryKey`): sem diferença de maiúsculas, acentos e espaços
   extras, calculada no domínio (os serviços rodam com `InvariantGlobalization`, então o mapeamento
-  de acentos é explícito, sem `string.Normalize`). Um orçamento por dono + escopo + chave
-  (índice único `ux_budgets_owner_scope_category`).
+  de acentos é explícito, sem `string.Normalize`).
+- **Unicidade**: dois orçamentos da mesma categoria e escopo não podem valer no mesmo mês. A
+  aplicação confere a sobreposição; o índice único `ux_budgets_owner_scope_open_category` (sobre
+  `open_category_key`, nula quando encerrado) garante no banco um só orçamento aberto, mesmo com
+  requisições concorrentes.
 
 ## Gateway (YARP) — implementado
 

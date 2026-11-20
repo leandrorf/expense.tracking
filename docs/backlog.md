@@ -207,7 +207,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
   - *Dado* um token sem `expenses.write`, *quando* tenta criar, *então* recebe 403; sem token, 401.
   - Rota pelo gateway (ex.: `/api/budgets/**`) para o serviço decidido na BDG-1.
   - Estimativa: 5 · **Must** · Dependências: BDG-1
-- 🔵 **BDG-3** Alterar o valor e encerrar um orçamento (API).
+- ✅ **BDG-3** Alterar o valor e encerrar um orçamento (API).
+  (`PUT /budgets/{id}/amount`, `POST /budgets/{id}/close`, `GET /budgets?month=`; vigências em `budget_limits`)
   - *Dado* "Alimentação" PF de R$ 1.500,00 desde 2026-12, *quando* o usuário altera para
     R$ 1.800,00 a partir de 2027-02, *então* dezembro e janeiro continuam com R$ 1.500,00 e fevereiro
     em diante usa R$ 1.800,00.
