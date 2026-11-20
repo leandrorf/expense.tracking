@@ -90,14 +90,23 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 
 ## 🔵 EPIC EVT — Reporting por eventos  · *To Do*
 **Objetivo:** reporting deixa de agregar sob demanda e passa a consumir eventos.
+**Transporte:** outbox do `transactions` exposto como feed HTTP, lido por polling pelo `reporting` — ver [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md) (Aceito).
 
-- 🔵 **EVT-1** Publicação de eventos de domínio no `transactions` (outbox pattern).
-  - *Dado* um gasto lançado, *quando* a transação é confirmada, *então* um evento `ExpenseRegistered` é gravado no outbox na mesma transação.
+- 🔵 **EVT-1** Eventos de domínio no `transactions`: outbox + feed HTTP.
+  - *Dado* um lançamento criado ou excluído, *quando* a mudança é confirmada, *então* um evento `TransactionRegistered` ou `TransactionDeleted` é gravado no outbox na mesma transação de banco.
+  - *Dado* um consumidor com token de serviço (client credentials, escopo `events.read`), *quando* chama `GET /events?after={seq}`, *então* recebe os eventos em ordem de sequência, sem pular eventos de transações que ainda não commitaram (margem contra lacunas).
+  - O `TransactionRegistered` carrega o escopo PF/PJ da conta, capturado na validação que o `transactions` já faz no `accounts` (o escopo é imutável).
+  - O evento guarda `eventId`, `version`, `occurredAt`, `ownerUserId` e o `traceparent` de origem.
+  - Carga inicial: a migração grava um `TransactionRegistered` para cada lançamento já existente.
   - Estimativa: 8
-- 🔵 **EVT-2** Projeção no `reporting` consumindo os eventos (com idempotência).
+- 🔵 **EVT-2** Projeção no `reporting` consumindo o feed (idempotente).
   - *Dado* o mesmo evento entregue mais de uma vez, *quando* o reporting processa, *então* a projeção não duplica valores.
+  - *Dado* o checkpoint zerado, *quando* o worker roda, *então* a projeção é reconstruída a partir do log.
+  - Worker em segundo plano com polling; projeção e checkpoint gravados no mesmo commit. Banco próprio `expense_reporting` (MySQL) no compose.
   - Estimativa: 8
 - 🔵 **EVT-3** `/reports/summary` passa a ler a projeção (sem chamadas HTTP sob demanda), mantendo compatibilidade.
+  - *Dado* o `transactions` ou o `accounts` fora do ar, *quando* consulto o resumo, *então* ele responde com a projeção (possivelmente defasada).
+  - Métrica de atraso da projeção (última sequência do feed menos o checkpoint) no pipeline da OBS-3. O E2E que confere o Resumo passa a esperar a projeção.
   - Estimativa: 5
 
 ---
