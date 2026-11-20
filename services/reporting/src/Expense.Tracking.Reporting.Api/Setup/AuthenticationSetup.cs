@@ -7,6 +7,7 @@ namespace Expense.Tracking.Reporting.Api.Setup;
 public static class AuthenticationSetup
 {
     public const string ReadPolicy = "ExpensesRead";
+    public const string WritePolicy = "ExpensesWrite";
 
     public static IServiceCollection AddReportingAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -41,7 +42,9 @@ public static class AuthenticationSetup
 
         services.AddAuthorizationBuilder()
             .AddPolicy(ReadPolicy, p => p.RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.read") || HasScope(ctx.User, "expenses.write")));
+                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.read") || HasScope(ctx.User, "expenses.write")))
+            .AddPolicy(WritePolicy, p => p.RequireAuthenticatedUser()
+                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")));
 
         return services;
     }

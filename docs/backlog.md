@@ -192,7 +192,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     correspondência de categoria; cálculo do consumido; rota no gateway e escopos OAuth
     (reaproveitar `expenses.read`/`expenses.write`).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **BDG-2** Definir e listar orçamentos mensais por categoria e escopo (API).
+- ✅ **BDG-2** Definir e listar orçamentos mensais por categoria e escopo (API).
+  (`GET`/`POST /budgets` no `reporting`, rota `/api/budgets/**` no gateway, smoke test estendido)
   - *Dado* um usuário com o escopo `expenses.write`, *quando* define um orçamento "Alimentação",
     escopo **PF**, R$ 1.500,00 a partir de 2026-12, *então* o orçamento é criado e aparece na
     listagem dele, e de nenhum outro usuário.

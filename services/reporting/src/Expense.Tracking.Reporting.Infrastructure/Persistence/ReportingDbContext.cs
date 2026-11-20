@@ -1,15 +1,21 @@
+using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Projection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Expense.Tracking.Reporting.Infrastructure.Persistence;
 
-/// <summary>EVT-2: banco proprio do reporting (<c>expense_reporting</c>) com a projecao e o checkpoint.</summary>
+/// <summary>
+/// EVT-2: banco proprio do reporting (<c>expense_reporting</c>) com a projecao e o checkpoint.
+/// BDG-2: tambem guarda os orcamentos do usuario (ADR-0002).
+/// </summary>
 public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> options) : DbContext(options)
 {
     public DbSet<ProjectedTransaction> Transactions => Set<ProjectedTransaction>();
 
     public DbSet<ProjectionCheckpoint> Checkpoints => Set<ProjectionCheckpoint>();
+
+    public DbSet<Budget> Budgets => Set<Budget>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -36,6 +42,25 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(t => t.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             // Consulta do resumo (EVT-3): por dono, opcionalmente por conta e periodo.
             b.HasIndex(t => new { t.OwnerUserId, t.OccurredOn }).HasDatabaseName("ix_projected_transactions_owner_date");
+        });
+
+        // BDG-2 (ADR-0002): dado escrito pelo usuario, fora da projecao.
+        modelBuilder.Entity<Budget>(b =>
+        {
+            b.ToTable("budgets");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            b.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(x => x.Category).HasColumnName("category").HasMaxLength(Budget.CategoryMaxLength).IsRequired();
+            b.Property(x => x.CategoryKey).HasColumnName("category_key").HasMaxLength(Budget.CategoryMaxLength).IsRequired();
+            b.Property(x => x.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(16).IsRequired();
+            b.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+            b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
+            b.Property(x => x.StartMonth).HasColumnName("start_month").IsRequired();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+            b.HasIndex(x => new { x.OwnerUserId, x.Scope, x.CategoryKey })
+                .IsUnique()
+                .HasDatabaseName("ux_budgets_owner_scope_category");
         });
 
         modelBuilder.Entity<ProjectionCheckpoint>(b =>

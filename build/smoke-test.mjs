@@ -89,6 +89,19 @@ async function main() {
     `resumo reflete o gasto da conta nova (totalExpense=${summary.totalExpense}, em ${((Date.now() - started) / 1000).toFixed(1)} s)`);
   console.log('  → byCategory:', JSON.stringify(summary.byCategory));
 
+  // 8) Orçamento (BDG-2). Categoria única por execução: o demo é persistente e a categoria é
+  // única por dono + escopo.
+  const budgetCategory = `Smoke ${Date.now()}`;
+  const budgetRes = await fetch(`${GATEWAY}/api/budgets`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ category: budgetCategory, scope: 'Personal', amount: 1500, startMonth: new Date().toISOString().slice(0, 7) }),
+  });
+  const budget = await budgetRes.json();
+  ok(budgetRes.status === 201 && !!budget.id, `POST /api/budgets criou orcamento (status ${budgetRes.status})`);
+  const budgetsRes = await fetch(`${GATEWAY}/api/budgets`, { headers: auth });
+  const budgets = budgetsRes.status === 200 ? await budgetsRes.json() : [];
+  ok(budgets.some((b) => b.id === budget.id), `GET /api/budgets lista o orcamento novo (status ${budgetsRes.status})`);
+
   console.log(`\nRESULTADO: ${pass} passaram, ${fail} falharam`);
   process.exit(fail === 0 ? 0 : 1);
 }

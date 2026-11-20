@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Budgets;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Application.Reports;
 using Expense.Tracking.Reporting.Infrastructure.Auth;
@@ -26,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<IProjectionStore, ProjectionStore>();
         services.AddScoped<IProjectionQueries, ProjectionQueries>();
         services.AddScoped<GetSummaryHandler>();
+        services.AddScoped<IBudgetRepository, BudgetRepository>();
+        services.AddScoped<CreateBudgetHandler>();
+        services.AddScoped<ListBudgetsHandler>();
         services.AddSingleton<ProjectionStatus>();
 
         var projection = new ProjectionOptions(

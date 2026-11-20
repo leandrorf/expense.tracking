@@ -19,6 +19,62 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Budgets.Budget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("category_key");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetime")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTime>("StartMonth")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("start_month");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "Scope", "CategoryKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_budgets_owner_scope_category");
+
+                    b.ToTable("budgets", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedTransaction", b =>
                 {
                     b.Property<Guid>("TransactionId")

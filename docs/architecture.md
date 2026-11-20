@@ -221,11 +221,25 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   Prometheus: `reporting_projection_lag` e `reporting_projection_checkpoint`. Antes da primeira
   leitura bem-sucedida nada é medido, para um atraso desconhecido não aparecer como zero.
 
+**Orçamentos (épico BDG, [ADR-0002](adr/0002-orcamentos-no-reporting.md))**:
+
+- Ficam no `reporting`, na tabela `budgets` do `expense_reporting`. São **dado escrito pelo
+  usuário**, fora da projeção: reconstruir a projeção (zerar o checkpoint) não pode apagá-los.
+- `GET /budgets` (`expenses.read` ou `expenses.write`) lista os orçamentos do dono;
+  `POST /budgets` (`expenses.write`) cria `{category, scope, amount, startMonth: "yyyy-MM",
+  currency?}` (moeda padrão BRL) e responde 201. Erros no formato `ProblemDetails` com `title` =
+  código estável (`budget.category_invalid`, `budget.amount_invalid`, `budget.scope_invalid`,
+  `budget.month_invalid`, `budget.currency_invalid`, `budget.duplicate` → 409).
+- **Categoria normalizada** (`CategoryKey`): sem diferença de maiúsculas, acentos e espaços
+  extras, calculada no domínio (os serviços rodam com `InvariantGlobalization`, então o mapeamento
+  de acentos é explícito, sem `string.Normalize`). Um orçamento por dono + escopo + chave
+  (índice único `ux_budgets_owner_scope_category`).
+
 ## Gateway (YARP) — implementado
 
 Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy YARP.
 
-- `/api/transactions/**` → `transactions`; `/api/reports/**` → `reporting`;
+- `/api/transactions/**` → `transactions`; `/api/reports/**` e `/api/budgets/**` → `reporting`;
   `/api/**` (demais) → `accounts`. Remove o prefixo `/api`: ex. `GET /api/accounts` →
   `accounts` `/accounts`, `GET /api/reports/summary` → `reporting` `/reports/summary`.
 - **Validação do token na borda** (mesma config JWT dos serviços) via policy `authenticated`:
