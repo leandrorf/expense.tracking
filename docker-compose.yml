@@ -33,8 +33,9 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       ConnectionStrings__IdentityDb: "server=identity-db;port=3306;database=${MYSQL_DATABASE:-expense_identity};user=${MYSQL_USER:-expense};password=${MYSQL_PASSWORD:-expense};"
       OAuth__Issuer: ${IDENTITY_ISSUER:-http://localhost:5080}
       Seed__Enabled: ${IDENTITY_SEED_ENABLED:-true}
@@ -77,8 +78,9 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       ConnectionStrings__AccountsDb: "server=accounts-db;port=3306;database=${ACCOUNTS_DB_NAME:-expense_accounts};user=${ACCOUNTS_DB_USER:-expense};password=${ACCOUNTS_DB_PASSWORD:-expense};"
       # Issuer publico (para validar o 'iss' do token) + metadados pela rede interna.
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
@@ -126,8 +128,9 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       ConnectionStrings__TransactionsDb: "server=transactions-db;port=3306;database=${TRANSACTIONS_DB_NAME:-expense_transactions};user=${TRANSACTIONS_DB_USER:-expense};password=${TRANSACTIONS_DB_PASSWORD:-expense};"
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
@@ -153,8 +156,9 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
@@ -182,8 +186,9 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # OBS-2: traces via OTLP/gRPC para o Jaeger (UI em http://localhost:16686).
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
@@ -215,15 +220,43 @@ services:
     networks:
       - expense-net
 
-  # OBS-2: backend de tracing distribuido. Recebe OTLP (gRPC 4317 / HTTP 4318) e expoe a UI.
-  # Os servicos nao dependem dele para subir: se estiver fora, os spans sao descartados.
+  # OBS-3: ponto unico de entrada da telemetria. Recebe OTLP dos servicos, repassa os traces
+  # ao Jaeger e expoe as metricas para o Prometheus (config em infra/observability/).
+  # As portas OTLP ficam no host para servicos rodando fora do Docker (dotnet run).
+  # Os servicos nao dependem dele para subir: se estiver fora, a telemetria e descartada.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    container_name: expense-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./infra/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - jaeger
+    ports:
+      - "${OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
+    networks:
+      - expense-net
+
+  # OBS-2: backend de tracing distribuido (UI). Recebe os spans do collector.
   jaeger:
     image: jaegertracing/jaeger:2.23.0
     container_name: expense-jaeger
     ports:
       - "${JAEGER_UI_PORT:-16686}:16686"
-      - "${OTLP_GRPC_PORT:-4317}:4317"
-      - "${OTLP_HTTP_PORT:-4318}:4318"
+    networks:
+      - expense-net
+
+  # OBS-3: metricas dos servicos (UI e PromQL), coletadas do collector.
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: expense-prometheus
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - otel-collector
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
     networks:
       - expense-net
 

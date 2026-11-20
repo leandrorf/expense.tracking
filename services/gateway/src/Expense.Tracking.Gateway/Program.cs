@@ -4,7 +4,8 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddStructuredLogging();
-builder.AddDistributedTracing();
+builder.AddTelemetry();
+builder.AddStandardHealthChecks();
 
 const string SpaCorsPolicy = "spa";
 const string AuthenticatedPolicy = "authenticated";
@@ -65,7 +66,7 @@ app.UseCors(SpaCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapHealthEndpoints();
 
 // Encaminha as rotas configuradas (protegidas pela policy definida em cada rota).
 app.MapReverseProxy();

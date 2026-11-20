@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddStructuredLogging();
-builder.AddDistributedTracing();
+builder.AddTelemetry();
+builder.AddStandardHealthChecks()
+    .AddDbContextCheck<TransactionsDbContext>("database", tags: [ObservabilitySetup.ReadyTag]);
 
 const string SpaCorsPolicy = "spa";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -41,7 +43,7 @@ app.UseCors(SpaCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).WithTags("Health");
+app.MapHealthEndpoints();
 app.MapTransactionsEndpoints();
 
 await InitializeDatabaseAsync(app);

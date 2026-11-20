@@ -1,0 +1,49 @@
+# OBS-3: OpenTelemetry Collector — ponto unico de entrada da telemetria dos servicos.
+#
+#   servicos .NET --OTLP--> collector --traces (OTLP)--> jaeger      (UI :16686)
+#                                     --metricas-------> :8889 <-- scrape do prometheus (UI :9090)
+#
+# Os servicos so conhecem o collector (OTEL_EXPORTER_OTLP_ENDPOINT); trocar o backend de
+# traces ou de metricas e uma mudanca so aqui.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Protege o collector de estourar memoria sob pico (deve ser o primeiro processor).
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # Expoe as metricas no formato do Prometheus. Os labels job/instance vem do recurso
+  # (service.name / service.instance.id), por isso o prometheus usa honor_labels.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

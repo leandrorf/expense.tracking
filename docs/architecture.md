@@ -186,8 +186,26 @@ serviço, sem biblioteca compartilhada).
   - Exportação OTLP só quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido. Sem ele (testes, CI,
     `dotnet run`), o tracing segue ativo e o trace id continua alimentando o correlation id.
   - `/health` fica fora dos traces, para o polling do Docker e do CI não gerar ruído.
-  - No Docker Compose, os spans vão para o **Jaeger** (`jaegertracing/jaeger`), com a UI em
-    `http://localhost:16686`. Os serviços não dependem dele para subir.
+  - No Docker Compose, os spans passam pelo OpenTelemetry Collector e chegam ao **Jaeger**
+    (`jaegertracing/jaeger`), com a UI em `http://localhost:16686`.
+- **Métricas (OBS-3):** o mesmo pipeline do OpenTelemetry coleta `http.server.request.duration`
+  (requests recebidos), `http.client.request.duration` (chamadas entre serviços) e o runtime do
+  .NET (meter nativo `System.Runtime`: GC, memória, threads). Exportação OTLP com a mesma regra
+  dos traces; no Compose, a cada 15 s (`OTEL_METRIC_EXPORT_INTERVAL`).
+- **OpenTelemetry Collector (OBS-3):** ponto único de entrada da telemetria
+  (`infra/observability/otel-collector.yaml`). Os serviços só conhecem o collector
+  (`OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317`); ele repassa os traces ao Jaeger e
+  expõe as métricas em `:8889` para o **Prometheus** (`infra/observability/prometheus.yml`, UI em
+  `http://localhost:9090`). No Prometheus, o label `job` é o nome do serviço
+  (ex.: `expense-tracking-accounts`). Os serviços não dependem do collector para subir.
+- **Health padronizado (OBS-3):** health checks do ASP.NET Core, públicos e com resposta JSON
+  (só nome, status e duração de cada check; nenhum detalhe de exceção).
+  - `/health/live`: o processo responde. Não roda checks.
+  - `/health/ready`: as dependências do próprio serviço estão ok (checks com a tag `ready`). Hoje,
+    o banco em `accounts`, `identity` e `transactions` (`AddDbContextCheck`). Responde 503 quando
+    algum falha. `gateway` e `reporting` não têm banco e não checam outros serviços, para uma
+    queda não se propagar em cascata.
+  - `/health`: alias de `/health/live`, mantido por compatibilidade.
 - Quando o chamador não envia `X-Correlation-Id`, o correlation id dos logs é o próprio trace id,
   o que liga uma linha de log ao trace no Jaeger.
 
