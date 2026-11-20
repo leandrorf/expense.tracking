@@ -1,8 +1,8 @@
 # ADR-0001: Transporte de eventos entre transactions e reporting (épico EVT)
 
-- **Status:** Proposto
-- **Data:** 2026-11-19
-- **Decisores:** dono do produto/repositório (decisão pendente); análise preparada pelo time de desenvolvimento
+- **Status:** Aceito
+- **Data:** 2026-11-19 (proposta e aceite)
+- **Decisores:** dono do produto/repositório; análise preparada pelo time de desenvolvimento
 - **Relacionados:** épico EVT (Jira SCRUM-14; histórias SCRUM-21, SCRUM-22, SCRUM-23), `docs/backlog.md`
 
 ## Contexto
@@ -144,7 +144,9 @@ O Debezium lê o binlog do MySQL do `transactions` (ou a tabela outbox) e public
 
 ## Decisão
 
-**Recomendação (aguardando o decisor): Opção B — outbox exposto como feed HTTP.**
+**Vamos usar a Opção B — outbox exposto como feed HTTP.** O `transactions` mantém o outbox como
+log de eventos e o expõe em `GET /events`; o `reporting` lê esse feed por polling, com
+checkpoint transacional, e mantém a projeção no próprio banco.
 
 Racional:
 
@@ -163,7 +165,7 @@ objetivo do projeto por si só.
 
 ## Consequências
 
-Para a opção recomendada (B):
+Para a opção escolhida (B):
 
 - **Positivas:**
   - O resumo deixa de depender do `transactions` e do `accounts` no momento da consulta.

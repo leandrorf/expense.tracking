@@ -6,4 +6,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 
 | ADR | Título | Status | Data |
 |---|---|---|---|
-| [0001](0001-transporte-de-eventos-transactions-reporting.md) | Transporte de eventos entre transactions e reporting (épico EVT) | Proposto | 2026-11-19 |
+| [0001](0001-transporte-de-eventos-transactions-reporting.md) | Transporte de eventos entre transactions e reporting (épico EVT) | Aceito | 2026-11-19 |
