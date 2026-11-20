@@ -8,12 +8,13 @@ import {
   type UserInfo,
 } from './auth/oauth';
 import { AccountsView } from './views/AccountsView';
+import { BudgetsView } from './views/BudgetsView';
 import { CardsView } from './views/CardsView';
 import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'summary' | 'accounts' | 'cards' | 'transactions';
+type Tab = 'summary' | 'budgets' | 'accounts' | 'cards' | 'transactions';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
@@ -81,6 +82,9 @@ export function App() {
           <button data-cy="tab-transactions" className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
             Lançamentos
           </button>
+          <button data-cy="tab-budgets" className={tab === 'budgets' ? 'active' : ''} onClick={() => setTab('budgets')}>
+            Orçamentos
+          </button>
           <button data-cy="tab-accounts" className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
             Contas
           </button>
@@ -99,6 +103,7 @@ export function App() {
       <main className="content">
         {tab === 'summary' && <SummaryView />}
         {tab === 'transactions' && <TransactionsView />}
+        {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
         {tab === 'cards' && <CardsView />}
       </main>
