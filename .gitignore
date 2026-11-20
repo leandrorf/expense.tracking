@@ -426,3 +426,6 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Claude Code: permissoes/config locais de cada maquina (os agents em .claude/agents sao versionados)
+.claude/settings.local.json
