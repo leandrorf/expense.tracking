@@ -1,6 +1,5 @@
 using Expense.Tracking.Reporting.Api.Endpoints;
 using Expense.Tracking.Reporting.Api.Setup;
-using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Infrastructure;
 using Expense.Tracking.Reporting.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,9 +14,8 @@ const string SpaCorsPolicy = "spa";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:5173"];
 
+// EVT-2/EVT-3: projecao alimentada pelo feed de eventos do transactions (ADR-0001); o resumo le dela.
 builder.Services.AddReportingInfrastructure(builder.Configuration);
-// EVT-2: projecao alimentada pelo feed de eventos do transactions (ADR-0001).
-builder.Services.AddReportingProjection(builder.Configuration);
 if (builder.Configuration.GetValue("Projection:Enabled", true))
 {
     builder.Services.AddHostedService<ProjectionWorker>();
@@ -25,9 +23,6 @@ if (builder.Configuration.GetValue("Projection:Enabled", true))
 builder.Services.AddReportingAuthentication(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IUserTokenAccessor, HttpContextUserTokenAccessor>();
-builder.Services.AddScoped<ICorrelationContext, HttpContextCorrelationContext>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(SpaCorsPolicy, policy => policy

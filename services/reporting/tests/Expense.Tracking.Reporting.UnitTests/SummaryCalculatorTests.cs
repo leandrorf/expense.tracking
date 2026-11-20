@@ -7,19 +7,16 @@ public sealed class SummaryCalculatorTests
     private static readonly Guid PfAccount = Guid.NewGuid();
     private static readonly Guid PjAccount = Guid.NewGuid();
 
-    private static readonly IReadOnlyDictionary<Guid, string> Scopes = new Dictionary<Guid, string>
-    {
-        [PfAccount] = "Personal",
-        [PjAccount] = "Business",
-    };
+    private static string? ScopeOf(Guid account) =>
+        account == PfAccount ? "Personal" : account == PjAccount ? "Business" : null;
 
     private static TransactionRecord Expense(Guid account, string category, string method, decimal amount) =>
-        new(account, "Expense", method, category, amount, "BRL");
+        new(account, "Expense", method, category, amount, "BRL", ScopeOf(account));
 
     [Fact]
     public void Calculate_EmptyList_ReturnsZeroedSummaryWithDefaultCurrency()
     {
-        var summary = SummaryCalculator.Calculate([], Scopes);
+        var summary = SummaryCalculator.Calculate([]);
 
         Assert.Equal("BRL", summary.Currency);
         Assert.Equal(0, summary.TotalExpense);
@@ -36,10 +33,10 @@ public sealed class SummaryCalculatorTests
         {
             Expense(PfAccount, "Alimentacao", "Pix", 100m),
             Expense(PjAccount, "Software", "CreditCard", 300m),
-            new TransactionRecord(PfAccount, "Income", "BankTransfer", "Salario", 500m, "BRL"),
+            new TransactionRecord(PfAccount, "Income", "BankTransfer", "Salario", 500m, "BRL", "Personal"),
         };
 
-        var summary = SummaryCalculator.Calculate(records, Scopes);
+        var summary = SummaryCalculator.Calculate(records);
 
         Assert.Equal(400m, summary.TotalExpense);
         Assert.Equal(500m, summary.TotalIncome);
@@ -57,7 +54,7 @@ public sealed class SummaryCalculatorTests
             Expense(PfAccount, "Transporte", "Pix", 200m),
         };
 
-        var summary = SummaryCalculator.Calculate(records, Scopes);
+        var summary = SummaryCalculator.Calculate(records);
 
         Assert.Equal(2, summary.ByCategory.Count);
         Assert.Equal("Transporte", summary.ByCategory[0].Key);
@@ -75,7 +72,7 @@ public sealed class SummaryCalculatorTests
             Expense(PjAccount, "C", "Pix", 250m),
         };
 
-        var summary = SummaryCalculator.Calculate(records, Scopes);
+        var summary = SummaryCalculator.Calculate(records);
 
         Assert.Equal("Business", summary.ByScope[0].Key);
         Assert.Equal(250m, summary.ByScope[0].Total);
@@ -84,11 +81,11 @@ public sealed class SummaryCalculatorTests
     }
 
     [Fact]
-    public void Calculate_UnknownAccountScope_FallsBackToUnknown()
+    public void Calculate_UnknownScope_LegacyTransaction_FallsBackToUnknown()
     {
         var records = new[] { Expense(Guid.NewGuid(), "C", "Pix", 10m) };
 
-        var summary = SummaryCalculator.Calculate(records, Scopes);
+        var summary = SummaryCalculator.Calculate(records);
 
         Assert.Equal("Unknown", summary.ByScope[0].Key);
     }
@@ -103,7 +100,7 @@ public sealed class SummaryCalculatorTests
             Expense(PfAccount, "C", "Pix", 20m),
         };
 
-        var summary = SummaryCalculator.Calculate(records, Scopes);
+        var summary = SummaryCalculator.Calculate(records);
 
         Assert.Equal("CreditCard", summary.ByPaymentMethod[0].Key);
         Assert.Equal(90m, summary.ByPaymentMethod[0].Total);

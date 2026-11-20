@@ -79,4 +79,7 @@ public sealed record FeedEvent(
 public interface IEventFeed
 {
     Task<IReadOnlyList<FeedEvent>> ReadAfterAsync(long afterSequence, int limit, CancellationToken cancellationToken);
+
+    /// <summary>Maior sequencia gravada no outbox (0 se vazio), inclusive eventos ainda na margem.</summary>
+    Task<long> GetHeadSequenceAsync(CancellationToken cancellationToken);
 }

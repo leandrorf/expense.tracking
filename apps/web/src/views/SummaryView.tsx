@@ -44,7 +44,7 @@ export function SummaryView() {
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         <span>até</span>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        <button onClick={() => void load()}>Aplicar</button>
+        <button onClick={() => void load()} data-cy="summary-apply">Aplicar</button>
       </div>
 
       {error && <p className="error">{error}</p>}

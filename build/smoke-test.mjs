@@ -74,11 +74,19 @@ async function main() {
   const tx = await txRes.json();
   ok(txRes.status === 201 && !!tx.id, `POST /api/transactions criou lancamento (status ${txRes.status})`);
 
-  // 7) Resumo
-  const sumRes = await fetch(`${GATEWAY}/api/reports/summary`, { headers: auth });
-  const summary = await sumRes.json();
+  // 7) Resumo da conta nova. O reporting le a projecao (EVT-3), que recebe o lancamento alguns
+  // segundos depois (margem do feed + polling do worker): consulta ate refletir, por ate 30 s.
+  let sumRes;
+  let summary;
+  const started = Date.now();
+  do {
+    if (summary) await new Promise((r) => setTimeout(r, 1000));
+    sumRes = await fetch(`${GATEWAY}/api/reports/summary?accountId=${account.id}`, { headers: auth });
+    summary = await sumRes.json();
+  } while (sumRes.status === 200 && summary.totalExpense !== 12.5 && Date.now() - started < 30_000);
   ok(sumRes.status === 200, `GET /api/reports/summary (status ${sumRes.status})`);
-  ok(summary.totalExpense >= 12.5, `resumo reflete o gasto (totalExpense=${summary.totalExpense})`);
+  ok(summary.totalExpense === 12.5,
+    `resumo reflete o gasto da conta nova (totalExpense=${summary.totalExpense}, em ${((Date.now() - started) / 1000).toFixed(1)} s)`);
   console.log('  → byCategory:', JSON.stringify(summary.byCategory));
 
   console.log(`\nRESULTADO: ${pass} passaram, ${fail} falharam`);

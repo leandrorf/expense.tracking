@@ -91,6 +91,7 @@ public sealed class EventHandlersTests
 
         Assert.Equal([1L], page.Events.Select(e => e.Sequence));
         Assert.Equal(1, page.LastSequence);
+        Assert.Equal(3, page.HeadSequence);
     }
 
     [Fact]
@@ -103,6 +104,7 @@ public sealed class EventHandlersTests
 
         Assert.Empty(page.Events);
         Assert.Equal(7, page.LastSequence);
+        Assert.Equal(8, page.HeadSequence);
     }
 
     private static readonly Guid Owner = Guid.NewGuid();
@@ -187,6 +189,9 @@ public sealed class EventHandlersTests
     {
         public Task<IReadOnlyList<FeedEvent>> ReadAfterAsync(long afterSequence, int limit, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<FeedEvent>>(events.Where(e => e.Sequence > afterSequence).Take(limit).ToArray());
+
+        public Task<long> GetHeadSequenceAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(events.Length == 0 ? 0 : events.Max(e => e.Sequence));
     }
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

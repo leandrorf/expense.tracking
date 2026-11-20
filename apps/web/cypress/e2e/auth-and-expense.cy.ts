@@ -35,6 +35,7 @@ describe('Gasto pessoal (PF) com Pix', () => {
 
     // 3) O Resumo (reporting) consolida o gasto: a categoria unica deste run bate o valor.
     cy.get('[data-cy=tab-summary]').click();
+    cy.waitForSummary('[data-cy=by-category]', category);
     cy.get('[data-cy=by-payment-method]').contains('Pix').should('be.visible');
     cy.get('[data-cy=by-category]').contains('li', category).should('contain', '42,50');
   });

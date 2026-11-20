@@ -17,8 +17,12 @@ public sealed record FeedEvent(
     string? TraceParent,
     JsonElement Payload);
 
-/// <summary>Pagina do feed; a proxima leitura usa <see cref="LastSequence"/> como cursor.</summary>
-public sealed record FeedPage(IReadOnlyList<FeedEvent> Events, long LastSequence);
+/// <summary>
+/// Pagina do feed; a proxima leitura usa <see cref="LastSequence"/> como cursor.
+/// <see cref="HeadSequence"/> e a maior sequencia gravada no outbox (EVT-3, atraso da projecao);
+/// vem 0 de um transactions anterior ao campo.
+/// </summary>
+public sealed record FeedPage(IReadOnlyList<FeedEvent> Events, long LastSequence, long HeadSequence = 0);
 
 /// <summary>Nomes e versoes de evento que o reporting sabe aplicar.</summary>
 public static class FeedEventTypes

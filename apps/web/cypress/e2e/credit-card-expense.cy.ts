@@ -54,6 +54,7 @@ describe('Gasto empresarial (PJ) no cartao de credito', () => {
 
     // 4) O resumo separa por escopo: o gasto PJ aparece em "Empresa (PJ)".
     cy.get('[data-cy=tab-summary]').click();
+    cy.waitForSummary('[data-cy=by-category]', category);
     cy.get('[data-cy=by-scope]').contains('Empresa (PJ)').should('be.visible');
     cy.get('[data-cy=by-category]').contains('li', category).should('contain', '199,90');
   });

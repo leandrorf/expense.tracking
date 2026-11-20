@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -10,17 +11,14 @@ using Microsoft.Extensions.Hosting;
 namespace Expense.Tracking.Reporting.IntegrationTests;
 
 /// <summary>
-/// Factory dos testes: clients HTTP falsos, banco da projecao em memoria e o feed de eventos falso.
+/// Factory dos testes: banco da projecao em memoria e o feed de eventos falso. Nao ha client para o
+/// transactions nem para o accounts: o resumo so le a projecao (EVT-3).
 /// O worker da projecao fica desligado por padrao (os testes chamam o processador); subclasses
 /// mudam configuracoes por <see cref="ConfigureTestSettings"/>.
 /// </summary>
 public class ReportingApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"reporting-tests-{Guid.NewGuid():N}";
-
-    public FakeTransactionsClient Transactions { get; } = new();
-
-    public FakeAccountsClient Accounts { get; } = new();
 
     public FakeEventFeed EventFeed { get; } = new();
 
@@ -36,7 +34,6 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
         {
             ["Jwt:Authority"] = "http://localhost",
             ["Services:TransactionsBaseUrl"] = "http://localhost:5100",
-            ["Services:AccountsBaseUrl"] = "http://localhost:5090",
             ["ConnectionStrings:ReportingDb"] = "server=localhost;database=ignored;user=root;password=root;",
             ["Projection:Enabled"] = "false",
         };
@@ -52,8 +49,6 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
         {
             var toRemove = services
                 .Where(d =>
-                    d.ServiceType == typeof(ITransactionsClient) ||
-                    d.ServiceType == typeof(IAccountsClient) ||
                     d.ServiceType == typeof(IEventFeedClient) ||
                     d.ServiceType == typeof(DbContextOptions<ReportingDbContext>) ||
                     d.ServiceType == typeof(DbContextOptions) ||
@@ -67,12 +62,27 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
             }
 
             services.AddDbContext<ReportingDbContext>(options => options.UseInMemoryDatabase(_databaseName));
-            services.AddSingleton<ITransactionsClient>(Transactions);
-            services.AddSingleton<IAccountsClient>(Accounts);
             services.AddSingleton<IEventFeedClient>(EventFeed);
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
         });
+    }
+
+    /// <summary>Aplica o feed falso na projecao ate esvaziar (o que o worker faria em segundo plano).</summary>
+    public async Task DrainFeedAsync()
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            await using var scope = Services.CreateAsyncScope();
+            var result = await scope.ServiceProvider.GetRequiredService<ProjectionProcessor>()
+                .ProcessNextBatchAsync(CancellationToken.None);
+            if (result.Read == 0)
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException("O feed nao esvaziou em 100 lotes.");
     }
 }

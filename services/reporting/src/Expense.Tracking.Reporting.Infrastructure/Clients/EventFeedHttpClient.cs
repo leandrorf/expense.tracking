@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Projection;
 
@@ -10,12 +11,14 @@ namespace Expense.Tracking.Reporting.Infrastructure.Clients;
 /// </summary>
 internal sealed class EventFeedHttpClient(HttpClient httpClient) : IEventFeedClient
 {
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
     public async Task<FeedPage> ReadAsync(long afterSequence, int limit, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync($"events?after={afterSequence}&limit={limit}", cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<FeedPage>(HttpRequestAuth.Json, cancellationToken)
+        return await response.Content.ReadFromJsonAsync<FeedPage>(Json, cancellationToken)
             ?? throw new InvalidOperationException("O feed de eventos respondeu vazio.");
     }
 }

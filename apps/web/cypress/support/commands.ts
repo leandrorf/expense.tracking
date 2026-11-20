@@ -33,12 +33,34 @@ Cypress.Commands.add('login', (email: string, password: string) => {
   );
 });
 
+// EVT-3: o Resumo le a projecao do reporting, que recebe o lancamento alguns segundos depois
+// (margem do feed do transactions + polling do worker). Recarrega o Resumo (botao Aplicar) ate o
+// texto aparecer no bloco, em vez de esperar um tempo fixo.
+Cypress.Commands.add('waitForSummary', (selector: string, text: string, attempts = 30) => {
+  cy.get('[data-cy=summary-stats]').should('be.visible');
+  cy.get(selector).then(($block) => {
+    if ($block.text().includes(text)) {
+      return;
+    }
+
+    if (attempts <= 1) {
+      throw new Error(`O Resumo nao refletiu "${text}" em ${selector} (projecao atrasada?).`);
+    }
+
+    cy.wait(1_000);
+    cy.get('[data-cy=summary-apply]').click();
+    cy.waitForSummary(selector, text, attempts - 1);
+  });
+});
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
     interface Chainable {
       /** Autentica o usuario via fluxo OAuth2 + PKCE pela UI, com cache de sessao. */
       login(email: string, password: string): Chainable<void>;
+      /** Recarrega o Resumo ate `text` aparecer em `selector` (espera a projecao do reporting). */
+      waitForSummary(selector: string, text: string, attempts?: number): Chainable<void>;
     }
   }
 }

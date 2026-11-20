@@ -31,7 +31,7 @@ expense.tracking/
 │   ├── transactions/      # Lançamentos de gastos (valida contas/cartões no accounts) — IMPLEMENTADO
 │   │   ├── src/ Domain | Application | Infrastructure | Api
 │   │   └── tests/ UnitTests | IntegrationTests
-│   ├── reporting/         # Consolidação de gastos (agregador) — IMPLEMENTADO
+│   ├── reporting/         # Consolidação de gastos (projeção por eventos) — IMPLEMENTADO
 │   │   ├── src/ Domain | Application | Infrastructure | Api
 │   │   └── tests/ UnitTests | IntegrationTests
 │   └── gateway/           # API Gateway (YARP) — IMPLEMENTADO
@@ -147,7 +147,3 @@ npm run dev              # http://localhost:5173
 ```
 
 Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
-
-## Próximos passos
-
-1. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)

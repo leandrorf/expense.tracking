@@ -1,18 +1,17 @@
 namespace Expense.Tracking.Reporting.Domain.Reports;
 
 /// <summary>
-/// Calculo puro da consolidacao. Recebe os lancamentos e um mapa conta->escopo (PF/PJ)
-/// e produz os totais. Sem I/O — totalmente testavel.
+/// Calculo puro da consolidacao. Recebe os lancamentos (com o escopo PF/PJ de cada um) e
+/// produz os totais. Sem I/O — totalmente testavel.
 /// </summary>
 public static class SummaryCalculator
 {
     public const string Expense = "Expense";
     public const string Income = "Income";
+    public const string UnknownScope = "Unknown";
     private const string DefaultCurrency = "BRL";
 
-    public static ReportSummary Calculate(
-        IReadOnlyList<TransactionRecord> records,
-        IReadOnlyDictionary<Guid, string> scopeByAccount)
+    public static ReportSummary Calculate(IReadOnlyList<TransactionRecord> records)
     {
         var currency = records
             .Select(r => r.Currency)
@@ -30,7 +29,7 @@ public static class SummaryCalculator
             Net: totalIncome - totalExpense,
             Count: records.Count,
             ByCategory: GroupTotals(expenses, r => r.Category),
-            ByScope: GroupTotals(expenses, r => scopeByAccount.GetValueOrDefault(r.AccountId, "Unknown")),
+            ByScope: GroupTotals(expenses, r => r.AccountScope ?? UnknownScope),
             ByPaymentMethod: GroupTotals(expenses, r => r.PaymentMethod));
     }
 

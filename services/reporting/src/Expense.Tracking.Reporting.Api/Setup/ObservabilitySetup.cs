@@ -78,7 +78,9 @@ public static class ObservabilitySetup
                 metrics
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddMeter(RuntimeMeterName);
+                    .AddMeter(RuntimeMeterName)
+                    // EVT-3: atraso e checkpoint da projecao (ProjectionStatus).
+                    .AddMeter(ProjectionTelemetry.SourceName);
 
                 if (exportEnabled)
                 {

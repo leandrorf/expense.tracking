@@ -1,28 +1,10 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using Expense.Tracking.Reporting.Application.Abstractions;
-using Expense.Tracking.Reporting.Domain.Reports;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Expense.Tracking.Reporting.IntegrationTests;
-
-public sealed class FakeTransactionsClient : ITransactionsClient
-{
-    public List<TransactionRecord> Records { get; } = [];
-
-    public Task<IReadOnlyList<TransactionRecord>> GetTransactionsAsync(ReportFilter filter, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<TransactionRecord>>(Records);
-}
-
-public sealed class FakeAccountsClient : IAccountsClient
-{
-    public Dictionary<Guid, string> Scopes { get; } = [];
-
-    public Task<IReadOnlyDictionary<Guid, string>> GetAccountScopesAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, string>>(Scopes);
-}
 
 public sealed class TestAuthHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,

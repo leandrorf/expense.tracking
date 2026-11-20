@@ -1,13 +1,17 @@
 namespace Expense.Tracking.Reporting.Domain.Reports;
 
-/// <summary>Lancamento consumido do servico transactions (forma minima para consolidar).</summary>
+/// <summary>
+/// Lancamento da projecao (forma minima para consolidar). <see cref="AccountScope"/> e o escopo
+/// da conta (<c>Personal</c>/<c>Business</c>), nulo quando desconhecido (lancamento legado).
+/// </summary>
 public sealed record TransactionRecord(
     Guid AccountId,
     string Type,
     string PaymentMethod,
     string Category,
     decimal Amount,
-    string Currency);
+    string Currency,
+    string? AccountScope = null);
 
 /// <summary>Total agrupado por uma chave (categoria, escopo, meio de pagamento...).</summary>
 public sealed record TotalByKey(string Key, decimal Total);

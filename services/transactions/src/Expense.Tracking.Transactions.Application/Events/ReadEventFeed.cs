@@ -12,8 +12,11 @@ public sealed record EventFeedOptions(TimeSpan SafetyMargin)
     public static readonly TimeSpan DefaultSafetyMargin = TimeSpan.FromSeconds(5);
 }
 
-/// <summary>Uma pagina do feed. <see cref="LastSequence"/> e o cursor para a proxima leitura.</summary>
-public sealed record EventFeedPage(IReadOnlyList<FeedEvent> Events, long LastSequence);
+/// <summary>
+/// Uma pagina do feed. <see cref="LastSequence"/> e o cursor para a proxima leitura;
+/// <see cref="HeadSequence"/> e a maior sequencia gravada, para o leitor medir o proprio atraso (EVT-3).
+/// </summary>
+public sealed record EventFeedPage(IReadOnlyList<FeedEvent> Events, long LastSequence, long HeadSequence);
 
 /// <summary>
 /// EVT-1: le o feed a partir de um cursor. A sequencia vem de auto-incremento, entao uma transacao
@@ -33,6 +36,10 @@ public sealed class ReadEventFeedHandler(IEventFeed feed, EventFeedOptions optio
         var candidates = await feed.ReadAfterAsync(after, limit, cancellationToken);
 
         var visible = candidates.TakeWhile(e => e.OccurredAtUtc <= cutoff).ToArray();
-        return new EventFeedPage(visible, visible.Length > 0 ? visible[^1].Sequence : after);
+        var last = visible.Length > 0 ? visible[^1].Sequence : after;
+
+        // Lida depois da pagina: um evento gravado entre as duas leituras so aumenta o head.
+        var head = await feed.GetHeadSequenceAsync(cancellationToken);
+        return new EventFeedPage(visible, last, Math.Max(head, last));
     }
 }

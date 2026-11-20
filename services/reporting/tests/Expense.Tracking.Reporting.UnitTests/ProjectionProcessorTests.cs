@@ -21,7 +21,7 @@ public sealed class ProjectionProcessorTests
 
         var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
 
-        Assert.Equal(new ProjectionBatchResult(1, 0, 1), result);
+        Assert.Equal(new ProjectionBatchResult(1, 0, 1, 1), result);
         var row = Assert.Single(store.Rows.Values);
         Assert.Equal("Business", row.AccountScope);
         Assert.Equal(120m, row.Amount);
@@ -72,7 +72,7 @@ public sealed class ProjectionProcessorTests
 
         var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
 
-        Assert.Equal(new ProjectionBatchResult(0, 1, 1), result);
+        Assert.Equal(new ProjectionBatchResult(0, 1, 1, 1), result);
         Assert.Empty(store.Rows);
         Assert.Equal(1, store.Checkpoint);
     }
@@ -99,8 +99,32 @@ public sealed class ProjectionProcessorTests
 
         var result = await Processor(new Feed(), store).ProcessNextBatchAsync(CancellationToken.None);
 
-        Assert.Equal(new ProjectionBatchResult(0, 0, 7), result);
+        Assert.Equal(new ProjectionBatchResult(0, 0, 7, 7), result);
         Assert.Equal(0, store.Saves);
+    }
+
+    [Fact]
+    public async Task Lag_IsTheHeadOfTheFeedMinusTheCheckpoint_EvenWithNothingVisible()
+    {
+        // Eventos ainda na margem do feed nao vem na pagina, mas ja contam no head.
+        var feed = new Feed { HeadSequence = 12 };
+        var store = new Store { Checkpoint = 9 };
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(0, result.Read);
+        Assert.Equal(3, result.Lag);
+    }
+
+    [Fact]
+    public async Task Lag_IsZero_WhenTheFeedDoesNotSendTheHead()
+    {
+        var feed = new Feed { HeadSequence = 0 };
+        feed.Registered(Guid.NewGuid());
+
+        var result = await Processor(feed, new Store()).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal((1L, 0L), (result.HeadSequence, result.Lag));
     }
 
     [Fact]
@@ -117,8 +141,8 @@ public sealed class ProjectionProcessorTests
         var first = await processor.ProcessNextBatchAsync(CancellationToken.None);
         var second = await processor.ProcessNextBatchAsync(CancellationToken.None);
 
-        Assert.Equal((2, 2L), (first.Read, first.Checkpoint));
-        Assert.Equal((2, 4L), (second.Read, second.Checkpoint));
+        Assert.Equal((2, 2L, 3L), (first.Read, first.Checkpoint, first.Lag));
+        Assert.Equal((2, 4L, 1L), (second.Read, second.Checkpoint, second.Lag));
         Assert.Equal(4, store.Rows.Count);
     }
 
@@ -178,10 +202,13 @@ public sealed class ProjectionProcessorTests
         /// <summary>Entrega de novo o mesmo evento (mesmo eventId), numa sequencia nova.</summary>
         public void Redeliver(FeedEvent original) => _events.Add(original with { Sequence = _events.Count + 1 });
 
+        /// <summary>Head informado pelo feed; 0 simula um transactions anterior ao campo.</summary>
+        public long? HeadSequence { get; set; }
+
         public Task<FeedPage> ReadAsync(long afterSequence, int limit, CancellationToken cancellationToken)
         {
             var page = _events.Where(e => e.Sequence > afterSequence).Take(limit).ToArray();
-            return Task.FromResult(new FeedPage(page, page.Length > 0 ? page[^1].Sequence : afterSequence));
+            return Task.FromResult(new FeedPage(page, page.Length > 0 ? page[^1].Sequence : afterSequence, HeadSequence ?? _events.Count));
         }
 
         private FeedEvent Add(string type, int version, Guid aggregate, object payload, string? traceParent = null)

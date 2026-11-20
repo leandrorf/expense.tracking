@@ -15,4 +15,7 @@ internal sealed class EventFeed(TransactionsDbContext dbContext) : IEventFeed
                 e.Sequence, e.EventId, e.EventType, e.Version, e.AggregateId, e.OwnerUserId,
                 e.OccurredAtUtc, e.TraceParent, e.Payload))
             .ToListAsync(cancellationToken);
+
+    public async Task<long> GetHeadSequenceAsync(CancellationToken cancellationToken) =>
+        await dbContext.OutboxEvents.MaxAsync(e => (long?)e.Sequence, cancellationToken) ?? 0;
 }

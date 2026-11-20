@@ -11,6 +11,7 @@ namespace Expense.Tracking.Reporting.Api.Setup;
 public sealed class ProjectionWorker(
     IServiceScopeFactory scopeFactory,
     ProjectionOptions options,
+    ProjectionStatus status,
     ILogger<ProjectionWorker> logger) : BackgroundService
 {
     public static readonly TimeSpan ErrorBackoff = TimeSpan.FromSeconds(10);
@@ -29,6 +30,7 @@ public sealed class ProjectionWorker(
                 using var scope = scopeFactory.CreateScope();
                 var processor = scope.ServiceProvider.GetRequiredService<ProjectionProcessor>();
                 var result = await processor.ProcessNextBatchAsync(stoppingToken);
+                status.Record(result); // EVT-3: alimenta a metrica de atraso
 
                 if (result.Read > 0)
                 {

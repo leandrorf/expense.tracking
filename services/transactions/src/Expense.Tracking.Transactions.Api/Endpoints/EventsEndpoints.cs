@@ -17,8 +17,11 @@ public sealed record FeedEventResponse(
     string? TraceParent,
     JsonElement Payload);
 
-/// <summary>Pagina do feed: ler a proxima com <c>after = lastSequence</c>.</summary>
-public sealed record EventFeedResponse(IReadOnlyList<FeedEventResponse> Events, long LastSequence);
+/// <summary>
+/// Pagina do feed: ler a proxima com <c>after = lastSequence</c>. <c>headSequence</c> e a maior
+/// sequencia gravada (inclusive eventos ainda na margem); o leitor mede o atraso com ela.
+/// </summary>
+public sealed record EventFeedResponse(IReadOnlyList<FeedEventResponse> Events, long LastSequence, long HeadSequence);
 
 /// <summary>
 /// EVT-1 (ADR-0001): feed de eventos do transactions, lido por polling pelo reporting.
@@ -50,7 +53,7 @@ public static class EventsEndpoints
                     e.OccurredAtUtc, e.TraceParent, JsonSerializer.Deserialize<JsonElement>(e.Payload)))
                 .ToArray();
 
-            return Results.Ok(new EventFeedResponse(events, page.LastSequence));
+            return Results.Ok(new EventFeedResponse(events, page.LastSequence, page.HeadSequence));
         })
         .WithTags("Events")
         .RequireAuthorization(AuthenticationSetup.EventsReadPolicy);
