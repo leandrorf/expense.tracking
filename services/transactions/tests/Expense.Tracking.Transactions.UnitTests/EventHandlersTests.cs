@@ -76,7 +76,7 @@ public sealed class EventHandlersTests
     }
 
     [Fact]
-    public void Feed_ServesOnlyTheContiguousPrefixOlderThanTheMargin()
+    public async Task Feed_ServesOnlyTheContiguousPrefixOlderThanTheMargin()
     {
         // Sequencia 2 ainda esta dentro da margem; a 3 e antiga, mas vem depois da 2:
         // servir a 3 faria o leitor pular a 2 de vez.
@@ -86,8 +86,8 @@ public sealed class EventHandlersTests
             Event(2, Now - TimeSpan.FromSeconds(1)),
             Event(3, Now - TimeSpan.FromSeconds(20)));
 
-        var page = new ReadEventFeedHandler(feed, new EventFeedOptions(margin), new FixedTime(Now))
-            .HandleAsync(0, 10, CancellationToken.None).GetAwaiter().GetResult();
+        var page = await new ReadEventFeedHandler(feed, new EventFeedOptions(margin), new FixedTime(Now))
+            .HandleAsync(0, 10, CancellationToken.None);
 
         Assert.Equal([1L], page.Events.Select(e => e.Sequence));
         Assert.Equal(1, page.LastSequence);
