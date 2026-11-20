@@ -166,7 +166,7 @@ o banco de outro serviço. Nos testes, a porta é substituída por um fake.
 
 ## Serviço `reporting` (agregador) — implementado
 
-Consolida gastos **sem banco próprio**: é um agregador que lê o `transactions` e o `accounts`
+Consolida gastos. O resumo é um agregador que lê o `transactions` e o `accounts`
 por HTTP (encaminhando o token do usuário) e calcula os totais em memória.
 
 - `GET /reports/summary?accountId=&from=&to=` → total de gastos, receitas, saldo, contagem,
@@ -174,8 +174,26 @@ por HTTP (encaminhando o token do usuário) e calcula os totais em memória.
 - O cálculo (`SummaryCalculator`) é uma função pura no domínio — totalmente testável.
 - O mapa conta→escopo (PF/PJ) vem do `accounts`; os lançamentos, do `transactions`.
 
-> Como não há broker de eventos, optou-se por agregação sob demanda (em vez de read models
-> materializados por eventos). Evoluir para projeções via eventos é um passo futuro.
+**Projeção por eventos (EVT-2, [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md))**:
+o `reporting` passou a ter banco próprio (`expense_reporting`) com uma projeção dos lançamentos
+alimentada pelo feed `GET /events` do `transactions`. O `/reports/summary` ainda agrega sob
+demanda; passar a ler a projeção é a EVT-3.
+
+- **Worker** (`ProjectionWorker`, hosted service): lê o feed em lotes a partir do checkpoint
+  (`Projection:BatchSize`, padrão 100). Com lote cheio, lê de novo na hora; com o feed vazio,
+  espera `Projection:PollIntervalSeconds` (2 s). Em erro, tenta de novo após 10 s.
+  `Projection:Enabled=false` desliga o worker.
+- **Token de serviço**: client credentials no identity (`ServiceAuth:*`, escopo `events.read`),
+  reaproveitado até perto de expirar.
+- **Mesmo commit**: `ProjectionProcessor` aplica o lote e grava projeção
+  (`projected_transactions`) e checkpoint (`projection_checkpoints`) num único `SaveChanges`.
+  Ou o lote inteiro entra, ou é relido.
+- **Idempotência**: cadastro é upsert e exclusão remove se existir. Reler eventos, inclusive com o
+  checkpoint zerado para reconstruir a projeção, chega ao mesmo estado. Tipo de evento
+  desconhecido é pulado; versão não suportada aborta o lote sem gravar nada.
+- **Tracing**: um span por lote, com links para os traces das requests que gravaram os eventos
+  (`traceParent` do envelope).
+- Eventos legados (`accountScope = null`) ficam com escopo nulo na projeção.
 
 ## Gateway (YARP) — implementado
 
@@ -226,9 +244,9 @@ serviço, sem biblioteca compartilhada).
   (só nome, status e duração de cada check; nenhum detalhe de exceção).
   - `/health/live`: o processo responde. Não roda checks.
   - `/health/ready`: as dependências do próprio serviço estão ok (checks com a tag `ready`). Hoje,
-    o banco em `accounts`, `identity` e `transactions` (`AddDbContextCheck`). Responde 503 quando
-    algum falha. `gateway` e `reporting` não têm banco e não checam outros serviços, para uma
-    queda não se propagar em cascata.
+    o banco em `accounts`, `identity`, `transactions` e `reporting` (`AddDbContextCheck`). Responde
+    503 quando algum falha. `gateway` não tem banco, e nenhum serviço checa outros serviços, para
+    uma queda não se propagar em cascata.
   - `/health`: alias de `/health/live`, mantido por compatibilidade.
 - Quando o chamador não envia `X-Correlation-Id`, o correlation id dos logs é o próprio trace id,
   o que liga uma linha de log ao trace no Jaeger.

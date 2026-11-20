@@ -142,12 +142,37 @@ services:
     networks:
       - expense-net
 
+  # EVT-2: banco proprio do reporting (projecao alimentada pelo feed de eventos do transactions).
+  reporting-db:
+    image: mysql:8.0
+    container_name: expense-reporting-db
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${REPORTING_DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${REPORTING_DB_NAME:-expense_reporting}
+      MYSQL_USER: ${REPORTING_DB_USER:-expense}
+      MYSQL_PASSWORD: ${REPORTING_DB_PASSWORD:-expense}
+    ports:
+      - "3310:3306"
+    volumes:
+      - reporting-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${REPORTING_DB_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - expense-net
+
   reporting:
     build:
       context: .
       dockerfile: services/reporting/Dockerfile
     container_name: expense-reporting
     depends_on:
+      reporting-db:
+        condition: service_healthy
       identity:
         condition: service_started
       accounts:
@@ -165,6 +190,11 @@ services:
       Services__TransactionsBaseUrl: "http://transactions:8080"
       Services__AccountsBaseUrl: "http://accounts:8080"
       Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
+      # EVT-2: projecao em banco proprio, lendo o feed /events do transactions com token de servico.
+      ConnectionStrings__ReportingDb: "server=reporting-db;port=3306;database=${REPORTING_DB_NAME:-expense_reporting};user=${REPORTING_DB_USER:-expense};password=${REPORTING_DB_PASSWORD:-expense};"
+      ServiceAuth__TokenEndpoint: "http://identity:8080/oauth/token"
+      ServiceAuth__ClientId: expense-tracking-service
+      ServiceAuth__ClientSecret: ${REPORTING_SERVICE_CLIENT_SECRET:-dev-service-secret}
     ports:
       - "${REPORTING_HTTP_PORT:-5110}:8080"
     networks:
@@ -264,6 +294,7 @@ volumes:
   identity-db-data:
   accounts-db-data:
   transactions-db-data:
+  reporting-db-data:
 
 networks:
   expense-net:

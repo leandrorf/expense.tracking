@@ -23,14 +23,17 @@ public sealed class HealthEndpointsTests(ReportingApiFactory factory) : IClassFi
     }
 
     [Fact]
-    public async Task Ready_IsHealthy_WithoutDependingOnOtherServices()
+    public async Task Ready_IsHealthy_AndChecksTheDatabase()
     {
         var response = await _factory.CreateClient().GetAsync("/health/ready");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Healthy", body.GetProperty("status").GetString());
-        // Sem banco proprio: a prontidao nao depende de outros servicos (evita falha em cascata).
-        Assert.Empty(body.GetProperty("checks").EnumerateObject());
+        // EVT-2: o reporting tem banco proprio (projecao). Continua sem checar outros servicos,
+        // para uma queda do transactions nao derrubar a prontidao do reporting.
+        var checks = body.GetProperty("checks");
+        Assert.Equal("Healthy", checks.GetProperty("database").GetProperty("status").GetString());
+        Assert.Single(checks.EnumerateObject());
     }
 }
