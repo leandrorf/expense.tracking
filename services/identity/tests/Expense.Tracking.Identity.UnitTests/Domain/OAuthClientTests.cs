@@ -15,6 +15,27 @@ public sealed class OAuthClientTests
         nowUtc: DateTimeOffset.UtcNow);
 
     [Fact]
+    public void AllowScopes_AddsOnlyMissingScopes()
+    {
+        var client = CreateSpa();
+
+        var changed = client.AllowScopes(["expenses.read", "events.read", "events.read"]);
+
+        Assert.True(changed);
+        Assert.Equal(["openid", "expenses.read", "events.read"], client.AllowedScopes);
+        Assert.True(client.EnsureScopesAllowed(["events.read"]).IsSuccess);
+    }
+
+    [Fact]
+    public void AllowScopes_ReturnsFalse_WhenNothingIsNew()
+    {
+        var client = CreateSpa();
+
+        Assert.False(client.AllowScopes(["openid", "expenses.read"]));
+        Assert.Equal(2, client.AllowedScopes.Count);
+    }
+
+    [Fact]
     public void PublicClient_AlwaysRequiresPkce()
     {
         var client = OAuthClient.Create(

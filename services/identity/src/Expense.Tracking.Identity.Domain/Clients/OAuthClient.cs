@@ -83,6 +83,25 @@ public sealed class OAuthClient
     public bool AllowsGrant(string grantType) =>
         _allowedGrantTypes.Contains(grantType, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Passa a permitir os escopos informados (os ja permitidos sao ignorados).
+    /// Retorna <c>true</c> se algum escopo novo foi adicionado.
+    /// </summary>
+    public bool AllowScopes(IEnumerable<string> scopes)
+    {
+        var added = false;
+        foreach (var scope in scopes.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal))
+        {
+            if (!_allowedScopes.Contains(scope, StringComparer.Ordinal))
+            {
+                _allowedScopes.Add(scope);
+                added = true;
+            }
+        }
+
+        return added;
+    }
+
     /// <summary>Filtra os escopos solicitados para apenas os permitidos ao cliente.</summary>
     public IReadOnlyCollection<string> FilterAllowedScopes(IEnumerable<string> requestedScopes) =>
         requestedScopes.Where(s => _allowedScopes.Contains(s, StringComparer.Ordinal)).Distinct(StringComparer.Ordinal).ToArray();

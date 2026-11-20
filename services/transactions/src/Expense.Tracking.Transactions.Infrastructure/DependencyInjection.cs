@@ -1,7 +1,9 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
+using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Transactions;
 using Expense.Tracking.Transactions.Infrastructure.Clients;
 using Expense.Tracking.Transactions.Infrastructure.Persistence;
+using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,14 @@ public static class DependencyInjection
         services.AddScoped<ListTransactionsHandler>();
         services.AddScoped<GetTransactionHandler>();
         services.AddScoped<DeleteTransactionHandler>();
+
+        // EVT-1: outbox transacional + feed de eventos (ADR-0001).
+        services.AddScoped<IEventOutbox, EventOutbox>();
+        services.AddScoped<IEventFeed, EventFeed>();
+        services.AddScoped<ReadEventFeedHandler>();
+        var marginSeconds = configuration.GetValue<double?>("Events:FeedSafetyMarginSeconds");
+        services.AddSingleton(new EventFeedOptions(
+            marginSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : EventFeedOptions.DefaultSafetyMargin));
 
         var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
         services.AddTransient<CorrelationIdForwardingHandler>();

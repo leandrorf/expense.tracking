@@ -54,10 +54,19 @@ public static class IdentitySeeder
         db.Clients.Add(spa);
     }
 
+    /// <summary>
+    /// Escopos do cliente de servico. <c>events.read</c> (EVT-1) da acesso ao feed de eventos do
+    /// transactions, lido pelo reporting.
+    /// </summary>
+    private static readonly string[] ServiceClientScopes = ["expenses.read", "expenses.write", "events.read"];
+
     private static async Task SeedServiceClientAsync(IdentityDbContext db, IPasswordHasher hasher, DateTimeOffset now, CancellationToken ct)
     {
-        if (await db.Clients.AnyAsync(c => c.ClientId == ServiceClientId, ct))
+        var existing = await db.Clients.FirstOrDefaultAsync(c => c.ClientId == ServiceClientId, ct);
+        if (existing is not null)
         {
+            // Bancos criados antes de um escopo novo recebem o escopo sem recriar o cliente.
+            existing.AllowScopes(ServiceClientScopes);
             return;
         }
 
@@ -67,7 +76,7 @@ public static class IdentitySeeder
             type: ClientType.Confidential,
             clientSecretHash: hasher.Hash(ServiceClientSecret),
             redirectUris: [],
-            allowedScopes: ["expenses.read", "expenses.write"],
+            allowedScopes: ServiceClientScopes,
             allowedGrantTypes: [GrantType.ClientCredentials],
             nowUtc: now,
             requirePkce: false);

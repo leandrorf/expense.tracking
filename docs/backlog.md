@@ -92,12 +92,13 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 **Objetivo:** reporting deixa de agregar sob demanda e passa a consumir eventos.
 **Transporte:** outbox do `transactions` exposto como feed HTTP, lido por polling pelo `reporting` — ver [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md) (Aceito).
 
-- 🔵 **EVT-1** Eventos de domínio no `transactions`: outbox + feed HTTP.
+- 🟢 **EVT-1** Eventos de domínio no `transactions`: outbox + feed HTTP.
   - *Dado* um lançamento criado ou excluído, *quando* a mudança é confirmada, *então* um evento `TransactionRegistered` ou `TransactionDeleted` é gravado no outbox na mesma transação de banco.
   - *Dado* um consumidor com token de serviço (client credentials, escopo `events.read`), *quando* chama `GET /events?after={seq}`, *então* recebe os eventos em ordem de sequência, sem pular eventos de transações que ainda não commitaram (margem contra lacunas).
   - O `TransactionRegistered` carrega o escopo PF/PJ da conta, capturado na validação que o `transactions` já faz no `accounts` (o escopo é imutável).
   - O evento guarda `eventId`, `version`, `occurredAt`, `ownerUserId` e o `traceparent` de origem.
   - Carga inicial: a migração grava um `TransactionRegistered` para cada lançamento já existente.
+  - Entregue: tabela `outbox_events` (migração `AddOutboxEvents`) gravada no mesmo `SaveChanges` do lançamento (porta `IEventOutbox`); `TransactionRegistered` (com `accountScope` = `Personal`/`Business`, lido na validação da conta no accounts) e `TransactionDeleted`; envelope com `traceParent`. Feed `GET /events?after&limit` com o escopo `events.read`, fora do gateway, servindo só o prefixo contíguo mais antigo que a margem (`Events:FeedSafetyMarginSeconds`, 5 s). Carga inicial na subida do serviço (idempotente; `accountScope = null` para lançamentos anteriores ao outbox). Identity: cliente de serviço ganha `events.read`, inclusive em bancos existentes. Testes: casos de uso (unit), feed/autorização/paginação/margem/carga inicial (integração), token com `events.read` (identity). Validado ao vivo no MySQL. Branch `feature/evt-outbox-feed`.
   - Estimativa: 8
 - 🔵 **EVT-2** Projeção no `reporting` consumindo o feed (idempotente).
   - *Dado* o mesmo evento entregue mais de uma vez, *quando* o reporting processa, *então* a projeção não duplica valores.

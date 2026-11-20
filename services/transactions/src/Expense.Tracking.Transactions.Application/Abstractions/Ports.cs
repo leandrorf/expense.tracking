@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Abstractions;
@@ -32,7 +33,11 @@ public interface IUnitOfWork
 /// </summary>
 public interface IAccountsClient
 {
-    Task<bool> AccountExistsAsync(Guid accountId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Escopo (PF/PJ) da conta, ou <c>null</c> se ela nao existe ou nao pertence ao usuario.
+    /// O escopo e imutavel no accounts, entao pode ser copiado para os eventos (EVT-1).
+    /// </summary>
+    Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken);
 
     Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken);
 }
@@ -47,4 +52,31 @@ public interface IUserTokenAccessor
 public interface ICorrelationContext
 {
     string? CorrelationId { get; }
+}
+
+/// <summary>
+/// EVT-1: outbox transacional. O evento adicionado e gravado no mesmo commit da mudanca
+/// (mesmo <see cref="IUnitOfWork"/>), entao nunca existe lancamento sem evento nem o contrario.
+/// </summary>
+public interface IEventOutbox
+{
+    void Add(TransactionEvent @event);
+}
+
+/// <summary>Evento gravado no outbox, como servido pelo feed (payload em JSON).</summary>
+public sealed record FeedEvent(
+    long Sequence,
+    Guid EventId,
+    string EventType,
+    int Version,
+    Guid AggregateId,
+    Guid OwnerUserId,
+    DateTimeOffset OccurredAtUtc,
+    string? TraceParent,
+    string Payload);
+
+/// <summary>Leitura do outbox em ordem de sequencia (EVT-1, feed <c>GET /events</c>).</summary>
+public interface IEventFeed
+{
+    Task<IReadOnlyList<FeedEvent>> ReadAfterAsync(long afterSequence, int limit, CancellationToken cancellationToken);
 }

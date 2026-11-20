@@ -99,6 +99,61 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
 
                     b.ToTable("transactions", (string)null);
                 });
+
+            modelBuilder.Entity("Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox.OutboxEvent", b =>
+                {
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    b.Property<Guid>("AggregateId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("aggregate_id");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("payload");
+
+                    b.Property<string>("TraceParent")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("trace_parent");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
+                    b.HasKey("Sequence");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_outbox_events_event_id");
+
+                    b.HasIndex("AggregateId", "EventType")
+                        .HasDatabaseName("ix_outbox_events_aggregate");
+
+                    b.ToTable("outbox_events", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

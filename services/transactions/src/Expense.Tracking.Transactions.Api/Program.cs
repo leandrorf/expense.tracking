@@ -3,6 +3,7 @@ using Expense.Tracking.Transactions.Api.Setup;
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Infrastructure;
 using Expense.Tracking.Transactions.Infrastructure.Persistence;
+using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,7 @@ app.UseAuthorization();
 
 app.MapHealthEndpoints();
 app.MapTransactionsEndpoints();
+app.MapEventsEndpoints();
 
 await InitializeDatabaseAsync(app);
 
@@ -62,6 +64,13 @@ static async Task InitializeDatabaseAsync(WebApplication app)
     else
     {
         await db.Database.EnsureCreatedAsync();
+    }
+
+    // EVT-1: lancamentos anteriores ao outbox ganham seu TransactionRegistered (idempotente).
+    var backfilled = await OutboxBackfill.RunAsync(db, scope.ServiceProvider.GetRequiredService<TimeProvider>());
+    if (backfilled > 0)
+    {
+        app.Logger.LogInformation("Carga inicial do outbox: {Count} lancamentos ganharam TransactionRegistered.", backfilled);
     }
 }
 

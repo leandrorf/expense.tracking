@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using Expense.Tracking.Transactions.Application.Abstractions;
 
 namespace Expense.Tracking.Transactions.Infrastructure.Clients;
@@ -9,13 +10,29 @@ namespace Expense.Tracking.Transactions.Infrastructure.Clients;
 /// </summary>
 internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccessor tokenAccessor) : IAccountsClient
 {
-    public Task<bool> AccountExistsAsync(Guid accountId, CancellationToken cancellationToken) =>
-        ExistsAsync($"accounts/{accountId}", cancellationToken);
+    public async Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync($"accounts/{accountId}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var account = await response.Content.ReadFromJsonAsync<AccountResponse>(cancellationToken);
+        return account?.Scope
+            ?? throw new InvalidOperationException("O accounts respondeu a conta sem o campo 'scope'.");
+    }
 
     public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) =>
         ExistsAsync($"credit-cards/{creditCardId}", cancellationToken);
 
     private async Task<bool> ExistsAsync(string path, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(path, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(string path, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
 
@@ -25,7 +42,9 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        return response.IsSuccessStatusCode;
+        return await httpClient.SendAsync(request, cancellationToken);
     }
+
+    /// <summary>So o que o transactions usa da conta devolvida pelo accounts.</summary>
+    private sealed record AccountResponse(string? Scope);
 }

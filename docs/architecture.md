@@ -140,6 +140,30 @@ cartão chamando o `accounts` por HTTP, **encaminhando o token do usuário** (po
 Como o `accounts` filtra pelo dono do token, um 200 confirma existência **e** posse — sem acessar
 o banco de outro serviço. Nos testes, a porta é substituída por um fake.
 
+**Eventos de domínio (EVT-1, [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md))**:
+
+- **Outbox transacional** (tabela `outbox_events`): criar um lançamento grava um
+  `TransactionRegistered` e excluir grava um `TransactionDeleted`, no **mesmo `SaveChanges`** da
+  mudança (porta `IEventOutbox`). Nunca há lançamento sem evento, nem o contrário. A exclusão é
+  física, então o evento é o único registro dela.
+- **Contrato**: envelope com `sequence`, `eventId`, `eventType`, `version`, `aggregateId`,
+  `ownerUserId`, `occurredAtUtc` e `traceParent` (W3C, liga ao trace da request de origem).
+  O payload do `TransactionRegistered` traz o necessário para a projeção do reporting, incluindo
+  o escopo da conta (`accountScope`: `Personal`/`Business`), lido do `accounts` na mesma
+  validação de sempre. O escopo é imutável na conta, então a cópia não fica desatualizada.
+- **Log retido**: nada é apagado depois de lido; consumidores reconstroem projeções desde a
+  sequência 0.
+- **Feed** `GET /events?after={seq}&limit={n}` (máx. 500): exige token com o escopo `events.read`
+  (client credentials do `expense-tracking-service`) e **não passa pelo gateway**. Devolve os
+  eventos em ordem e `lastSequence`, o cursor da próxima leitura.
+- **Margem contra lacunas** (`Events:FeedSafetyMarginSeconds`, padrão 5 s): a sequência é
+  auto-incremento, então uma transação pode commitar depois de outra com sequência maior. O feed
+  só serve o **prefixo contíguo** de eventos mais antigos que a margem e para no primeiro evento
+  recente demais, para o leitor nunca pular uma sequência.
+- **Carga inicial**: na subida, lançamentos sem `TransactionRegistered` (anteriores ao outbox)
+  ganham o evento, em ordem de criação. É idempotente. Esses eventos saem com
+  `accountScope = null`, porque o `transactions` não guarda o escopo da conta.
+
 ## Serviço `reporting` (agregador) — implementado
 
 Consolida gastos **sem banco próprio**: é um agregador que lê o `transactions` e o `accounts`

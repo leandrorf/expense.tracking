@@ -1,5 +1,6 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.Contracts;
+using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
@@ -21,6 +22,7 @@ public sealed record CreateTransactionCommand(
 public sealed class CreateTransactionHandler(
     ITransactionRepository transactions,
     IAccountsClient accountsClient,
+    IEventOutbox outbox,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
 {
@@ -37,7 +39,9 @@ public sealed class CreateTransactionHandler(
         }
 
         // Valida referencias no servico accounts (propriedade garantida pelo token encaminhado).
-        if (!await accountsClient.AccountExistsAsync(command.AccountId, cancellationToken))
+        // A mesma consulta traz o escopo PF/PJ da conta, que vai no evento (EVT-1).
+        var accountScope = await accountsClient.FindAccountScopeAsync(command.AccountId, cancellationToken);
+        if (accountScope is null)
         {
             return Result.Failure<TransactionDto>(Error.NotFound("account.not_found", "Conta nao encontrada para o usuario."));
         }
@@ -49,6 +53,7 @@ public sealed class CreateTransactionHandler(
         }
 
         await transactions.AddAsync(result.Value, cancellationToken);
+        outbox.Add(TransactionRegistered.From(result.Value, accountScope));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return TransactionDto.From(result.Value);
     }
@@ -84,7 +89,10 @@ public sealed class GetTransactionHandler(ITransactionRepository transactions)
     }
 }
 
-public sealed class DeleteTransactionHandler(ITransactionRepository transactions, IUnitOfWork unitOfWork)
+public sealed class DeleteTransactionHandler(
+    ITransactionRepository transactions,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork)
 {
     public async Task<Result> HandleAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken)
     {
@@ -95,6 +103,8 @@ public sealed class DeleteTransactionHandler(ITransactionRepository transactions
         }
 
         transactions.Remove(transaction);
+        // A exclusao e fisica: o evento e o unico registro de que o lancamento existiu.
+        outbox.Add(new TransactionDeleted(transaction.Id, transaction.OwnerUserId));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
