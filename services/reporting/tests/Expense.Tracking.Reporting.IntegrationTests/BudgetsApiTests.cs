@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Expense.Tracking.Reporting.IntegrationTests;
 
 /// <summary>
-/// BDG-2/BDG-3: definir, listar, alterar o valor e encerrar orcamentos. Os testes dividem o
+/// BDG-2/BDG-3/BDG-4: definir, listar, alterar o valor, encerrar e acompanhar orcamentos. Os testes dividem o
 /// banco; cada um usa um usuario proprio.
 /// </summary>
 public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture<ReportingApiFactory>
@@ -287,5 +287,109 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
         var response = await ClientFor(Guid.NewGuid()).GetAsync("/budgets?month=dezembro");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+    private async Task<JsonElement[]> StatusAsync(HttpClient client, string month)
+    {
+        var body = await client.GetFromJsonAsync<JsonElement>($"/budgets/status?month={month}");
+        Assert.Equal(month, body.GetProperty("month").GetString());
+        return body.GetProperty("budgets").EnumerateArray().ToArray();
+    }
+
+    [Fact]
+    public async Task Status_ComputesTheMonthFromTheProjection()
+    {
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        await CreateAsync(client, Budget(category: "Alimentação", scope: "Personal", amount: 1000m, startMonth: "2026-12"));
+        await CreateAsync(client, Budget(category: "Fornecedores", scope: "Business", amount: 5000m, startMonth: "2026-12"));
+        var feed = _factory.EventFeed;
+        // PF: Pix + dinheiro + cartao em contas diferentes, uma variacao de digitacao da categoria.
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 300m, "Alimentação", occurredOn: "2026-12-02", paymentMethod: "Pix");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 200m, "alimentacao ", occurredOn: "2026-12-10", paymentMethod: "Cash");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 250m, "Alimentação", occurredOn: "2026-12-28", paymentMethod: "CreditCard");
+        // PJ: boleto + transferencia.
+        feed.Registered(Guid.NewGuid(), owner, "Business", 3000m, "Fornecedores", occurredOn: "2026-12-05", paymentMethod: "Boleto");
+        feed.Registered(Guid.NewGuid(), owner, "Business", 1200m, "Fornecedores", occurredOn: "2026-12-20", paymentMethod: "BankTransfer");
+        // Nao entram: gasto PJ na categoria do PF, receita, outro mes, outra moeda, escopo desconhecido, outro dono.
+        feed.Registered(Guid.NewGuid(), owner, "Business", 999m, "Alimentação", occurredOn: "2026-12-03");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 999m, "Alimentação", occurredOn: "2026-12-03", transactionType: "Income");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 999m, "Alimentação", occurredOn: "2027-01-01");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 999m, "Alimentação", occurredOn: "2026-12-03", currency: "USD");
+        feed.Registered(Guid.NewGuid(), owner, null, 999m, "Alimentação", occurredOn: "2026-12-03");
+        feed.Registered(Guid.NewGuid(), Guid.NewGuid(), "Personal", 999m, "Alimentação", occurredOn: "2026-12-03");
+        await _factory.DrainFeedAsync();
+
+        var statuses = await StatusAsync(client, "2026-12");
+
+        Assert.Equal(
+            [
+                ("Alimentação", "Personal", 1000m, 750m, 250m, 75m, "OnTrack"),
+                ("Fornecedores", "Business", 5000m, 4200m, 800m, 84m, "Warning"),
+            ],
+            statuses.Select(s => (
+                s.GetProperty("category").GetString(),
+                s.GetProperty("scope").GetString(),
+                s.GetProperty("limit").GetDecimal(),
+                s.GetProperty("spent").GetDecimal(),
+                s.GetProperty("remaining").GetDecimal(),
+                s.GetProperty("percent").GetDecimal(),
+                s.GetProperty("status").GetString())).ToArray());
+    }
+
+    [Fact]
+    public async Task Status_IsExceeded_AndGoesBackWhenTheExpenseIsDeleted()
+    {
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        await CreateAsync(client, Budget(amount: 1000m, startMonth: "2026-12"));
+        var big = Guid.NewGuid();
+        _factory.EventFeed.Registered(Guid.NewGuid(), owner, "Personal", 600m, "Alimentação", occurredOn: "2026-12-01");
+        _factory.EventFeed.Registered(big, owner, "Personal", 700m, "Alimentação", occurredOn: "2026-12-15");
+        await _factory.DrainFeedAsync();
+
+        var exceeded = Assert.Single(await StatusAsync(client, "2026-12"));
+        Assert.Equal("Exceeded", exceeded.GetProperty("status").GetString());
+        Assert.Equal(-300m, exceeded.GetProperty("remaining").GetDecimal());
+
+        _factory.EventFeed.Deleted(big, owner);
+        await _factory.DrainFeedAsync();
+
+        var after = Assert.Single(await StatusAsync(client, "2026-12"));
+        Assert.Equal(600m, after.GetProperty("spent").GetDecimal());
+        Assert.Equal("OnTrack", after.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Status_FollowsTheVersionsAndTheClosing()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(amount: 1000m, startMonth: "2026-12"));
+        await client.PutAsJsonAsync($"/budgets/{id}/amount", new { amount = 2000m, fromMonth = "2027-01" });
+        await client.PostAsJsonAsync($"/budgets/{id}/close", new { fromMonth = "2027-02" });
+
+        Assert.Equal(1000m, Assert.Single(await StatusAsync(client, "2026-12")).GetProperty("limit").GetDecimal());
+        Assert.Equal(2000m, Assert.Single(await StatusAsync(client, "2027-01")).GetProperty("limit").GetDecimal());
+        Assert.Empty(await StatusAsync(client, "2027-02"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("?month=2026-13")]
+    public async Task Status_WithoutAValidMonth_ReturnsValidationProblem(string query)
+    {
+        var response = await ClientFor(Guid.NewGuid()).GetAsync($"/budgets/status{query}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("budget.month_invalid", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task Status_WithReadScope_IsAllowed_AndWithoutToken_IsUnauthorized()
+    {
+        var reader = await ClientFor(Guid.NewGuid(), scope: "expenses.read").GetAsync("/budgets/status?month=2026-12");
+        var anonymous = await _factory.CreateClient().GetAsync("/budgets/status?month=2026-12");
+
+        Assert.Equal(HttpStatusCode.OK, reader.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
     }
 }

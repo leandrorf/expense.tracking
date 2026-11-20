@@ -1,3 +1,4 @@
+using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Common;
 
@@ -139,5 +140,41 @@ public sealed class ChangeBudgetHandler(IBudgetRepository budgets)
 
         await budgets.SaveChangesAsync(cancellationToken);
         return BudgetDto.From(budget);
+    }
+}
+
+public sealed record BudgetStatusDto(
+    Guid BudgetId,
+    string Category,
+    string Scope,
+    string Currency,
+    decimal Limit,
+    decimal Spent,
+    decimal Remaining,
+    decimal Percent,
+    string Status);
+
+/// <param name="Month">Mes consultado (<c>yyyy-MM</c>).</param>
+public sealed record BudgetMonthDto(string Month, IReadOnlyList<BudgetStatusDto> Budgets);
+
+/// <summary>
+/// BDG-4: acompanhamento do mes. O consumido sai da projecao (mesma fonte e mesma defasagem do
+/// Resumo), entao responde mesmo com o transactions fora do ar.
+/// </summary>
+public sealed class GetBudgetStatusHandler(IBudgetRepository budgets, IProjectionQueries projection)
+{
+    public async Task<BudgetMonthDto> HandleAsync(Guid ownerUserId, DateOnly month, CancellationToken cancellationToken)
+    {
+        var first = new DateOnly(month.Year, month.Month, 1);
+        var last = first.AddMonths(1).AddDays(-1);
+
+        var list = await budgets.ListAsync(ownerUserId, cancellationToken);
+        var transactions = await projection.GetTransactionsAsync(ownerUserId, new ReportFilter(From: first, To: last), cancellationToken);
+
+        var statuses = BudgetStatusCalculator.Calculate(first, list, transactions)
+            .Select(s => new BudgetStatusDto(
+                s.BudgetId, s.Category, s.Scope.ToString(), s.Currency, s.Limit, s.Spent, s.Remaining, s.Percent, s.Health.ToString()))
+            .ToList();
+        return new BudgetMonthDto(first.ToString("yyyy-MM"), statuses);
     }
 }

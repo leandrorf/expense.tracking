@@ -216,7 +216,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     aparecer nos meses seguintes e continua nos anteriores.
   - *Dado* um orçamento de outro usuário, *quando* tenta alterar ou encerrar, *então* recebe 404.
   - Estimativa: 3 · **Must** · Dependências: BDG-2
-- 🔵 **BDG-4** Acompanhamento do mês: limite, consumido, restante e status (API).
+- ✅ **BDG-4** Acompanhamento do mês: limite, consumido, restante e status (API).
+  (`GET /budgets/status?month=`, cálculo puro em `BudgetStatusCalculator`)
   - *Dado* "Alimentação" PF de R$ 1.000,00 em 2026-12 e gastos PF em "Alimentação" de R$ 300,00 no
     **Pix**, R$ 200,00 em **dinheiro** e R$ 250,00 no **cartão de crédito**, em contas PF diferentes,
     *quando* consulto o status de 2026-12, *então* o consumido é R$ 750,00, o restante R$ 250,00, 75%

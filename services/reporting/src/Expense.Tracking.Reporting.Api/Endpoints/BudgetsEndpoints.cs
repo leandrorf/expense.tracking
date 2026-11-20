@@ -24,7 +24,7 @@ public static class BudgetsEndpoints
 
     public static IEndpointRouteBuilder MapBudgetsEndpoints(this IEndpointRouteBuilder app)
     {
-        // BDG-2/BDG-3 (ADR-0002): orcamentos mensais por categoria e escopo, sempre restritos ao dono.
+        // BDG-2/BDG-3/BDG-4 (ADR-0002): orcamentos mensais por categoria e escopo, sempre restritos ao dono.
         var group = app.MapGroup("/budgets").WithTags("Budgets");
 
         // Sem ?month= lista todos (com o valor da vigencia mais recente); com mes, so os que valem
@@ -48,6 +48,22 @@ public static class BudgetsEndpoints
             }
 
             return Results.Ok(await handler.HandleAsync(ownerUserId, filter, ct));
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        // BDG-4: limite, consumido, restante e situacao de cada orcamento que vale no mes.
+        group.MapGet("/status", async (string? month, ClaimsPrincipal user, GetBudgetStatusHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseMonth(month, out var parsed))
+            {
+                return HttpResults.Problem(InvalidMonth);
+            }
+
+            return Results.Ok(await handler.HandleAsync(ownerUserId, parsed, ct));
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
         group.MapPost("/", async (CreateBudgetRequest request, ClaimsPrincipal user, CreateBudgetHandler handler, CancellationToken ct) =>

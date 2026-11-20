@@ -121,6 +121,27 @@ async function main() {
   ok(timeline[0] === 1500 && timeline[1] === 1800 && timeline[2] === undefined,
     `valor por mes respeita vigencia e encerramento (${JSON.stringify(timeline)})`);
 
+  // 10) Acompanhamento do mês (BDG-4): um gasto na categoria do orçamento (variando maiúsculas)
+  // aparece no consumido depois que a projeção o recebe.
+  const budgetTxRes = await fetch(`${GATEWAY}/api/transactions`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({
+      accountId: account.id, type: 'Expense', paymentMethod: 'Cash',
+      description: 'Gasto do orcamento', category: budgetCategory.toUpperCase(), amount: 300,
+      currency: 'BRL', occurredOn: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  ok(budgetTxRes.status === 201, `POST /api/transactions na categoria do orcamento (status ${budgetTxRes.status})`);
+  let status;
+  const statusStarted = Date.now();
+  do {
+    if (status) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/budgets/status?month=${monthAfter(0)}`, { headers: auth });
+    status = res.status === 200 ? (await res.json()).budgets.find((b) => b.budgetId === budget.id) ?? {} : {};
+  } while (status.spent !== 300 && Date.now() - statusStarted < 30_000);
+  ok(status.spent === 300 && status.remaining === 1200 && status.status === 'OnTrack',
+    `GET /api/budgets/status reflete o gasto (spent=${status.spent}, remaining=${status.remaining}, status=${status.status}, em ${((Date.now() - statusStarted) / 1000).toFixed(1)} s)`);
+
   console.log(`\nRESULTADO: ${pass} passaram, ${fail} falharam`);
   process.exit(fail === 0 ? 0 : 1);
 }
