@@ -152,7 +152,7 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
 - **O Resumo não cruza categoria × escopo:** devolve `byCategory` e `byScope` separados. O consumo
   de um orçamento precisa de uma consulta nova na projeção.
 
-**Decisões em aberto (precisam de aceite do dono antes da BDG-2):**
+**Decisões (aceitas pelo dono em 2026-11-20, registradas na ADR-0002; a recomendação de cada item foi a escolhida):**
 1. **Onde mora o orçamento.** Opções: (a) no `reporting`, em tabelas próprias no
    `expense_reporting`, ao lado da projeção; (b) serviço novo `budgets` com banco próprio;
    (c) no `accounts`. *Recomendação: (a)*. O consumido sai da projeção sem chamada entre serviços e
@@ -183,7 +183,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
 7. **"Metas".** *Recomendação:* neste épico, meta = teto de gasto. Meta de economia ou de receita
    fica como pergunta aberta ao dono, fora do MVP.
 
-- 🔵 **BDG-1** ADR-0002: onde mora o orçamento e regras do modelo.
+- ✅ **BDG-1** ADR-0002: onde mora o orçamento e regras do modelo.
+  ([ADR-0002](adr/0002-orcamentos-no-reporting.md), Aceita em 2026-11-20)
   - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa a análise de
     opções, *então* a ADR-0002 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado),
     e o PO ajusta as histórias seguintes ao que foi decidido.
