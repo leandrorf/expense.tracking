@@ -8,6 +8,8 @@ public static class AuthenticationSetup
 {
     public const string ReadPolicy = "ExpensesRead";
     public const string WritePolicy = "ExpensesWrite";
+    public const string AccountScopesReadPolicy = "AccountScopesRead";
+    public const string AccountScopesReadScope = "accounts.scopes.read";
 
     public static IServiceCollection AddAccountsAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -46,7 +48,10 @@ public static class AuthenticationSetup
             .AddPolicy(ReadPolicy, p => p.RequireAuthenticatedUser()
                 .RequireAssertion(ctx => HasScope(ctx.User, "expenses.read") || HasScope(ctx.User, "expenses.write")))
             .AddPolicy(WritePolicy, p => p.RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")));
+                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")))
+            // EVT-4: endpoint interno, so para tokens de servico (client credentials).
+            .AddPolicy(AccountScopesReadPolicy, p => p.RequireAuthenticatedUser()
+                .RequireAssertion(ctx => HasScope(ctx.User, AccountScopesReadScope)));
 
         return services;
     }

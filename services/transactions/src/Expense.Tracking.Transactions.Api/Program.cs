@@ -17,6 +17,11 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
     ?? ["http://localhost:5173"];
 
 builder.Services.AddTransactionsInfrastructure(builder.Configuration);
+// EVT-4: completa o escopo PF/PJ dos eventos de lancamentos anteriores ao outbox.
+if (builder.Configuration.GetValue(DependencyInjection.LegacyScopeBackfillEnabledKey, true))
+{
+    builder.Services.AddHostedService<AccountScopeBackfillWorker>();
+}
 builder.Services.AddTransactionsAuthentication(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();

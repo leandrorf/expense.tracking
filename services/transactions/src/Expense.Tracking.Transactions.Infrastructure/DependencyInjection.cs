@@ -1,6 +1,7 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Transactions;
+using Expense.Tracking.Transactions.Infrastructure.Auth;
 using Expense.Tracking.Transactions.Infrastructure.Clients;
 using Expense.Tracking.Transactions.Infrastructure.Persistence;
 using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
@@ -48,6 +49,40 @@ public static class DependencyInjection
             services.AddSingleton(TimeProvider.System);
         }
 
+        AddLegacyScopeBackfill(services, configuration, accountsBaseUrl);
+
         return services;
     }
+
+    /// <summary>
+    /// EVT-4: cliente do endpoint interno de escopos do accounts, com token de servico (client
+    /// credentials, escopo <c>accounts.scopes.read</c>). O worker que o usa fica na Api.
+    /// </summary>
+    private static void AddLegacyScopeBackfill(IServiceCollection services, IConfiguration configuration, string accountsBaseUrl)
+    {
+        var enabled = configuration.GetValue(LegacyScopeBackfillEnabledKey, true);
+        var secret = configuration["ServiceAuth:ClientSecret"];
+        if (enabled && string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException(
+                $"ServiceAuth:ClientSecret nao configurado: o backfill de escopos precisa do token de servico ({LegacyScopeBackfillEnabledKey}=false desliga).");
+        }
+
+        services.AddSingleton(new ServiceClientOptions(
+            TokenEndpoint: new Uri(configuration["ServiceAuth:TokenEndpoint"] ?? "http://localhost:5080/oauth/token"),
+            ClientId: configuration["ServiceAuth:ClientId"] ?? "expense-tracking-service",
+            ClientSecret: secret ?? string.Empty,
+            Scope: configuration["ServiceAuth:Scope"] ?? "accounts.scopes.read"));
+        services.AddHttpClient(ClientCredentialsTokenProvider.HttpClientName);
+        services.AddSingleton<IServiceTokenProvider, ClientCredentialsTokenProvider>();
+        services.AddTransient<ServiceTokenHandler>();
+        services.AddHttpClient<IAccountScopeDirectory, AccountScopeDirectoryHttpClient>(client =>
+        {
+            client.BaseAddress = new Uri(accountsBaseUrl.EndsWith('/') ? accountsBaseUrl : accountsBaseUrl + "/");
+        })
+        .AddHttpMessageHandler<ServiceTokenHandler>();
+    }
+
+    /// <summary>Liga/desliga o backfill de escopos dos lancamentos legados (EVT-4). Padrao: ligado.</summary>
+    public const string LegacyScopeBackfillEnabledKey = "Events:LegacyScopeBackfill:Enabled";
 }

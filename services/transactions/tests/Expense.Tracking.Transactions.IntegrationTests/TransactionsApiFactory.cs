@@ -42,6 +42,8 @@ public class TransactionsApiFactory : WebApplicationFactory<Program>
             ["Services:AccountsBaseUrl"] = "http://localhost:5090",
             // Sem margem no feed de eventos: os testes leem o evento logo apos gravar.
             ["Events:FeedSafetyMarginSeconds"] = "0",
+            // EVT-4: o worker do backfill chamaria o accounts/identity reais; os testes o chamam direto.
+            ["Events:LegacyScopeBackfill:Enabled"] = "false",
         };
         ConfigureTestSettings(settings);
 

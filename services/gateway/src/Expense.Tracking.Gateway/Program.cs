@@ -68,6 +68,11 @@ app.UseAuthorization();
 
 app.MapHealthEndpoints();
 
+// EVT-4: endpoints internos dos servicos (ex.: /internal/account-scopes do accounts) nao saem
+// pela borda. Sem isto, o catch-all /api/** -> accounts os exporia em /api/internal/**. A rota
+// literal e mais especifica que o catch-all do YARP, entao vence no roteamento.
+app.Map("/api/internal/{**rest}", () => Results.NotFound());
+
 // Encaminha as rotas configuradas (protegidas pela policy definida em cada rota).
 app.MapReverseProxy();
 

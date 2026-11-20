@@ -125,6 +125,12 @@ Segurança e isolamento:
 - **Políticas de escopo**: leitura exige `expenses.read`; escrita exige `expenses.write`.
 - **Isolamento por dono**: toda consulta é filtrada pelo `sub` do token (um usuário só vê os próprios dados).
 
+**Endpoint interno (EVT-4)**: `GET /internal/account-scopes?ids={id}&ids={id}` (1 a 100 ids)
+devolve só `{ accountId, scope }` de contas de **qualquer** dono; ids desconhecidos ficam de fora.
+Exige token com o escopo `accounts.scopes.read`, que só o cliente de serviço pode pedir (a SPA
+não), e não passa pelo gateway. É a única consulta do `accounts` sem filtro de dono (porta
+`IAccountScopeLookup`, separada do repositório escopado).
+
 ## Serviço `transactions` (recurso) — implementado
 
 Núcleo do controle de gastos. Mesma divisão hexagonal, banco próprio `expense_transactions`,
@@ -164,6 +170,14 @@ o banco de outro serviço. Nos testes, a porta é substituída por um fake.
 - **Carga inicial**: na subida, lançamentos sem `TransactionRegistered` (anteriores ao outbox)
   ganham o evento, em ordem de criação. É idempotente. Esses eventos saem com
   `accountScope = null`, porque o `transactions` não guarda o escopo da conta.
+- **Escopo dos legados (EVT-4)**: depois da carga inicial, o `AccountScopeBackfillWorker` pede ao
+  `accounts` o escopo das contas desses lançamentos (`GET /internal/account-scopes`, token de
+  serviço com `accounts.scopes.read`) e grava um `TransactionAccountScopeResolved`
+  (`transactionId`, `ownerUserId`, `accountId`, `accountScope`) por lançamento. O log não é
+  reescrito: o evento completa o `TransactionRegistered`, e um rebuild desde a sequência 0 chega
+  ao mesmo escopo. Idempotente (ignora quem já tem o evento e os lançamentos excluídos). Em
+  falha (accounts ou identity fora do ar), tenta de novo com espera crescente até 5 min e para ao
+  concluir. `Events:LegacyScopeBackfill:Enabled=false` desliga.
 
 ## Serviço `reporting` — implementado
 
@@ -177,8 +191,9 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   (inclusivo, pela data do lançamento). Não chama o `transactions` nem o `accounts` na consulta,
   então responde com os dois fora do ar. Em troca, o resumo pode estar **defasado**: um
   lançamento novo aparece depois da margem do feed (5 s) mais o polling do worker (2 s).
-- O escopo PF/PJ vem do próprio evento. Lançamentos anteriores ao outbox (carga inicial da
-  EVT-1) não têm escopo e aparecem como `Unknown` ("Desconhecido" na SPA).
+- O escopo PF/PJ vem do próprio evento. Lançamentos anteriores ao outbox ganham o escopo pelo
+  `TransactionAccountScopeResolved` (EVT-4); até ele chegar, ou se a conta não existir mais no
+  `accounts`, aparecem como `Unknown` ("Desconhecido" na SPA).
 - O cálculo (`SummaryCalculator`) é uma função pura no domínio — totalmente testável.
 
 **Projeção por eventos (EVT-2)**:
@@ -197,7 +212,9 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   desconhecido é pulado; versão não suportada aborta o lote sem gravar nada.
 - **Tracing**: um span por lote, com links para os traces das requests que gravaram os eventos
   (`traceParent` do envelope).
-- Eventos legados (`accountScope = null`) ficam com escopo nulo na projeção.
+- Eventos legados (`accountScope = null`) ficam com escopo nulo na projeção até o
+  `TransactionAccountScopeResolved`, que só completa uma linha existente (não recria um
+  lançamento já excluído).
 - **Atraso (EVT-3)**: a cada leitura do feed, o worker registra `headSequence − checkpoint` em
   `ProjectionStatus`, exposto como as métricas `reporting.projection.lag` e
   `reporting.projection.checkpoint` (meter `Expense.Tracking.Reporting.Projection`). No
@@ -215,6 +232,8 @@ Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy
   sem token válido, o gateway responde 401 e nem encaminha.
 - **CORS centralizado** para a origem da SPA.
 - Escopo e isolamento por dono continuam sendo aplicados no serviço de destino (defesa em profundidade).
+- **Endpoints internos bloqueados (EVT-4)**: `/api/internal/**` responde 404 na borda. Sem isso,
+  o catch-all `/api/**` exporia o `/internal/**` do `accounts`, que é só para serviços.
 
 Topologia: o `identity` permanece acessível diretamente (é o emissor dos tokens — o `iss`
 precisa bater com o issuer configurado). A SPA autentica no `identity` e chama as APIs de

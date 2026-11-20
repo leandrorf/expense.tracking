@@ -28,6 +28,15 @@ public interface IUnitOfWork
 }
 
 /// <summary>
+/// EVT-4: escopo PF/PJ de contas no accounts, com token de servico (sem usuario). Usado so para
+/// completar os eventos de lancamentos anteriores ao outbox. Ids desconhecidos ficam de fora.
+/// </summary>
+public interface IAccountScopeDirectory
+{
+    Task<IReadOnlyDictionary<Guid, string>> GetScopesAsync(IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Cliente do servico 'accounts'. Verifica existencia/propriedade (o accounts filtra pelo
 /// dono do token encaminhado), permitindo validar referencias sem acessar o banco dele.
 /// </summary>

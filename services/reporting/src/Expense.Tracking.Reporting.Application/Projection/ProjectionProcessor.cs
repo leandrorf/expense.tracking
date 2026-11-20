@@ -94,6 +94,11 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
                 await ApplyDeletedAsync(Read<TransactionDeletedV1>(feedEvent), cancellationToken);
                 return true;
 
+            case FeedEventTypes.TransactionAccountScopeResolved:
+                EnsureSupported(feedEvent);
+                await ApplyScopeResolvedAsync(feedEvent, Read<TransactionAccountScopeResolvedV1>(feedEvent), cancellationToken);
+                return true;
+
             default:
                 // Tipo novo que o reporting ainda nao usa: nao afeta a projecao.
                 return false;
@@ -127,6 +132,17 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         if (row is not null)
         {
             store.Remove(row);
+        }
+    }
+
+    // EVT-4: so completa uma linha existente. Se o lancamento ja foi excluido, nao o recria.
+    private async Task ApplyScopeResolvedAsync(FeedEvent feedEvent, TransactionAccountScopeResolvedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindAsync(e.TransactionId, cancellationToken);
+        if (row is not null)
+        {
+            row.AccountScope = e.AccountScope;
+            row.LastEventSequence = feedEvent.Sequence;
         }
     }
 

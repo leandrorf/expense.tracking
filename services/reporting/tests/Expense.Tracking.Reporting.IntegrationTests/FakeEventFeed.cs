@@ -33,6 +33,15 @@ public sealed class FakeEventFeed : IEventFeedClient
             occurredOn,
         });
 
+    public FeedEvent ScopeResolved(Guid transactionId, Guid ownerUserId, string accountScope) =>
+        Append(FeedEventTypes.TransactionAccountScopeResolved, transactionId, ownerUserId, new
+        {
+            transactionId,
+            ownerUserId,
+            accountId = Guid.NewGuid(),
+            accountScope,
+        });
+
     public FeedEvent Deleted(Guid transactionId, Guid ownerUserId) =>
         Append(FeedEventTypes.TransactionDeleted, transactionId, ownerUserId, new { transactionId, ownerUserId });
 

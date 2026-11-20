@@ -64,6 +64,49 @@ public sealed class ProjectionProcessorTests
     }
 
     [Fact]
+    public async Task ScopeResolved_CompletesTheScopeOfALegacyRow()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var tx = Guid.NewGuid();
+        feed.Registered(tx, scope: null, amount: 80m);
+        var resolved = ScopeResolved(feed, tx, "Business");
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal((2, 0), (result.Applied, result.Skipped));
+        var row = Assert.Single(store.Rows.Values);
+        Assert.Equal("Business", row.AccountScope);
+        Assert.Equal(80m, row.Amount);
+        Assert.Equal(resolved.Sequence, row.LastEventSequence);
+    }
+
+    [Fact]
+    public async Task ScopeResolved_ForADeletedTransaction_DoesNotRecreateIt()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var tx = Guid.NewGuid();
+        feed.Registered(tx, scope: null);
+        feed.Deleted(tx);
+        ScopeResolved(feed, tx, "Personal");
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(3, result.Applied);
+        Assert.Empty(store.Rows);
+    }
+
+    private static FeedEvent ScopeResolved(Feed feed, Guid tx, string scope) =>
+        feed.Raw(FeedEventTypes.TransactionAccountScopeResolved, 1, new
+        {
+            transactionId = tx,
+            ownerUserId = Guid.Empty,
+            accountId = Guid.Empty,
+            accountScope = scope,
+        });
+
+    [Fact]
     public async Task UnknownEventType_IsSkipped_AndTheCheckpointStillAdvances()
     {
         var feed = new Feed();

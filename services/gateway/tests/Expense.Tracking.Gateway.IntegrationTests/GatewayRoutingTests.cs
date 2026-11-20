@@ -30,6 +30,19 @@ public sealed class GatewayRoutingTests(GatewayRoutingTests.Factory factory) : I
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/api/internal/account-scopes")]
+    [InlineData("/api/internal/qualquer/coisa")]
+    public async Task InternalServiceEndpoints_AreNotExposed(string path)
+    {
+        // EVT-4: sem o bloqueio, o catch-all /api/** levaria ao accounts (e responderia 401 aqui).
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public async Task UnknownRoute_ReturnsNotFound()
     {

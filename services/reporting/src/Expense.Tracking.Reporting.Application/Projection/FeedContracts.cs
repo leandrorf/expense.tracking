@@ -29,6 +29,7 @@ public static class FeedEventTypes
 {
     public const string TransactionRegistered = "TransactionRegistered";
     public const string TransactionDeleted = "TransactionDeleted";
+    public const string TransactionAccountScopeResolved = "TransactionAccountScopeResolved";
     public const int SupportedVersion = 1;
 }
 
@@ -44,6 +45,12 @@ public sealed record TransactionRegisteredV1(
     decimal Amount,
     string Currency,
     DateOnly OccurredOn);
+
+/// <summary>
+/// Payload v1 do <c>TransactionAccountScopeResolved</c> (EVT-4): escopo descoberto depois para um
+/// lancamento cujo <c>TransactionRegistered</c> saiu sem escopo.
+/// </summary>
+public sealed record TransactionAccountScopeResolvedV1(Guid TransactionId, Guid OwnerUserId, Guid AccountId, string AccountScope);
 
 /// <summary>Payload v1 do <c>TransactionDeleted</c>.</summary>
 public sealed record TransactionDeletedV1(Guid TransactionId, Guid OwnerUserId);

@@ -55,6 +55,25 @@ public sealed record TransactionRegistered(
         transaction.OccurredOn);
 }
 
+/// <summary>
+/// EVT-4: o escopo PF/PJ da conta de um lancamento anterior ao outbox foi descoberto (o
+/// <see cref="TransactionRegistered"/> dele saiu com <c>accountScope = null</c>). Completa esse
+/// evento sem reescrever o log: quem reconstroi a projecao desde a sequencia 0 chega ao mesmo
+/// escopo. Consumidores aplicam so se o lancamento ainda existir.
+/// </summary>
+public sealed record TransactionAccountScopeResolved(
+    Guid TransactionId,
+    Guid OwnerUserId,
+    Guid AccountId,
+    string AccountScope)
+    : TransactionEvent(TransactionId, OwnerUserId)
+{
+    public const string Name = "TransactionAccountScopeResolved";
+
+    [JsonIgnore]
+    public override string EventType => Name;
+}
+
 /// <summary>Um lancamento foi excluido (a exclusao e fisica; este evento e o unico registro dela).</summary>
 public sealed record TransactionDeleted(Guid TransactionId, Guid OwnerUserId)
     : TransactionEvent(TransactionId, OwnerUserId)

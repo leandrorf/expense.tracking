@@ -118,10 +118,13 @@ public sealed class OAuthFlowTests(IdentityApiFactory factory) : IClassFixture<I
         Assert.Null(body.GetProperty("refresh_token").GetString());
     }
 
-    [Fact]
-    public async Task ClientCredentials_ServiceClient_CanRequestTheEventsFeedScope()
+    // EVT-1: o reporting le o feed de eventos do transactions com events.read.
+    // EVT-4: o transactions le o escopo PF/PJ das contas no accounts com accounts.scopes.read.
+    [Theory]
+    [InlineData("events.read")]
+    [InlineData("accounts.scopes.read")]
+    public async Task ClientCredentials_ServiceClient_CanRequestTheInternalServiceScopes(string scope)
     {
-        // EVT-1: o reporting le o feed de eventos do transactions com este escopo.
         var client = CreateClient();
 
         var response = await PostTokenAsync(client, new Dictionary<string, string>
@@ -129,12 +132,12 @@ public sealed class OAuthFlowTests(IdentityApiFactory factory) : IClassFixture<I
             ["grant_type"] = "client_credentials",
             ["client_id"] = ServiceClientId,
             ["client_secret"] = ServiceClientSecret,
-            ["scope"] = "events.read"
+            ["scope"] = scope
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("events.read", body.GetProperty("scope").GetString());
+        Assert.Equal(scope, body.GetProperty("scope").GetString());
     }
 
     [Fact]

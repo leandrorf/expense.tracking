@@ -70,6 +70,21 @@ public sealed class ReportsApiTests(ReportingApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task Summary_LegacyTransaction_MovesToItsScope_WhenTheScopeIsResolved()
+    {
+        // EVT-4: o transactions completa o escopo do lancamento legado com um evento proprio.
+        var owner = Guid.NewGuid();
+        var legacy = Guid.NewGuid();
+        _factory.EventFeed.Registered(legacy, owner, accountScope: null, amount: 30m);
+        _factory.EventFeed.ScopeResolved(legacy, owner, "Business");
+        await _factory.DrainFeedAsync();
+
+        var summary = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/summary");
+
+        Assert.Equal([("Business", 30m)], Totals(summary, "byScope"));
+    }
+
+    [Fact]
     public async Task Summary_FiltersByAccountAndInclusivePeriod()
     {
         var owner = Guid.NewGuid();

@@ -17,6 +17,16 @@ public interface IAccountRepository
     void Update(Account account);
 }
 
+/// <summary>
+/// EVT-4: escopo PF/PJ de contas por id, <b>sem</b> filtrar pelo dono. Unica consulta que cruza
+/// donos: so atende o endpoint interno de servico (escopo <c>accounts.scopes.read</c>) e devolve
+/// apenas o escopo, nenhum outro dado da conta.
+/// </summary>
+public interface IAccountScopeLookup
+{
+    Task<IReadOnlyDictionary<Guid, AccountScope>> GetScopesAsync(IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken);
+}
+
 /// <summary>Repositorio de cartoes de credito, tambem escopado pelo dono.</summary>
 public interface ICreditCardRepository
 {

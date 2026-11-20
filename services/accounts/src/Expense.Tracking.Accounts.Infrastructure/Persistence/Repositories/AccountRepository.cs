@@ -23,3 +23,14 @@ internal sealed class AccountRepository(AccountsDbContext dbContext) : IAccountR
 
     public void Update(Account account) => dbContext.Accounts.Update(account);
 }
+
+/// <summary>EVT-4: ver <see cref="IAccountScopeLookup"/> (consulta interna, sem filtro de dono).</summary>
+internal sealed class AccountScopeLookup(AccountsDbContext dbContext) : IAccountScopeLookup
+{
+    public async Task<IReadOnlyDictionary<Guid, AccountScope>> GetScopesAsync(
+        IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken) =>
+        await dbContext.Accounts
+            .AsNoTracking()
+            .Where(a => accountIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.Scope, cancellationToken);
+}
