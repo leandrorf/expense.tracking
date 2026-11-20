@@ -25,11 +25,6 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("id");
 
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("amount");
-
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -42,6 +37,10 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(60)")
                         .HasColumnName("category_key");
 
+                    b.Property<DateTime?>("ClosedFromMonth")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("closed_from_month");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetime")
                         .HasColumnName("created_at");
@@ -51,6 +50,11 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("varchar(3)")
                         .HasColumnName("currency");
+
+                    b.Property<string>("OpenCategoryKey")
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("open_category_key");
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("char(36)")
@@ -69,8 +73,11 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerUserId", "Scope", "CategoryKey")
+                        .HasDatabaseName("ix_budgets_owner_scope_category");
+
+                    b.HasIndex("OwnerUserId", "Scope", "OpenCategoryKey")
                         .IsUnique()
-                        .HasDatabaseName("ux_budgets_owner_scope_category");
+                        .HasDatabaseName("ux_budgets_owner_scope_open_category");
 
                     b.ToTable("budgets", (string)null);
                 });
@@ -153,6 +160,34 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.HasKey("Feed");
 
                     b.ToTable("projection_checkpoints", (string)null);
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Budgets.Budget", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Reporting.Domain.Budgets.BudgetLimit", "_limits", b1 =>
+                        {
+                            b1.Property<Guid>("BudgetId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("budget_id");
+
+                            b1.Property<DateTime>("EffectiveFrom")
+                                .HasColumnType("datetime(6)")
+                                .HasColumnName("effective_from");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.HasKey("BudgetId", "EffectiveFrom");
+
+                            b1.ToTable("budget_limits", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("BudgetId");
+                        });
+
+                    b.Navigation("_limits");
                 });
 #pragma warning restore 612, 618
         }

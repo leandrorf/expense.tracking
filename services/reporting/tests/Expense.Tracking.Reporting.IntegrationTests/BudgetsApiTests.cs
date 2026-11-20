@@ -5,7 +5,8 @@ using System.Text.Json;
 namespace Expense.Tracking.Reporting.IntegrationTests;
 
 /// <summary>
-/// BDG-2: definir e listar orcamentos. Os testes dividem o banco; cada um usa um usuario proprio.
+/// BDG-2/BDG-3: definir, listar, alterar o valor e encerrar orcamentos. Os testes dividem o
+/// banco; cada um usa um usuario proprio.
 /// </summary>
 public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture<ReportingApiFactory>
 {
@@ -148,5 +149,143 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
         await _factory.DrainFeedAsync();
 
         Assert.Single((await client.GetFromJsonAsync<JsonElement[]>("/budgets"))!);
+    }
+    private static async Task<Guid> CreateAsync(HttpClient client, object request)
+    {
+        var response = await client.PostAsJsonAsync("/budgets", request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
+    private static async Task<decimal?> AmountInAsync(HttpClient client, Guid id, string month)
+    {
+        var list = await client.GetFromJsonAsync<JsonElement[]>($"/budgets?month={month}");
+        var budget = list!.SingleOrDefault(b => b.GetProperty("id").GetGuid() == id);
+        return budget.ValueKind == JsonValueKind.Undefined ? null : budget.GetProperty("amount").GetDecimal();
+    }
+
+    [Fact]
+    public async Task ChangeAmount_AppliesFromTheMonth_AndKeepsThePreviousMonths()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(amount: 1500m, startMonth: "2026-12"));
+
+        var response = await client.PutAsJsonAsync($"/budgets/{id}/amount", new { amount = 1800m, fromMonth = "2027-02" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1800m, body.GetProperty("amount").GetDecimal());
+        Assert.Equal(
+            [("2026-12", 1500m), ("2027-02", 1800m)],
+            body.GetProperty("limits").EnumerateArray()
+                .Select(l => (l.GetProperty("fromMonth").GetString(), l.GetProperty("amount").GetDecimal())).ToArray());
+        Assert.Null(await AmountInAsync(client, id, "2026-11"));
+        Assert.Equal(1500m, await AmountInAsync(client, id, "2026-12"));
+        Assert.Equal(1500m, await AmountInAsync(client, id, "2027-01"));
+        Assert.Equal(1800m, await AmountInAsync(client, id, "2027-02"));
+        Assert.Equal(1800m, await AmountInAsync(client, id, "2027-09"));
+    }
+
+    [Fact]
+    public async Task Close_HidesTheBudgetFromThatMonth_AndKeepsItInThePreviousMonths()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(startMonth: "2026-12"));
+
+        var response = await client.PostAsJsonAsync($"/budgets/{id}/close", new { fromMonth = "2027-03" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("2027-03", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("closedFromMonth").GetString());
+        Assert.Equal(1500m, await AmountInAsync(client, id, "2027-02"));
+        Assert.Null(await AmountInAsync(client, id, "2027-03"));
+        Assert.Null(await AmountInAsync(client, id, "2027-08"));
+        // Sem mes, a lista continua mostrando o orcamento encerrado (historico).
+        Assert.Single((await client.GetFromJsonAsync<JsonElement[]>("/budgets"))!);
+    }
+
+    [Fact]
+    public async Task AfterClosing_TheCategoryCanGetANewBudget_OnlyFromTheClosingMonth()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(startMonth: "2026-12"));
+        await client.PostAsJsonAsync($"/budgets/{id}/close", new { fromMonth = "2027-03" });
+
+        var overlapping = await client.PostAsJsonAsync("/budgets", Budget(startMonth: "2027-02"));
+        var next = await client.PostAsJsonAsync("/budgets", Budget(amount: 900m, startMonth: "2027-03"));
+
+        Assert.Equal(HttpStatusCode.Conflict, overlapping.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, next.StatusCode);
+        var march = await client.GetFromJsonAsync<JsonElement[]>("/budgets?month=2027-03");
+        Assert.Equal(900m, Assert.Single(march!).GetProperty("amount").GetDecimal());
+    }
+
+    [Theory]
+    [InlineData("PUT", "amount")]
+    [InlineData("POST", "close")]
+    public async Task ChangingSomeoneElsesBudget_ReturnsNotFound(string method, string action)
+    {
+        var id = await CreateAsync(ClientFor(Guid.NewGuid()), Budget());
+        var request = new HttpRequestMessage(new HttpMethod(method), $"/budgets/{id}/{action}")
+        {
+            Content = JsonContent.Create(new { amount = 10m, fromMonth = "2027-03" })
+        };
+
+        var response = await ClientFor(Guid.NewGuid()).SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangeAmount_AfterClosing_IsAConflict()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(startMonth: "2026-12"));
+        await client.PostAsJsonAsync($"/budgets/{id}/close", new { fromMonth = "2027-03" });
+
+        var response = await client.PutAsJsonAsync($"/budgets/{id}/amount", new { amount = 10m, fromMonth = "2027-04" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("budget.closed", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+    }
+
+    [Theory]
+    [InlineData("/amount", "2026-11", "budget.month_before_start")]
+    [InlineData("/amount", "2027", "budget.month_invalid")]
+    [InlineData("/close", "2026-12", "budget.month_before_start")]
+    [InlineData("/close", "", "budget.month_invalid")]
+    public async Task InvalidChange_ReturnsValidationProblem(string action, string fromMonth, string expectedCode)
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget(startMonth: "2026-12"));
+        var method = action == "/amount" ? HttpMethod.Put : HttpMethod.Post;
+
+        var response = await client.SendAsync(new HttpRequestMessage(method, $"/budgets/{id}{action}")
+        {
+            Content = JsonContent.Create(new { amount = 10m, fromMonth })
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(expectedCode, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task Changes_WithoutWriteScope_ReturnForbidden()
+    {
+        var id = await CreateAsync(ClientFor(Guid.NewGuid()), Budget());
+        var reader = ClientFor(Guid.NewGuid(), scope: "expenses.read");
+
+        var change = await reader.PutAsJsonAsync($"/budgets/{id}/amount", new { amount = 10m, fromMonth = "2027-03" });
+        var close = await reader.PostAsJsonAsync($"/budgets/{id}/close", new { fromMonth = "2027-03" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, change.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, close.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_WithInvalidMonth_ReturnsValidationProblem()
+    {
+        var response = await ClientFor(Guid.NewGuid()).GetAsync("/budgets?month=dezembro");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }
