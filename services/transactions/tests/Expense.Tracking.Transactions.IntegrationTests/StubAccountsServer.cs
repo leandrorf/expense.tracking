@@ -23,8 +23,9 @@ public sealed class StubAccountsServer : IAsyncDisposable
         builder.Logging.ClearProviders();
 
         _app = builder.Build();
-        _app.MapGet("/accounts/{id}", (HttpRequest request) => Record(request));
-        _app.MapGet("/credit-cards/{id}", (HttpRequest request) => Record(request));
+        // Mesmo formato do accounts real: o transactions le o 'scope' da conta (EVT-1).
+        _app.MapGet("/accounts/{id}", (HttpRequest request, Guid id) => Record(request, new { id, scope = "Personal" }));
+        _app.MapGet("/credit-cards/{id}", (HttpRequest request, Guid id) => Record(request, new { id }));
         _app.StartAsync().GetAwaiter().GetResult();
 
         BaseUrl = _app.Urls.Single();
@@ -35,10 +36,10 @@ public sealed class StubAccountsServer : IAsyncDisposable
     /// <summary>Valores do header <c>traceparent</c> recebidos, na ordem de chegada.</summary>
     public ConcurrentQueue<string> ReceivedTraceParents { get; } = new();
 
-    private IResult Record(HttpRequest request)
+    private IResult Record(HttpRequest request, object body)
     {
         ReceivedTraceParents.Enqueue(request.Headers["traceparent"].ToString());
-        return Results.Ok();
+        return Results.Ok(body);
     }
 
     public async ValueTask DisposeAsync()

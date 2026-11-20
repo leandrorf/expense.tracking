@@ -8,6 +8,8 @@ public static class AuthenticationSetup
 {
     public const string ReadPolicy = "ExpensesRead";
     public const string WritePolicy = "ExpensesWrite";
+    public const string EventsReadPolicy = "EventsRead";
+    public const string EventsReadScope = "events.read";
 
     public static IServiceCollection AddTransactionsAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -44,7 +46,10 @@ public static class AuthenticationSetup
             .AddPolicy(ReadPolicy, p => p.RequireAuthenticatedUser()
                 .RequireAssertion(ctx => HasScope(ctx.User, "expenses.read") || HasScope(ctx.User, "expenses.write")))
             .AddPolicy(WritePolicy, p => p.RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")));
+                .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")))
+            // EVT-1: feed de eventos, so para tokens de servico (client credentials).
+            .AddPolicy(EventsReadPolicy, p => p.RequireAuthenticatedUser()
+                .RequireAssertion(ctx => HasScope(ctx.User, EventsReadScope)));
 
         return services;
     }

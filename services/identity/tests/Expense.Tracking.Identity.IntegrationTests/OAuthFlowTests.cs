@@ -119,6 +119,25 @@ public sealed class OAuthFlowTests(IdentityApiFactory factory) : IClassFixture<I
     }
 
     [Fact]
+    public async Task ClientCredentials_ServiceClient_CanRequestTheEventsFeedScope()
+    {
+        // EVT-1: o reporting le o feed de eventos do transactions com este escopo.
+        var client = CreateClient();
+
+        var response = await PostTokenAsync(client, new Dictionary<string, string>
+        {
+            ["grant_type"] = "client_credentials",
+            ["client_id"] = ServiceClientId,
+            ["client_secret"] = ServiceClientSecret,
+            ["scope"] = "events.read"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("events.read", body.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public async Task ClientCredentials_WithWrongSecret_ReturnsInvalidClient()
     {
         var client = CreateClient();

@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Domain.Transactions;
+using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 
 namespace Expense.Tracking.Transactions.Infrastructure.Persistence;
@@ -6,6 +7,8 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence;
 public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext> options) : DbContext(options)
 {
     public DbSet<Transaction> Transactions => Set<Transaction>();
+
+    public DbSet<OutboxEvent> OutboxEvents => Set<OutboxEvent>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

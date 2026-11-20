@@ -40,6 +40,8 @@ public class TransactionsApiFactory : WebApplicationFactory<Program>
             ["ConnectionStrings:TransactionsDb"] = "server=localhost;database=ignored;user=root;password=root;",
             ["Jwt:Authority"] = "http://localhost",
             ["Services:AccountsBaseUrl"] = "http://localhost:5090",
+            // Sem margem no feed de eventos: os testes leem o evento logo apos gravar.
+            ["Events:FeedSafetyMarginSeconds"] = "0",
         };
         ConfigureTestSettings(settings);
 
