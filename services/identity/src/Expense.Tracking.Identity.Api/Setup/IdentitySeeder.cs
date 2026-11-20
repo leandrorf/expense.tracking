@@ -56,9 +56,10 @@ public static class IdentitySeeder
 
     /// <summary>
     /// Escopos do cliente de servico. <c>events.read</c> (EVT-1) da acesso ao feed de eventos do
-    /// transactions, lido pelo reporting.
+    /// transactions, lido pelo reporting. <c>accounts.scopes.read</c> (EVT-4) da acesso ao escopo
+    /// PF/PJ das contas no accounts, usado pelo transactions para completar eventos legados.
     /// </summary>
-    private static readonly string[] ServiceClientScopes = ["expenses.read", "expenses.write", "events.read"];
+    private static readonly string[] ServiceClientScopes = ["expenses.read", "expenses.write", "events.read", "accounts.scopes.read"];
 
     private static async Task SeedServiceClientAsync(IdentityDbContext db, IPasswordHasher hasher, DateTimeOffset now, CancellationToken ct)
     {

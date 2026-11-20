@@ -43,6 +43,7 @@ app.MapHealthEndpoints();
 app.MapAccountsEndpoints();
 app.MapCreditCardsEndpoints();
 app.MapPaymentMethodsEndpoints();
+app.MapInternalEndpoints();
 
 await InitializeDatabaseAsync(app);
 

@@ -137,6 +137,10 @@ services:
       Jwt__Audience: expense-tracking-api
       Services__AccountsBaseUrl: "http://accounts:8080"
       Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
+      # EVT-4: token de servico para buscar no accounts o escopo dos lancamentos legados.
+      ServiceAuth__TokenEndpoint: "http://identity:8080/oauth/token"
+      ServiceAuth__ClientId: expense-tracking-service
+      ServiceAuth__ClientSecret: ${TRANSACTIONS_SERVICE_CLIENT_SECRET:-dev-service-secret}
     ports:
       - "${TRANSACTIONS_HTTP_PORT:-5100}:8080"
     networks:
