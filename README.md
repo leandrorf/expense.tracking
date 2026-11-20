@@ -62,6 +62,13 @@ Sobem os serviços:
 - **SPA (web)** em `http://localhost:5173`
 - **Jaeger** (tracing distribuído) em `http://localhost:16686`: os traces aparecem como
   `expense-tracking-gateway`, `-transactions`, `-accounts` etc.
+- **Prometheus** (métricas) em `http://localhost:9090`. Ex.: requests por serviço com
+  `sum by (job) (rate(http_server_request_duration_seconds_count[1m]))`.
+- **OpenTelemetry Collector** recebe a telemetria dos serviços (OTLP em `:4317`/`:4318`) e a
+  distribui para o Jaeger e o Prometheus.
+
+Cada serviço expõe `/health/live` (processo de pé) e `/health/ready` (dependências, como o
+banco, acessíveis; 503 se não). `/health` continua como alias de `/health/live`.
 
 As APIs de recurso podem ser acessadas direto (`:5090/accounts`) ou via gateway
 (`:8080/api/accounts`), sempre com `Authorization: Bearer <token>`.
@@ -143,5 +150,4 @@ Requer o Identity rodando (Docker ou `dotnet run`) em `http://localhost:5080`.
 
 ## Próximos passos
 
-1. Observabilidade: endpoints de métricas/health padronizados por serviço (OBS-3)
-2. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)
+1. Evoluir `reporting` para projeções via eventos (hoje agrega sob demanda)

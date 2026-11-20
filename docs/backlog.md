@@ -71,7 +71,7 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Procedência: configurado e confirmado na UI do GitHub pelo dono do repo; o token `gh` desta sessão é read-only e não inspeciona rulesets. Prova automática: os required checks aparecem no próximo PR para `main`.
   - Estimativa: 2
 
-## 🟡 EPIC OBS — Observabilidade  · *In Progress*
+## 🟢 EPIC OBS — Observabilidade  · *Done*
 **Objetivo:** enxergar o que acontece entre os serviços.
 
 - 🟢 **OBS-1** Logs estruturados (JSON) com correlation id propagado pelo gateway.
@@ -83,7 +83,9 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Entregue: OpenTelemetry 1.21 (ASP.NET Core + HttpClient) em `ObservabilitySetup.AddDistributedTracing` de cada serviço; nome `expense-tracking-<serviço>`; `/health` fora dos traces. Exportação OTLP só com `OTEL_EXPORTER_OTLP_ENDPOINT` (testes/CI não exportam). Jaeger 2.23 no compose (UI `:16686`). Teste de integração no `transactions` com accounts falso em Kestrel real prova pai/filho nos spans e no `traceparent` recebido. Validado ao vivo: smoke test + trace `gateway → transactions → accounts` no Jaeger. Branch `feature/obs-distributed-tracing`.
   - Fora do escopo: spans de banco (instrumentação EF Core do OpenTelemetry ainda é beta) e métricas (OBS-3).
   - Estimativa: 8
-- 🔵 **OBS-3** Endpoints de métricas/health padronizados por serviço.
+- 🟢 **OBS-3** Endpoints de métricas/health padronizados por serviço.
+  - *Dado* qualquer serviço, *quando* consulto `/health/live` e `/health/ready`, *então* recebo o mesmo contrato JSON, com a prontidão refletindo as dependências do próprio serviço; *e* as métricas HTTP e de runtime chegam ao Prometheus identificadas pelo serviço.
+  - Entregue: health checks do ASP.NET Core (`/health/live` sem checks; `/health/ready` com o banco via `AddDbContextCheck` em accounts/identity/transactions; `/health` como alias). Métricas OpenTelemetry (`http.server.request.duration`, `http.client.request.duration`, meter `System.Runtime`) exportadas por OTLP. OpenTelemetry Collector 0.165 (contrib) como entrada única: traces → Jaeger, métricas → Prometheus 3.16 (config em `infra/observability/`). E2E passa a esperar `/health/ready`. Testes de integração do contrato nos 5 serviços + 503 com dependência falha e métrica no pipeline (accounts). Branch `feature/obs-metrics-health`.
   - Estimativa: 3
 
 ## 🔵 EPIC EVT — Reporting por eventos  · *To Do*

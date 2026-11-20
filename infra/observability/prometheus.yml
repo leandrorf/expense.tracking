@@ -1,0 +1,12 @@
+# OBS-3: o Prometheus coleta as metricas que o OpenTelemetry Collector expoe em :8889.
+# honor_labels mantem o job = service.name (ex.: expense-tracking-accounts) definido pelo
+# collector, em vez de sobrescrever com o nome do job de scrape.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    honor_labels: true
+    static_configs:
+      - targets: ["otel-collector:8889"]

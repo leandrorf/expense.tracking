@@ -42,7 +42,10 @@ jobs:
             return 1
           }
           wait_for "identity (discovery)" "http://localhost:5080/.well-known/openid-configuration"
-          wait_for "gateway (health)"     "http://localhost:8080/health"
+          # OBS-3: /health/ready so responde 200 com o banco do servico acessivel.
+          wait_for "accounts (ready)"     "http://localhost:5090/health/ready"
+          wait_for "transactions (ready)" "http://localhost:5100/health/ready"
+          wait_for "gateway (ready)"      "http://localhost:8080/health/ready"
           wait_for "web (SPA)"            "http://localhost:5173"
 
       - name: Cypress run
