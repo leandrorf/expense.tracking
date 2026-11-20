@@ -5,10 +5,16 @@ using Expense.Tracking.Reporting.Domain.Projection;
 
 namespace Expense.Tracking.Reporting.Application.Projection;
 
-/// <summary>Resultado de um lote: eventos aplicados, pulados (tipo desconhecido) e o novo checkpoint.</summary>
-public sealed record ProjectionBatchResult(int Applied, int Skipped, long Checkpoint)
+/// <summary>
+/// Resultado de um lote: eventos aplicados, pulados (tipo desconhecido), o novo checkpoint e a
+/// maior sequencia gravada no feed.
+/// </summary>
+public sealed record ProjectionBatchResult(int Applied, int Skipped, long Checkpoint, long HeadSequence)
 {
     public int Read => Applied + Skipped;
+
+    /// <summary>Eventos gravados no outbox e ainda nao aplicados (inclusive os que estao na margem do feed).</summary>
+    public long Lag => Math.Max(0, HeadSequence - Checkpoint);
 }
 
 /// <summary>Configuracao do consumo do feed.</summary>
@@ -17,7 +23,10 @@ public sealed record ProjectionOptions(int BatchSize, TimeSpan PollInterval, boo
     public static readonly ProjectionOptions Default = new(100, TimeSpan.FromSeconds(2), Enabled: true);
 }
 
-/// <summary>Telemetria da projecao: um span por lote, ligado aos traces de origem dos eventos.</summary>
+/// <summary>
+/// Telemetria da projecao: um span por lote, ligado aos traces de origem dos eventos. O meter das
+/// metricas de atraso (<see cref="ProjectionStatus"/>) usa o mesmo nome.
+/// </summary>
 public static class ProjectionTelemetry
 {
     public const string SourceName = "Expense.Tracking.Reporting.Projection";
@@ -40,9 +49,11 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
     {
         var checkpoint = await store.GetCheckpointAsync(cancellationToken);
         var page = await feed.ReadAsync(checkpoint, options.BatchSize, cancellationToken);
+        // Sem headSequence (transactions antigo, 0), o head cai para o cursor: atraso 0, nunca negativo.
+        var head = Math.Max(page.HeadSequence, page.LastSequence);
         if (page.Events.Count == 0)
         {
-            return new ProjectionBatchResult(0, 0, checkpoint);
+            return new ProjectionBatchResult(0, 0, checkpoint, Math.Max(head, checkpoint));
         }
 
         using var activity = StartBatchActivity(page, checkpoint);
@@ -65,7 +76,7 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
 
         activity?.SetTag("projection.events.applied", applied);
         activity?.SetTag("projection.events.skipped", skipped);
-        return new ProjectionBatchResult(applied, skipped, page.LastSequence);
+        return new ProjectionBatchResult(applied, skipped, page.LastSequence, head);
     }
 
     /// <summary>Aplica um evento. Retorna false quando o tipo e desconhecido (pulado).</summary>

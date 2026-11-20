@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +24,7 @@ public sealed class ProjectionTests(ReportingApiFactory factory) : IClassFixture
         _factory.EventFeed.Registered(deleted, owner, amount: 40m);
         var last = _factory.EventFeed.Deleted(deleted, owner);
 
-        await DrainAsync();
+        await _factory.DrainFeedAsync();
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
@@ -45,7 +46,7 @@ public sealed class ProjectionTests(ReportingApiFactory factory) : IClassFixture
         var removed = Guid.NewGuid();
         _factory.EventFeed.Registered(removed, owner, amount: 999m);
         _factory.EventFeed.Deleted(removed, owner);
-        await DrainAsync();
+        await _factory.DrainFeedAsync();
         var before = await SnapshotAsync(owner);
 
         await using (var scope = _factory.Services.CreateAsyncScope())
@@ -55,28 +56,12 @@ public sealed class ProjectionTests(ReportingApiFactory factory) : IClassFixture
             await db.SaveChangesAsync();
         }
 
-        await DrainAsync();
+        await _factory.DrainFeedAsync();
         var after = await SnapshotAsync(owner);
 
         Assert.Equal(2, before.Count);
         Assert.Equal(before, after);
         Assert.Equal(30m, after.Sum(r => r.Amount));
-    }
-
-    private async Task DrainAsync()
-    {
-        for (var i = 0; i < 100; i++)
-        {
-            await using var scope = _factory.Services.CreateAsyncScope();
-            var result = await scope.ServiceProvider.GetRequiredService<ProjectionProcessor>()
-                .ProcessNextBatchAsync(CancellationToken.None);
-            if (result.Read == 0)
-            {
-                return;
-            }
-        }
-
-        Assert.Fail("O feed nao esvaziou em 100 lotes.");
     }
 
     private async Task<List<(Guid Id, string? Scope, decimal Amount)>> SnapshotAsync(Guid owner)
@@ -108,6 +93,34 @@ public sealed class ProjectionWorkerTests(ProjectionWorkerTests.WorkerFactory fa
 
         _factory.EventFeed.Deleted(transactionId, owner);
         Assert.True(await WaitForAsync(async db => !await db.Transactions.AnyAsync(t => t.TransactionId == transactionId)));
+    }
+
+    [Fact]
+    public async Task Worker_PublishesTheLagAndTheCheckpointAsMetrics()
+    {
+        _ = _factory.Server;
+        var registered = _factory.EventFeed.Registered(Guid.NewGuid(), Guid.NewGuid(), amount: 5m);
+        var status = _factory.Services.GetRequiredService<ProjectionStatus>();
+        Assert.True(await WaitForAsync(async db =>
+            status.Lag == 0 && await db.Transactions.AnyAsync(t => t.TransactionId == registered.AggregateId)));
+
+        // So o meter desta factory: outras classes de teste tem o proprio ProjectionStatus.
+        var meterFactory = _factory.Services.GetRequiredService<IMeterFactory>();
+        var values = new Dictionary<string, long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == ProjectionTelemetry.SourceName && ReferenceEquals(instrument.Meter.Scope, meterFactory))
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, value, _, _) => values[instrument.Name] = value);
+        listener.Start();
+        listener.RecordObservableInstruments();
+
+        Assert.Equal(0, values[ProjectionStatus.LagInstrument]);
+        Assert.True(values[ProjectionStatus.CheckpointInstrument] >= registered.Sequence);
     }
 
     private async Task<bool> WaitForAsync(Func<ReportingDbContext, Task<bool>> condition)

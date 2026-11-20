@@ -38,7 +38,7 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 - 🟢 **TXN-3** Banco `expense_transactions`; `DateOnly` via converter. · 2
 
 ## 🟢 EPIC RPT — Reporting (consolidação)  · *Done*
-- 🟢 **RPT-1** Agregador sem banco: lê transactions + accounts por HTTP (token encaminhado). · 5
+- 🟢 **RPT-1** Agregador sem banco: lê transactions + accounts por HTTP (token encaminhado). · 5 *(substituído pela projeção por eventos no épico EVT)*
 - 🟢 **RPT-2** `SummaryCalculator` puro; endpoint `/reports/summary` por categoria/escopo PF-PJ/meio. · 3
 
 ## 🟢 EPIC WEB — SPA React (login + telas)  · *Done*
@@ -88,7 +88,7 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Entregue: health checks do ASP.NET Core (`/health/live` sem checks; `/health/ready` com o banco via `AddDbContextCheck` em accounts/identity/transactions; `/health` como alias). Métricas OpenTelemetry (`http.server.request.duration`, `http.client.request.duration`, meter `System.Runtime`) exportadas por OTLP. OpenTelemetry Collector 0.165 (contrib) como entrada única: traces → Jaeger, métricas → Prometheus 3.16 (config em `infra/observability/`). E2E passa a esperar `/health/ready`. Testes de integração do contrato nos 5 serviços + 503 com dependência falha e métrica no pipeline (accounts). Branch `feature/obs-metrics-health`.
   - Estimativa: 3
 
-## 🔵 EPIC EVT — Reporting por eventos  · *To Do*
+## 🟢 EPIC EVT — Reporting por eventos  · *Concluído*
 **Objetivo:** reporting deixa de agregar sob demanda e passa a consumir eventos.
 **Transporte:** outbox do `transactions` exposto como feed HTTP, lido por polling pelo `reporting` — ver [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md) (Aceito).
 
@@ -106,9 +106,10 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
   - Worker em segundo plano com polling; projeção e checkpoint gravados no mesmo commit. Banco próprio `expense_reporting` (MySQL) no compose.
   - Entregue: `ProjectionWorker` (hosted service) lê `GET /events` em lotes (`Projection:BatchSize` 100, polling de 2 s, backoff de 10 s em erro) com token de serviço (`ClientCredentialsTokenProvider`, escopo `events.read`, token reaproveitado até perto de expirar). `ProjectionProcessor` aplica cadastro como upsert e exclusão como remoção se existir, e grava projeção (`projected_transactions`) e checkpoint (`projection_checkpoints`) no mesmo `SaveChanges`. Tipo de evento desconhecido é pulado; versão não suportada aborta o lote sem gravar. Span por lote ligado (links) aos traces de origem. `accountScope = null` dos eventos legados fica gravado como nulo (vira `Unknown` na leitura, EVT-3). Banco `expense_reporting` (migração `InitialCreate`) com check de readiness. Testes: processador (unit), projeção/rebuild/worker e token de serviço (integração). Validado ao vivo: projeção igual à fonte (15 lançamentos, 404,90), replay com checkpoint zerado sem duplicar e rebuild do zero. Branch `feature/evt-reporting-projection`.
   - Estimativa: 8
-- 🔵 **EVT-3** `/reports/summary` passa a ler a projeção (sem chamadas HTTP sob demanda), mantendo compatibilidade.
+- 🟢 **EVT-3** `/reports/summary` passa a ler a projeção (sem chamadas HTTP sob demanda), mantendo compatibilidade.
   - *Dado* o `transactions` ou o `accounts` fora do ar, *quando* consulto o resumo, *então* ele responde com a projeção (possivelmente defasada).
   - Métrica de atraso da projeção (última sequência do feed menos o checkpoint) no pipeline da OBS-3. O E2E que confere o Resumo passa a esperar a projeção.
+  - Entregue: `GetSummaryHandler` lê a projeção (`IProjectionQueries`) filtrando por dono (`sub`), conta e período; contrato da resposta inalterado. Escopo vem do evento; `accountScope` nulo (legado) agrupa como `Unknown`. Removidos os clients HTTP do resumo (`ITransactionsClient`, `IAccountsClient`, repasse de token/correlation id) e a dependência do `accounts` no compose. Feed do transactions ganha `headSequence` (campo novo, compatível); métricas `reporting.projection.lag`/`reporting.projection.checkpoint` (`ProjectionStatus`, observable gauges) no Collector → Prometheus. E2E: comando `cy.waitForSummary` recarrega o Resumo (botão Aplicar) até a projeção refletir; smoke test confere o resumo da conta nova com espera. Testes: atraso (unit), resumo por dono/filtros/legado `Unknown` e métricas do worker (integração), `headSequence` (transactions). Validado ao vivo: resumo idêntico com transactions e accounts parados, métricas no Prometheus, E2E 2/2 e smoke 10/10. Branch `feature/evt-reporting-summary-projection`.
   - Estimativa: 5
 
 ---

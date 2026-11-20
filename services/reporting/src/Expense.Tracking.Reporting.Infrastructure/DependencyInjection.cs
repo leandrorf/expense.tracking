@@ -13,36 +13,20 @@ namespace Expense.Tracking.Reporting.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddReportingInfrastructure(this IServiceCollection services, IConfiguration configuration)
-    {
-        var transactionsBaseUrl = configuration["Services:TransactionsBaseUrl"] ?? "http://localhost:5100";
-        var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
-
-        services.AddTransient<CorrelationIdForwardingHandler>();
-
-        services.AddHttpClient<ITransactionsClient, TransactionsHttpClient>(client =>
-            client.BaseAddress = ToBaseUri(transactionsBaseUrl))
-            .AddHttpMessageHandler<CorrelationIdForwardingHandler>();
-
-        services.AddHttpClient<IAccountsClient, AccountsHttpClient>(client =>
-            client.BaseAddress = ToBaseUri(accountsBaseUrl))
-            .AddHttpMessageHandler<CorrelationIdForwardingHandler>();
-
-        services.AddScoped<GetSummaryHandler>();
-
-        return services;
-    }
-
     /// <summary>
-    /// EVT-2 (ADR-0001): projecao alimentada pelo feed de eventos do transactions, no banco
-    /// proprio <c>expense_reporting</c>. O worker que chama o processador fica na Api.
+    /// EVT-2/EVT-3 (ADR-0001): projecao alimentada pelo feed de eventos do transactions, no banco
+    /// proprio <c>expense_reporting</c>, e o resumo lido dela. O worker que chama o processador
+    /// fica na Api.
     /// </summary>
-    public static IServiceCollection AddReportingProjection(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddReportingInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("ReportingDb")
             ?? throw new InvalidOperationException("Connection string 'ReportingDb' nao configurada.");
         services.AddDbContext<ReportingDbContext>(options => options.UseMySQL(connectionString));
         services.AddScoped<IProjectionStore, ProjectionStore>();
+        services.AddScoped<IProjectionQueries, ProjectionQueries>();
+        services.AddScoped<GetSummaryHandler>();
+        services.AddSingleton<ProjectionStatus>();
 
         var projection = new ProjectionOptions(
             BatchSize: configuration.GetValue("Projection:BatchSize", ProjectionOptions.Default.BatchSize),

@@ -17,19 +17,20 @@ public sealed class FakeEventFeed : IEventFeedClient
 
     public FeedEvent Registered(
         Guid transactionId, Guid ownerUserId, string? accountScope = "Personal", decimal amount = 100m,
-        string category = "Alimentacao", Guid? accountId = null) =>
+        string category = "Alimentacao", Guid? accountId = null, string occurredOn = "2026-11-19",
+        string transactionType = "Expense", string paymentMethod = "Pix") =>
         Append(FeedEventTypes.TransactionRegistered, transactionId, ownerUserId, new
         {
             transactionId,
             ownerUserId,
             accountId = accountId ?? Guid.NewGuid(),
             accountScope,
-            transactionType = "Expense",
-            paymentMethod = "Pix",
+            transactionType,
+            paymentMethod,
             category,
             amount,
             currency = "BRL",
-            occurredOn = "2026-11-19",
+            occurredOn,
         });
 
     public FeedEvent Deleted(Guid transactionId, Guid ownerUserId) =>
@@ -41,7 +42,7 @@ public sealed class FakeEventFeed : IEventFeedClient
         {
             Reads++;
             var page = _events.Where(e => e.Sequence > afterSequence).Take(limit).ToArray();
-            return Task.FromResult(new FeedPage(page, page.Length > 0 ? page[^1].Sequence : afterSequence));
+            return Task.FromResult(new FeedPage(page, page.Length > 0 ? page[^1].Sequence : afterSequence, _events.Count));
         }
     }
 

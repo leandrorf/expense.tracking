@@ -112,6 +112,8 @@ public sealed partial class EventsFeedTests(TransactionsApiFactory factory) : IC
             var single = Assert.Single(page.GetProperty("events").EnumerateArray());
             var sequence = single.GetProperty("sequence").GetInt64();
             Assert.Equal(sequence, page.GetProperty("lastSequence").GetInt64());
+            // Os 3 lancamentos ja estao gravados: o head nao fica para tras do ultimo.
+            Assert.True(page.GetProperty("headSequence").GetInt64() >= start + 3);
             seen.Add((sequence, single.GetProperty("aggregateId").GetGuid()));
             cursor = sequence;
         }
@@ -122,6 +124,7 @@ public sealed partial class EventsFeedTests(TransactionsApiFactory factory) : IC
         var end = await ReadPageAsync(service, cursor, limit: 10);
         Assert.Empty(end.GetProperty("events").EnumerateArray());
         Assert.Equal(cursor, end.GetProperty("lastSequence").GetInt64());
+        Assert.True(end.GetProperty("headSequence").GetInt64() >= cursor);
     }
 
     [Theory]

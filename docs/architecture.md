@@ -26,7 +26,7 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 | `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS                   | ✅ implementado |
 | `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
 | `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ✅ implementado |
-| `reporting`    | Consolidação de gastos (serviço agregador sobre transactions + accounts) | ✅ implementado |
+| `reporting`    | Consolidação de gastos (projeção alimentada pelos eventos do transactions) | ✅ implementado |
 | `gateway`      | API Gateway (YARP): roteamento, validação de token, CORS                 | ✅ implementado |
 
 Frontend: `apps/web` (SPA React + TS) — ✅ login OAuth2 + PKCE **e** telas de resumo,
@@ -155,7 +155,8 @@ o banco de outro serviço. Nos testes, a porta é substituída por um fake.
   sequência 0.
 - **Feed** `GET /events?after={seq}&limit={n}` (máx. 500): exige token com o escopo `events.read`
   (client credentials do `expense-tracking-service`) e **não passa pelo gateway**. Devolve os
-  eventos em ordem e `lastSequence`, o cursor da próxima leitura.
+  eventos em ordem, `lastSequence` (o cursor da próxima leitura) e `headSequence` (a maior
+  sequência gravada, inclusive eventos ainda na margem), com que o leitor mede o próprio atraso.
 - **Margem contra lacunas** (`Events:FeedSafetyMarginSeconds`, padrão 5 s): a sequência é
   auto-incremento, então uma transação pode commitar depois de outra com sequência maior. O feed
   só serve o **prefixo contíguo** de eventos mais antigos que a margem e para no primeiro evento
@@ -164,20 +165,23 @@ o banco de outro serviço. Nos testes, a porta é substituída por um fake.
   ganham o evento, em ordem de criação. É idempotente. Esses eventos saem com
   `accountScope = null`, porque o `transactions` não guarda o escopo da conta.
 
-## Serviço `reporting` (agregador) — implementado
+## Serviço `reporting` — implementado
 
-Consolida gastos. O resumo é um agregador que lê o `transactions` e o `accounts`
-por HTTP (encaminhando o token do usuário) e calcula os totais em memória.
+Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco próprio
+`expense_reporting`, alimentada pelo feed de eventos do `transactions`
+([ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md)).
 
 - `GET /reports/summary?accountId=&from=&to=` → total de gastos, receitas, saldo, contagem,
   e quebras **por categoria**, **por escopo (PF/PJ)** e **por meio de pagamento**.
+- **Lê só a projeção (EVT-3)**: filtra pelo dono (`sub` do token), pela conta e pelo período
+  (inclusivo, pela data do lançamento). Não chama o `transactions` nem o `accounts` na consulta,
+  então responde com os dois fora do ar. Em troca, o resumo pode estar **defasado**: um
+  lançamento novo aparece depois da margem do feed (5 s) mais o polling do worker (2 s).
+- O escopo PF/PJ vem do próprio evento. Lançamentos anteriores ao outbox (carga inicial da
+  EVT-1) não têm escopo e aparecem como `Unknown` ("Desconhecido" na SPA).
 - O cálculo (`SummaryCalculator`) é uma função pura no domínio — totalmente testável.
-- O mapa conta→escopo (PF/PJ) vem do `accounts`; os lançamentos, do `transactions`.
 
-**Projeção por eventos (EVT-2, [ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md))**:
-o `reporting` passou a ter banco próprio (`expense_reporting`) com uma projeção dos lançamentos
-alimentada pelo feed `GET /events` do `transactions`. O `/reports/summary` ainda agrega sob
-demanda; passar a ler a projeção é a EVT-3.
+**Projeção por eventos (EVT-2)**:
 
 - **Worker** (`ProjectionWorker`, hosted service): lê o feed em lotes a partir do checkpoint
   (`Projection:BatchSize`, padrão 100). Com lote cheio, lê de novo na hora; com o feed vazio,
@@ -194,6 +198,11 @@ demanda; passar a ler a projeção é a EVT-3.
 - **Tracing**: um span por lote, com links para os traces das requests que gravaram os eventos
   (`traceParent` do envelope).
 - Eventos legados (`accountScope = null`) ficam com escopo nulo na projeção.
+- **Atraso (EVT-3)**: a cada leitura do feed, o worker registra `headSequence − checkpoint` em
+  `ProjectionStatus`, exposto como as métricas `reporting.projection.lag` e
+  `reporting.projection.checkpoint` (meter `Expense.Tracking.Reporting.Projection`). No
+  Prometheus: `reporting_projection_lag` e `reporting_projection_checkpoint`. Antes da primeira
+  leitura bem-sucedida nada é medido, para um atraso desconhecido não aparecer como zero.
 
 ## Gateway (YARP) — implementado
 
@@ -232,7 +241,8 @@ serviço, sem biblioteca compartilhada).
     (`jaegertracing/jaeger`), com a UI em `http://localhost:16686`.
 - **Métricas (OBS-3):** o mesmo pipeline do OpenTelemetry coleta `http.server.request.duration`
   (requests recebidos), `http.client.request.duration` (chamadas entre serviços) e o runtime do
-  .NET (meter nativo `System.Runtime`: GC, memória, threads). Exportação OTLP com a mesma regra
+  .NET (meter nativo `System.Runtime`: GC, memória, threads). O `reporting` publica também o
+  atraso da projeção (`reporting.projection.lag`, EVT-3). Exportação OTLP com a mesma regra
   dos traces; no Compose, a cada 15 s (`OTEL_METRIC_EXPORT_INTERVAL`).
 - **OpenTelemetry Collector (OBS-3):** ponto único de entrada da telemetria
   (`infra/observability/otel-collector.yaml`). Os serviços só conhecem o collector

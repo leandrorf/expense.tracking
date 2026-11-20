@@ -175,8 +175,7 @@ services:
         condition: service_healthy
       identity:
         condition: service_started
-      accounts:
-        condition: service_started
+      # EVT-3: o resumo le a projecao; o transactions so e lido pelo worker (feed /events).
       transactions:
         condition: service_started
     environment:
@@ -188,7 +187,6 @@ services:
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
       Services__TransactionsBaseUrl: "http://transactions:8080"
-      Services__AccountsBaseUrl: "http://accounts:8080"
       Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
       # EVT-2: projecao em banco proprio, lendo o feed /events do transactions com token de servico.
       ConnectionStrings__ReportingDb: "server=reporting-db;port=3306;database=${REPORTING_DB_NAME:-expense_reporting};user=${REPORTING_DB_USER:-expense};password=${REPORTING_DB_PASSWORD:-expense};"
