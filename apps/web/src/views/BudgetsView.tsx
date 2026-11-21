@@ -314,6 +314,8 @@ const percentLabel = (value: number) => `${value.toLocaleString('pt-BR', { maxim
  */
 function MonthTracking({ revision }: { revision: number }) {
   const [month, setMonth] = useState(currentMonth());
+  // O consumido vem da projeção, que chega alguns segundos depois do lançamento: "atualizar" busca de novo.
+  const [refresh, setRefresh] = useState(0);
   const [data, setData] = useState<BudgetMonth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -330,7 +332,7 @@ function MonthTracking({ revision }: { revision: number }) {
     return () => {
       cancelled = true;
     };
-  }, [month, revision]);
+  }, [month, revision, refresh]);
 
   // Descarta resposta de outro mês enquanto a nova não chega.
   const statuses = data?.month === month ? data.budgets : [];
@@ -359,6 +361,15 @@ function MonthTracking({ revision }: { revision: number }) {
           onClick={() => setMonth((m) => shiftMonth(m, 1))}
         >
           ›
+        </button>
+        <button
+          type="button"
+          className="ghost small"
+          data-cy="budget-month-refresh"
+          onClick={() => setRefresh((r) => r + 1)}
+          disabled={loading}
+        >
+          atualizar
         </button>
         {month !== currentMonth() && (
           <button type="button" className="ghost small" data-cy="budget-month-current" onClick={() => setMonth(currentMonth())}>

@@ -53,6 +53,31 @@ Cypress.Commands.add('waitForSummary', (selector: string, text: string, attempts
   });
 });
 
+// BDG-9: o acompanhamento dos orcamentos tambem le a projecao. Recarrega o mes (botao
+// "atualizar", esperando a resposta do /budgets/status) ate o consumido do orcamento `category`
+// no escopo `scope` chegar a `spent` (texto como aparece na tela, ex.: '150,00').
+Cypress.Commands.add(
+  'waitForBudget',
+  (scope: 'personal' | 'business', category: string, spent: string, attempts = 30) => {
+    const row = `[data-cy=budget-status-${scope}] [data-cy=budget-status-row][data-category="${category}"]`;
+    cy.get(row).then(($row) => {
+      if ($row.find('[data-cy=budget-status-spent]').text().includes(spent)) {
+        return;
+      }
+
+      if (attempts <= 1) {
+        throw new Error(`O orcamento "${category}" (${scope}) nao chegou a ${spent} consumido (projecao atrasada?).`);
+      }
+
+      cy.wait(1_000);
+      cy.intercept('GET', '**/api/budgets/status*').as('budgetStatus');
+      cy.get('[data-cy=budget-month-refresh]').click();
+      cy.wait('@budgetStatus');
+      cy.waitForBudget(scope, category, spent, attempts - 1);
+    });
+  },
+);
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Cypress {
@@ -61,6 +86,8 @@ declare global {
       login(email: string, password: string): Chainable<void>;
       /** Recarrega o Resumo ate `text` aparecer em `selector` (espera a projecao do reporting). */
       waitForSummary(selector: string, text: string, attempts?: number): Chainable<void>;
+      /** Recarrega o acompanhamento do mes ate o consumido do orcamento chegar a `spent`. */
+      waitForBudget(scope: 'personal' | 'business', category: string, spent: string, attempts?: number): Chainable<void>;
     }
   }
 }

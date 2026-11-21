@@ -100,7 +100,8 @@ node build/smoke-test.mjs
 
 Testes de ponta a ponta pela UI real da SPA: login OAuth2 + PKCE na tela do IdP (outra
 origem, via `cy.origin`), criação de conta, lançamento de gasto (Pix e cartão de crédito) e
-conferência do consolidado no Resumo. Exigem o **stack completo no ar**:
+conferência do consolidado no Resumo, e orçamentos PF e PJ (consumido e status no
+acompanhamento do mês). Exigem o **stack completo no ar**:
 
 ```bash
 docker compose up --build -d        # sobe identity + serviços + gateway + web
