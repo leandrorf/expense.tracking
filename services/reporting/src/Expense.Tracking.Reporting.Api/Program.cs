@@ -21,6 +21,8 @@ if (builder.Configuration.GetValue("Projection:Enabled", true))
     builder.Services.AddHostedService<ProjectionWorker>();
 }
 builder.Services.AddReportingAuthentication(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<Expense.Tracking.Reporting.Application.Abstractions.IUserTokenAccessor, HttpContextUserTokenAccessor>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
@@ -47,6 +49,7 @@ app.UseAuthorization();
 app.MapHealthEndpoints();
 app.MapReportsEndpoints();
 app.MapBudgetsEndpoints();
+app.MapInvoicesEndpoints();
 
 await InitializeDatabaseAsync(app);
 

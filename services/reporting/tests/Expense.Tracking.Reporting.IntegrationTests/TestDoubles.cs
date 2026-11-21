@@ -1,5 +1,9 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Invoices;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -28,4 +32,36 @@ public sealed class TestAuthHandler(
         var identity = new ClaimsIdentity(claims, SchemeName, "sub", roleType: null);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
+}
+
+/// <summary>INV-4: cartoes cadastrados no "accounts" dos testes, cada um com seu dono.</summary>
+public sealed class CardRegistry
+{
+    private readonly ConcurrentDictionary<Guid, (Guid Owner, CardInfo Card)> _cards = new();
+
+    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m)
+    {
+        var card = new CardInfo(Guid.NewGuid(), Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true);
+        _cards[card.Id] = (owner, card);
+        return card;
+    }
+
+    public CardInfo? Find(Guid cardId, Guid owner) =>
+        _cards.TryGetValue(cardId, out var entry) && entry.Owner == owner ? entry.Card : null;
+}
+
+/// <summary>Faz o papel do accounts: so devolve o cartao ao dono (o accounts filtra pelo token).</summary>
+public sealed class FakeCardDirectory(CardRegistry registry, IHttpContextAccessor httpContextAccessor) : ICardDirectory
+{
+    public Task<CardInfo?> FindAsync(Guid cardId, CancellationToken cancellationToken)
+    {
+        var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
+        return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.Find(cardId, owner) : null);
+    }
+}
+
+/// <summary>Relogio parado, para a situacao das faturas nao depender do dia em que o teste roda.</summary>
+public sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
 }

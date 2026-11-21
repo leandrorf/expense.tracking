@@ -22,9 +22,11 @@ public enum InvoiceStatus
 /// <summary>
 /// Um lancamento no cartao como a fatura o enxerga. <paramref name="Amount"/> e sempre positivo,
 /// o sentido vem de <paramref name="IsRefund"/> (receita no cartao). Estorno e sempre a vista.
+/// <paramref name="Description"/> e nula so em lancamento ainda sem os detalhes do cartao (INV-2).
 /// </summary>
 public sealed record CardCharge(
-    Guid TransactionId, string Category, decimal Amount, DateOnly OccurredOn, int Installments = 1, bool IsRefund = false);
+    Guid TransactionId, string Category, decimal Amount, DateOnly OccurredOn, int Installments = 1, bool IsRefund = false,
+    string? Description = null);
 
 /// <summary>Pagamento registrado para a fatura de um mes de vencimento.</summary>
 public sealed record InvoicePayment(DateOnly DueMonth, decimal Amount);
@@ -32,7 +34,8 @@ public sealed record InvoicePayment(DateOnly DueMonth, decimal Amount);
 /// <param name="Amount">Positivo para compra ou parcela; negativo para estorno (abate do total).</param>
 /// <param name="Installment">Numero da parcela (1 a vista).</param>
 public sealed record InvoiceItem(
-    Guid TransactionId, string Category, DateOnly PurchaseDate, decimal Amount, int Installment, int Installments);
+    Guid TransactionId, string Category, DateOnly PurchaseDate, decimal Amount, int Installment, int Installments,
+    string? Description = null);
 
 /// <param name="Remaining">O que falta pagar; nunca negativo (pagamento acima do total nao gera credito).</param>
 public sealed record Invoice(
@@ -110,7 +113,7 @@ public static class InvoiceCalculator
         if (charge.IsRefund)
         {
             yield return (firstDueMonth, new InvoiceItem(
-                charge.TransactionId, charge.Category, charge.OccurredOn, -charge.Amount, 1, 1));
+                charge.TransactionId, charge.Category, charge.OccurredOn, -charge.Amount, 1, 1, charge.Description));
             yield break;
         }
 
@@ -118,7 +121,7 @@ public static class InvoiceCalculator
         for (var i = 0; i < parts.Count; i++)
         {
             yield return (firstDueMonth.AddMonths(i), new InvoiceItem(
-                charge.TransactionId, charge.Category, charge.OccurredOn, parts[i], i + 1, parts.Count));
+                charge.TransactionId, charge.Category, charge.OccurredOn, parts[i], i + 1, parts.Count, charge.Description));
         }
     }
 }

@@ -22,6 +22,9 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
 
     public FakeEventFeed EventFeed { get; } = new();
 
+    /// <summary>INV-4: cartoes que o "accounts" devolve, por dono.</summary>
+    public CardRegistry Cards { get; } = new();
+
     protected virtual void ConfigureTestSettings(IDictionary<string, string?> settings)
     {
     }
@@ -50,6 +53,7 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
             var toRemove = services
                 .Where(d =>
                     d.ServiceType == typeof(IEventFeedClient) ||
+                    d.ServiceType == typeof(ICardDirectory) ||
                     d.ServiceType == typeof(DbContextOptions<ReportingDbContext>) ||
                     d.ServiceType == typeof(DbContextOptions) ||
                     d.ServiceType == typeof(ReportingDbContext) ||
@@ -63,6 +67,8 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<ReportingDbContext>(options => options.UseInMemoryDatabase(_databaseName));
             services.AddSingleton<IEventFeedClient>(EventFeed);
+            services.AddSingleton(Cards);
+            services.AddScoped<ICardDirectory, FakeCardDirectory>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
