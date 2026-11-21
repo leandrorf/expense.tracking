@@ -49,6 +49,9 @@ public static class ImportErrors
     public static readonly Error NotPending = Error.Conflict(
         "import.not_pending", "A importacao nao esta pendente.");
 
+    public static readonly Error NotConfirmed = Error.Conflict(
+        "import.not_confirmed", "So uma importacao confirmada pode ser desfeita.");
+
     public static readonly Error LineNotFound = Error.Validation(
         "import.line_not_found", "Linha nao pertence a esta importacao.");
 

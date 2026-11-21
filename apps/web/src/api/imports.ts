@@ -30,7 +30,7 @@ export interface ImportSummary {
 
 export interface ImportBatch {
   id: string;
-  status: 'Pending' | 'Confirmed' | 'Discarded';
+  status: 'Pending' | 'Confirmed' | 'Discarded' | 'Undone';
   format: 'Ofx' | 'Csv';
   kind: 'BankAccount' | 'CreditCard';
   accountId: string;
@@ -40,6 +40,7 @@ export interface ImportBatch {
   createdAtUtc: string;
   expiresAtUtc: string;
   confirmedAtUtc: string | null;
+  undoneAtUtc: string | null;
   summary: ImportSummary;
   lines: ImportLine[];
 }
@@ -105,4 +106,7 @@ export const importsApi = {
 
   confirm: (id: string, lines: ImportLineDecision[]) =>
     apiFetch<ImportBatch>(`/api/imports/${id}/confirm`, { method: 'POST', body: JSON.stringify({ lines }) }),
+
+  /** IMP-9: exclui os lançamentos criados pelo lote (os que ainda existem). Idempotente. */
+  undo: (id: string) => apiFetch<ImportBatch>(`/api/imports/${id}/undo`, { method: 'POST' }),
 };

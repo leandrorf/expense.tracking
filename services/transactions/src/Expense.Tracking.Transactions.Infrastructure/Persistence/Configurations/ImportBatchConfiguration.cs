@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Configurations;
 
-/// <summary>IMP-4: lote de importacao pendente/confirmado/descartado (ADR-0004, decisao 2).</summary>
+/// <summary>IMP-4: lote de importacao pendente/confirmado/descartado/desfeito (ADR-0004, decisao 2).</summary>
 internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<ImportBatch>
 {
     public void Configure(EntityTypeBuilder<ImportBatch> builder)
@@ -28,6 +28,7 @@ internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<Import
         builder.Property(b => b.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(b => b.ExpiresAtUtc).HasColumnName("expires_at_utc").IsRequired();
         builder.Property(b => b.ConfirmedAtUtc).HasColumnName("confirmed_at_utc");
+        builder.Property(b => b.UndoneAtUtc).HasColumnName("undone_at_utc");
 
         builder.HasMany(b => b.Lines).WithOne().HasForeignKey(l => l.BatchId).OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(b => b.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);

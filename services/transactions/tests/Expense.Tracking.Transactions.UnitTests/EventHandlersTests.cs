@@ -149,6 +149,10 @@ public sealed class EventHandlersTests
 
         public void Remove(Transaction transaction) => _items.Remove(transaction);
 
+        public Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(
+            Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Transaction>>(_items.Where(t => t.OwnerUserId == ownerUserId && t.ImportBatchId == importBatchId).ToList());
+
         public Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
             Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());

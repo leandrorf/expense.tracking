@@ -13,6 +13,7 @@ public sealed class ImportMetrics : IDisposable
 
     private readonly Meter _meter;
     private readonly Counter<long> _lines;
+    private readonly Counter<long> _undone;
 
     public ImportMetrics(IMeterFactory meterFactory)
     {
@@ -20,6 +21,9 @@ public sealed class ImportMetrics : IDisposable
         _lines = _meter.CreateCounter<long>(
             "transactions.imports.lines", unit: "{line}",
             description: "Linhas de importacao confirmadas, por resultado (imported ou duplicate) e formato.");
+        _undone = _meter.CreateCounter<long>(
+            "transactions.imports.undone", unit: "{transaction}",
+            description: "Lancamentos excluidos ao desfazer uma importacao (IMP-9), por formato.");
     }
 
     public void LinesConfirmed(ImportFormat format, int imported, int duplicate)
@@ -28,6 +32,9 @@ public sealed class ImportMetrics : IDisposable
         _lines.Add(imported, formatTag, new KeyValuePair<string, object?>("result", "imported"));
         _lines.Add(duplicate, formatTag, new KeyValuePair<string, object?>("result", "duplicate"));
     }
+
+    public void TransactionsUndone(ImportFormat format, int removed) =>
+        _undone.Add(removed, new KeyValuePair<string, object?>("format", format.ToString().ToLowerInvariant()));
 
     public void Dispose() => _meter.Dispose();
 }
