@@ -80,6 +80,10 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(16)")
                         .HasColumnName("status");
 
+                    b.Property<DateTime?>("UndoneAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("undone_at_utc");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerUserId");

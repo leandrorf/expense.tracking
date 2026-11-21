@@ -58,6 +58,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   const [flaggedLines, setFlaggedLines] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<ImportBatch | null>(null);
   const [csvProposal, setCsvProposal] = useState<CsvMappingProposal | null>(null);
+  const [confirmingUndo, setConfirmingUndo] = useState(false);
   const { categories, remember } = useCategorySuggestions();
 
   // Extrato de conta não aceita cartão de crédito como meio (ADR-0004, decisão 5).
@@ -94,6 +95,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     setFileInputKey((k) => k + 1);
     setBulkCategory('');
     setFlaggedLines(new Set());
+    setConfirmingUndo(false);
     setError(null);
   }
 
@@ -206,6 +208,20 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     }
   }
 
+  async function handleUndo() {
+    if (!result) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await importsApi.undo(result.id));
+      setConfirmingUndo(false);
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const money = (value: number, currency: string) => value.toLocaleString('pt-BR', { style: 'currency', currency });
   const methodName = (code: string | null) => paymentMethods.find((m) => m.code === code)?.name ?? code ?? '—';
 
@@ -220,11 +236,12 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
 
   if (result) {
     const ignored = result.summary.total - result.summary.imported - result.summary.duplicate;
+    const undone = result.status === 'Undone';
     return (
       <section>
         <h2>Importar</h2>
-        <div className="import-result" data-cy="import-result" role="status">
-          <h3>Importação concluída</h3>
+        <div className="import-result" data-cy="import-result" data-status={result.status} role="status">
+          <h3>{undone ? 'Importação desfeita' : 'Importação concluída'}</h3>
           <dl className="import-result-figures">
             <div>
               <dt>Importados</dt>
@@ -239,15 +256,46 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
               <dd data-cy="import-result-ignored">{ignored}</dd>
             </div>
           </dl>
-          <p className="muted">O Resumo e os orçamentos passam a contar os importados em alguns segundos.</p>
-          <div className="actions">
-            <button data-cy="import-go-transactions" className="primary" onClick={onShowTransactions}>
-              Ver lançamentos
-            </button>
-            <button data-cy="import-new" className="ghost" onClick={startOver}>
-              Nova importação
-            </button>
-          </div>
+          <p className="muted">
+            {undone
+              ? 'Os lançamentos criados por esta importação foram excluídos. O Resumo e os orçamentos deixam de contá-los em alguns segundos.'
+              : 'O Resumo e os orçamentos passam a contar os importados em alguns segundos.'}
+          </p>
+          {error && (
+            <p className="error" data-cy="import-error" role="alert">
+              {error}
+            </p>
+          )}
+          {confirmingUndo ? (
+            <div className="import-undo-confirm" data-cy="import-undo-confirm" role="alertdialog" aria-label="Desfazer importação">
+              <p>
+                Excluir os {result.summary.imported} lançamento(s) criados por esta importação? Os que você já excluiu
+                ficam como estão.
+              </p>
+              <div className="actions">
+                <button data-cy="import-undo-yes" className="danger" onClick={() => void handleUndo()} disabled={busy}>
+                  Desfazer importação
+                </button>
+                <button data-cy="import-undo-no" className="ghost" onClick={() => setConfirmingUndo(false)} disabled={busy}>
+                  Manter
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="actions">
+              <button data-cy="import-go-transactions" className="primary" onClick={onShowTransactions}>
+                Ver lançamentos
+              </button>
+              <button data-cy="import-new" className="ghost" onClick={startOver}>
+                Nova importação
+              </button>
+              {!undone && result.summary.imported > 0 && (
+                <button data-cy="import-undo" className="link-danger" onClick={() => setConfirmingUndo(true)}>
+                  Desfazer importação
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </section>
     );

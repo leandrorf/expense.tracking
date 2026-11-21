@@ -13,7 +13,10 @@ public enum ImportBatchStatus
 {
     Pending = 0,
     Confirmed = 1,
-    Discarded = 2
+    Discarded = 2,
+
+    /// <summary>Confirmado e depois desfeito (IMP-9): os lancamentos criados por ele foram excluidos.</summary>
+    Undone = 3
 }
 
 /// <summary>Situacao de uma linha na previa (ADR-0004, decisoes 3 e 6).</summary>
@@ -93,6 +96,8 @@ public sealed class ImportBatch
     public DateTimeOffset ExpiresAtUtc { get; private set; }
 
     public DateTimeOffset? ConfirmedAtUtc { get; private set; }
+
+    public DateTimeOffset? UndoneAtUtc { get; private set; }
 
     public IReadOnlyList<ImportLine> Lines => _lines;
 
@@ -225,6 +230,23 @@ public sealed class ImportBatch
         Status = ImportBatchStatus.Confirmed;
         ConfirmedAtUtc = nowUtc;
         return created;
+    }
+
+    /// <summary>
+    /// IMP-9: desfaz um lote confirmado. Quem chama exclui os lancamentos que ainda existem com este
+    /// lote de origem; as linhas ficam como estavam, como registro do que foi importado. Um lote
+    /// desfeito nao volta a ser confirmado: para importar de novo, envia-se o arquivo outra vez.
+    /// </summary>
+    public Result Undo(DateTimeOffset nowUtc)
+    {
+        if (Status != ImportBatchStatus.Confirmed)
+        {
+            return Result.Failure(ImportErrors.NotConfirmed);
+        }
+
+        Status = ImportBatchStatus.Undone;
+        UndoneAtUtc = nowUtc;
+        return Result.Success();
     }
 
     public bool IsExpired(DateTimeOffset nowUtc) => Status == ImportBatchStatus.Pending && nowUtc >= ExpiresAtUtc;

@@ -246,6 +246,37 @@ public sealed class ImportBatchTests
         Assert.Equal("import.not_pending", batch.Confirm([], new HashSet<string>(), Now).Error.Code);
     }
 
+    // ---------- IMP-9: desfazer ----------
+
+    [Fact]
+    public void Undo_ConfirmedBatch_IsUndone_KeepingTheLinesAsRecord()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount, StatementLine.Valid(1, Day, -1m, "A", "A")));
+        batch.Confirm([Category(batch.Lines[0], "X")], new HashSet<string>(), Now);
+        var later = Now + TimeSpan.FromHours(1);
+
+        Assert.True(batch.Undo(later).IsSuccess);
+
+        Assert.Equal(ImportBatchStatus.Undone, batch.Status);
+        Assert.Equal(later, batch.UndoneAtUtc);
+        Assert.Equal(ImportLineStatus.Imported, batch.Lines[0].Status);
+        Assert.False(batch.IsExpired(Now + TimeSpan.FromDays(30)));
+    }
+
+    [Fact]
+    public void Undo_PendingOrAlreadyUndoneBatch_Fails_AndAnUndoneBatchCannotBeConfirmed()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount, StatementLine.Valid(1, Day, -1m, "A", "A")));
+
+        Assert.Equal("import.not_confirmed", batch.Undo(Now).Error.Code);
+        Assert.Equal(ImportBatchStatus.Pending, batch.Status);
+
+        batch.Confirm([Category(batch.Lines[0], "X")], new HashSet<string>(), Now);
+        batch.Undo(Now);
+        Assert.Equal("import.not_confirmed", batch.Undo(Now).Error.Code);
+        Assert.Equal("import.not_pending", batch.Confirm([], new HashSet<string>(), Now).Error.Code);
+    }
+
     [Fact]
     public void PendingBatch_ExpiresAfterSevenDays()
     {

@@ -141,6 +141,18 @@ public static class ImportsEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        group.MapPost("/{id:guid}/undo", async (Guid id, HttpContext http, UndoImportHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new UndoImportCommand(owner.Value, id), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         group.MapGet("/{id:guid}", async (Guid id, HttpContext http, GetImportHandler handler, CancellationToken ct) =>
         {
             var owner = http.User.GetUserId();

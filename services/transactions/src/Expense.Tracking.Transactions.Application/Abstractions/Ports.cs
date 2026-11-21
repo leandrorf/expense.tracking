@@ -24,6 +24,9 @@ public interface ITransactionRepository
 
     void Remove(Transaction transaction);
 
+    /// <summary>IMP-9: lancamentos do dono que ainda existem com este lote de origem.</summary>
+    Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken);
+
     /// <summary>IMP-4: quais das chaves externas ja estao lancadas na conta (deduplicacao da previa).</summary>
     Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);

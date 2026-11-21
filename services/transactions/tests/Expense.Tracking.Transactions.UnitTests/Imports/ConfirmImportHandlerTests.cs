@@ -139,6 +139,10 @@ public sealed class ConfirmImportHandlerTests
         public void Remove(Transaction transaction)
         {
         }
+
+        public Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(
+            Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Transaction>>([]);
     }
 
     private sealed class RecordingOutbox : IEventOutbox

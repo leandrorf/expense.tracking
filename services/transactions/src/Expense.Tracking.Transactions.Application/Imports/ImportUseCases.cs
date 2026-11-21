@@ -223,6 +223,70 @@ public sealed class ConfirmImportHandler(
     }
 }
 
+public sealed record UndoImportCommand(Guid OwnerUserId, Guid BatchId);
+
+/// <summary>
+/// IMP-9: desfaz um lote confirmado. Exclui os lancamentos criados por ele que ainda existem (o
+/// usuario pode ter excluido algum a mao) e grava um TransactionDeleted por lancamento no outbox,
+/// na mesma gravacao que marca o lote como desfeito; Resumo e orcamentos voltam pela projecao.
+/// Idempotente: lote ja desfeito devolve o mesmo resultado sem excluir nada. Corrida (o lote
+/// desfeito em paralelo, ou um lancamento excluido a mao no meio) recarrega e decide de novo.
+/// </summary>
+public sealed class UndoImportHandler(
+    IImportBatchRepository batches,
+    ITransactionRepository transactions,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork,
+    ImportMetrics metrics,
+    TimeProvider timeProvider)
+{
+    private const int MaxAttempts = 3;
+
+    public async Task<Result<ImportBatchDto>> HandleAsync(UndoImportCommand command, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var batch = await batches.GetAsync(command.BatchId, command.OwnerUserId, cancellationToken);
+            var now = timeProvider.GetUtcNow();
+            if (batch is null || batch.IsExpired(now))
+            {
+                return Result.Failure<ImportBatchDto>(ImportErrors.BatchNotFound);
+            }
+
+            if (batch.Status == ImportBatchStatus.Undone)
+            {
+                return ImportBatchDto.From(batch);
+            }
+
+            var undone = batch.Undo(now);
+            if (undone.IsFailure)
+            {
+                return Result.Failure<ImportBatchDto>(undone.Error);
+            }
+
+            var created = await transactions.ListByImportBatchAsync(batch.OwnerUserId, batch.Id, cancellationToken);
+            foreach (var transaction in created)
+            {
+                transactions.Remove(transaction);
+                outbox.Add(new TransactionDeleted(transaction.Id, transaction.OwnerUserId));
+            }
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (PersistenceConflictException) when (attempt < MaxAttempts)
+            {
+                unitOfWork.Reset();
+                continue;
+            }
+
+            metrics.TransactionsUndone(batch.Format, created.Count);
+            return ImportBatchDto.From(batch);
+        }
+    }
+}
+
 public sealed class GetImportHandler(IImportBatchRepository batches, TimeProvider timeProvider)
 {
     public async Task<Result<ImportBatchDto>> HandleAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken)

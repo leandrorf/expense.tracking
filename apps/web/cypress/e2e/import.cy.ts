@@ -138,6 +138,80 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=import-result-imported]').should('have.text', '2');
   });
 
+  // IMP-9: desfazer a importação exclui os lançamentos do lote; o orçamento volta ao que era e o
+  // mesmo arquivo pode ser importado de novo.
+  it('desfaz uma importação: lançamentos somem, o orçamento volta e o arquivo pode ser reenviado', () => {
+    const stamp = Date.now();
+    const accountName = `E2E UNDO ${stamp}`;
+    const category = `Feira UNDO ${stamp}`;
+    // Data do mês corrente: o acompanhamento de orçamentos abre no mês do navegador.
+    const now = new Date();
+    const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const ofx = [
+      'OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', 'CHARSET:1252', '',
+      '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL<BANKTRANLIST>',
+      `<STMTTRN><DTPOSTED>${day}<TRNAMT>-60.00<FITID>UNDO-${stamp}-1<MEMO>FEIRA UNDO ${stamp}</STMTTRN>`,
+      '</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
+    ].join('\r\n');
+    const file = { contents: Cypress.Buffer.from(ofx, 'latin1'), fileName: 'extrato.ofx', mimeType: 'application/x-ofx' };
+    const upload = () => {
+      cy.get('[data-cy=tab-import]').click();
+      cy.get('[data-cy=import-account]').find('option').contains(accountName).then(($opt) => {
+        cy.get('[data-cy=import-account]').select($opt.val() as string);
+      });
+      cy.get('[data-cy=import-payment-method]').select('Pix');
+      cy.get('[data-cy=import-file]').selectFile(file);
+      cy.get('[data-cy=import-submit]').click();
+    };
+
+    cy.get('[data-cy=tab-accounts]').click();
+    cy.get('[data-cy=account-name]').type(accountName);
+    cy.get('[data-cy=account-submit]').click();
+    cy.get('[data-cy=accounts-table]').contains('td', accountName).should('be.visible');
+
+    cy.get('[data-cy=tab-budgets]').click();
+    cy.get('[data-cy=budget-category]').type(category);
+    cy.get('[data-cy=budget-scope]').select('Personal');
+    cy.get('[data-cy=budget-amount]').type('100');
+    cy.get('[data-cy=budget-submit]').click();
+    cy.get(`[data-cy=budgets-personal] [data-cy=budget-row][data-category="${category}"]`).should('exist');
+
+    // 1) Importa e, na própria tela de resultado, desfaz (com confirmação).
+    upload();
+    cy.get('[data-cy=import-bulk-category]').type(category);
+    cy.get('[data-cy=import-bulk-apply-empty]').click();
+    cy.get('[data-cy=import-confirm]').click();
+    cy.get('[data-cy=import-result-imported]').should('have.text', '1');
+
+    cy.get('[data-cy=import-undo]').click();
+    cy.get('[data-cy=import-undo-confirm]').should('contain', 'Excluir os 1 lançamento(s)');
+    cy.get('[data-cy=import-undo-no]').click();
+    cy.get('[data-cy=import-result]').should('have.attr', 'data-status', 'Confirmed');
+    cy.get('[data-cy=import-undo]').click();
+    cy.get('[data-cy=import-undo-yes]').click();
+    cy.get('[data-cy=import-result]').should('have.attr', 'data-status', 'Undone').and('contain', 'Importação desfeita');
+    cy.get('[data-cy=import-undo]').should('not.exist');
+
+    // 2) O lançamento sumiu. Um gasto manual criado depois serve de marcador: o feed entrega em
+    //    ordem, então o orçamento chegar a 10,00 prova que a importação e a exclusão já passaram.
+    cy.get('[data-cy=import-go-transactions]').click();
+    cy.get('[data-cy=tx-table]').should('not.contain', `FEIRA UNDO ${stamp}`);
+    cy.get('[data-cy=tx-account]').select(accountName);
+    cy.get('[data-cy=tx-payment-method]').select('Pix');
+    cy.get('[data-cy=tx-description]').type(`Marcador UNDO ${stamp}`);
+    cy.get('[data-cy=tx-category]').type(category);
+    cy.get('[data-cy=tx-amount]').type('10');
+    cy.get('[data-cy=tx-submit]').click();
+    cy.get('[data-cy=tx-table]').contains('td', `Marcador UNDO ${stamp}`).should('be.visible');
+
+    cy.get('[data-cy=tab-budgets]').click();
+    cy.waitForBudget('personal', category, '10,00');
+
+    // 3) O mesmo arquivo de novo: a linha volta como nova, não como duplicada.
+    upload();
+    cy.get('[data-cy=import-row][data-status=New]').should('have.length', 1);
+  });
+
   // IMP-10: fatura de cartão PJ em CSV. O pagamento da fatura (crédito) fica fora por padrão, as
   // compras entram no cartão e sobem o orçamento PJ da categoria, sem tocar o PF de mesmo nome.
   it('importa uma fatura PJ em CSV: pagamento fora, orçamento PJ sobe e reenvio vem duplicado', () => {

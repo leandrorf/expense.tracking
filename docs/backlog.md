@@ -667,11 +667,21 @@ produto (2026-11-21).
     "primeira linha é cabeçalho" e "inverter sinal" (marcado por padrão na fatura). Colunas
     repetidas ou faltando bloqueiam a prévia.
   - Estimativa: 3 · **Must** · Dependências: IMP-3, IMP-7
-- 🔵 **IMP-9** Desfazer uma importação.
+- ✅ **IMP-9** Desfazer uma importação. → `POST /imports/{id}/undo`, `UndoImportHandler`; botão na tela de resultado da aba Importar.
   - *Dado* um lote confirmado, *quando* desfaço, *então* os lançamentos criados por ele (e ainda não
     excluídos) são excluídos, cada um com seu `TransactionDeleted`, e o Resumo e os orçamentos voltam
     ao que eram depois da projeção.
   - *Dado* um lote de outro usuário, *quando* tento desfazer, *então* recebo 404.
+  - Feito assim: o lote vai para `Undone` (com `undoneAtUtc`, migração `ImportUndo`) na mesma
+    gravação que exclui os lançamentos e escreve os eventos no outbox; as linhas ficam como registro
+    do que foi importado. Idempotente: desfazer de novo devolve o mesmo lote sem excluir nada. Lote
+    pendente → 409 `import.not_confirmed`; um lote desfeito não volta a ser confirmado (reenvia-se o
+    arquivo, e as linhas voltam como novas). Corrida (o mesmo lote desfeito em paralelo, ou um
+    lançamento excluído a mão no meio) recarrega e decide de novo, como a confirmação; provada ao
+    vivo no MySQL: 5 desfazer em paralelo e desfazer junto com exclusões manuais dão sempre um único
+    `TransactionDeleted` por lançamento. Na SPA, "Desfazer importação" pede confirmação antes. Só a
+    importação recém-confirmada pode ser desfeita pela tela (não há lista de lotes). Métrica
+    `transactions.imports.undone`; smoke com o passo de desfazer; E2E em `import.cy.ts`.
   - Estimativa: 3 · **Should** · Dependências: IMP-5
 - ✅ **IMP-10** E2E Cypress: importações PF e PJ. → `cypress/e2e/import.cy.ts`.
   - *Dado* uma conta PF e um OFX sintético de extrato, *quando* importo com categorias e confirmo,

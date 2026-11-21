@@ -15,13 +15,14 @@ public sealed record ImportBatchDto(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset ExpiresAtUtc,
     DateTimeOffset? ConfirmedAtUtc,
+    DateTimeOffset? UndoneAtUtc,
     ImportSummaryDto Summary,
     IReadOnlyList<ImportLineDto> Lines)
 {
     public static ImportBatchDto From(ImportBatch batch) =>
         new(batch.Id, batch.Status.ToString(), batch.Format.ToString(), batch.Kind.ToString(), batch.AccountId,
             batch.CreditCardId, batch.Currency, batch.DefaultPaymentMethod.ToString(), batch.CreatedAtUtc,
-            batch.ExpiresAtUtc, batch.ConfirmedAtUtc, ImportSummaryDto.From(batch.Lines),
+            batch.ExpiresAtUtc, batch.ConfirmedAtUtc, batch.UndoneAtUtc, ImportSummaryDto.From(batch.Lines),
             batch.Lines.OrderBy(l => l.Number).Select(ImportLineDto.From).ToList());
 }
 

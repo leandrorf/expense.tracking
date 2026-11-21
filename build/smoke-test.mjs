@@ -189,6 +189,21 @@ async function main() {
   const again = againRes.status === 201 ? await againRes.json() : {};
   ok(again.summary?.duplicate === 2 && again.summary?.included === 0,
     `reimportar o mesmo arquivo so traz duplicadas (status ${againRes.status}, duplicadas=${again.summary?.duplicate})`);
+
+  // 13) Desfazer (IMP-9): exclui os lançamentos do lote e o Resumo volta ao que era antes.
+  const undoRes = await fetch(`${GATEWAY}/api/imports/${batch.id}/undo`, { method: 'POST', headers: auth });
+  const undone = undoRes.status === 200 ? await undoRes.json() : {};
+  ok(undone.status === 'Undone',
+    `POST /api/imports/{id}/undo desfez o lote (status ${undoRes.status}, lote=${undone.status})`);
+  let reverted;
+  const undoStarted = Date.now();
+  do {
+    if (reverted) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/reports/summary?accountId=${account.id}`, { headers: auth });
+    reverted = res.status === 200 ? await res.json() : {};
+  } while ((reverted.totalExpense !== 312.5 || reverted.totalIncome !== 0) && Date.now() - undoStarted < 30_000);
+  ok(reverted.totalExpense === 312.5 && reverted.totalIncome === 0,
+    `resumo sem os importados depois de desfazer (gastos=${reverted.totalExpense}, receitas=${reverted.totalIncome}, em ${((Date.now() - undoStarted) / 1000).toFixed(1)} s)`);
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

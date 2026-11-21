@@ -653,6 +653,27 @@ table.import-preview td.income {
   font-variant-numeric: tabular-nums;
 }
 
+/* IMP-9: confirmação antes de excluir os lançamentos do lote */
+.import-undo-confirm {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #7f1d1d;
+  border-radius: 10px;
+}
+
+.import-undo-confirm p {
+  margin: 0;
+}
+
+button.danger {
+  background: #b91c1c;
+  color: white;
+}
+
+button.danger:hover {
+  background: #991b1b;
+}
+
 /* ---- Mapeamento de colunas do CSV (IMP-8) ---- */
 .csv-mapping-fields {
   align-items: flex-end;

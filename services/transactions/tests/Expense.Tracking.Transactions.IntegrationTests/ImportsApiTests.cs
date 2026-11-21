@@ -609,6 +609,108 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         await AssertProblem(response, HttpStatusCode.NotFound, "account.not_found");
     }
 
+    // ---------- IMP-9: desfazer ----------
+
+    private async Task<(HttpClient Client, Guid AccountId, Guid BatchId, List<Guid> Created)> ConfirmedBankStatementAsync(Guid? owner = null)
+    {
+        var (client, accountId, batch) = await PreviewBankStatementAsync(owner);
+        var id = batch.GetProperty("id").GetGuid();
+        var confirmed = await Json(await client.PostAsJsonAsync($"/imports/{id}/confirm", AllWithCategory(batch)));
+        var created = confirmed.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("transactionId").GetGuid()).ToList();
+        return (client, accountId, id, created);
+    }
+
+    [Fact]
+    public async Task Undo_RemovesTheBatchTransactionsWithOneDeletedEventEach_AndKeepsTheOthers()
+    {
+        var owner = Guid.NewGuid();
+        var (client, accountId, id, created) = await ConfirmedBankStatementAsync(owner);
+        // Lancamento da mesma conta que nao veio do lote: fica.
+        await SeedImportedTransactionAsync(owner, accountId, externalId: "outro-lote");
+
+        var response = await client.PostAsync($"/imports/{id}/undo", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var undone = await Json(response);
+        Assert.Equal("Undone", undone.GetProperty("status").GetString());
+        Assert.NotEqual(JsonValueKind.Null, undone.GetProperty("undoneAtUtc").ValueKind);
+
+        var left = await TransactionsOfAsync(client, accountId);
+        Assert.Equal(["Importado antes"], left.Select(t => t.GetProperty("description").GetString()));
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        var deleted = db.OutboxEvents.Where(e => created.Contains(e.AggregateId) && e.EventType == "TransactionDeleted").ToList();
+        Assert.Equal(created.Order(), deleted.Select(e => e.AggregateId).Order());
+    }
+
+    [Fact]
+    public async Task Undo_ThenTheSameFileAgain_ComesBackAsNewLines()
+    {
+        var (client, accountId, id, _) = await ConfirmedBankStatementAsync();
+        await client.PostAsync($"/imports/{id}/undo", null);
+
+        var again = await Json(await client.PostAsync("/imports",
+            Upload(Sample("extrato-conta-ofx1.ofx"), "extrato.ofx", accountId, paymentMethod: "Pix")));
+
+        Assert.Equal(5, again.GetProperty("summary").GetProperty("new").GetInt32());
+        Assert.Equal(0, again.GetProperty("summary").GetProperty("duplicate").GetInt32());
+    }
+
+    [Fact]
+    public async Task Undo_Twice_DeletesOnceAndAnswersTheSame()
+    {
+        var (client, _, id, created) = await ConfirmedBankStatementAsync();
+
+        var first = await (await client.PostAsync($"/imports/{id}/undo", null)).Content.ReadAsStringAsync();
+        var second = await client.PostAsync($"/imports/{id}/undo", null);
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(first, await second.Content.ReadAsStringAsync());
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        Assert.Equal(created.Count, db.OutboxEvents.Count(e => created.Contains(e.AggregateId) && e.EventType == "TransactionDeleted"));
+    }
+
+    [Fact]
+    public async Task Undo_TransactionAlreadyDeletedByHand_IsSkipped()
+    {
+        var (client, accountId, id, created) = await ConfirmedBankStatementAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/transactions/{created[0]}")).StatusCode);
+
+        var response = await client.PostAsync($"/imports/{id}/undo", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(await TransactionsOfAsync(client, accountId));
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        // Um evento por lancamento: o excluido a mao nao ganha um segundo TransactionDeleted.
+        Assert.Equal(created.Count, db.OutboxEvents.Count(e => created.Contains(e.AggregateId) && e.EventType == "TransactionDeleted"));
+    }
+
+    [Fact]
+    public async Task Undo_PendingBatch_IsConflict()
+    {
+        var (client, _, batch) = await PreviewBankStatementAsync();
+
+        var response = await client.PostAsync($"/imports/{batch.GetProperty("id").GetGuid()}/undo", null);
+
+        await AssertProblem(response, HttpStatusCode.Conflict, "import.not_confirmed");
+    }
+
+    [Fact]
+    public async Task Undo_AnotherUsersBatch_IsNotFound_AndReadScopeIsForbidden()
+    {
+        var (client, accountId, id, _) = await ConfirmedBankStatementAsync();
+
+        var other = await ClientFor(Guid.NewGuid()).PostAsync($"/imports/{id}/undo", null);
+        var readOnly = await ClientFor(Guid.NewGuid(), scope: "expenses.read").PostAsync($"/imports/{id}/undo", null);
+
+        await AssertProblem(other, HttpStatusCode.NotFound, "import.not_found");
+        Assert.Equal(HttpStatusCode.Forbidden, readOnly.StatusCode);
+        Assert.Equal(5, (await TransactionsOfAsync(client, accountId)).Count);
+    }
+
     private async Task<int> CountBatchesAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();

@@ -41,6 +41,12 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
 
     public void Remove(Transaction transaction) => dbContext.Transactions.Remove(transaction);
 
+    public async Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(
+        Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
+        await dbContext.Transactions
+            .Where(t => t.OwnerUserId == ownerUserId && t.ImportBatchId == importBatchId)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
     {
