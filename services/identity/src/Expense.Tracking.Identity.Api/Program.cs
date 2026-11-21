@@ -10,11 +10,12 @@ builder.AddTelemetry();
 builder.AddStandardHealthChecks()
     .AddDbContextCheck<IdentityDbContext>("database", tags: [ObservabilitySetup.ReadyTag]);
 
+// IDX-2: origens de CORS vem so da configuracao de quem roda o Identity (sem padrao no codigo).
 const string SpaCorsPolicy = "spa";
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:5173"];
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
 builder.Services.AddIdentityInfrastructure(builder.Configuration);
+builder.Services.Configure<LoginPageOptions>(builder.Configuration.GetSection(LoginPageOptions.SectionName));
 builder.Services.AddIdentityAuthentication();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -62,12 +63,10 @@ static async Task InitializeDatabaseAsync(WebApplication app)
         await db.Database.EnsureCreatedAsync();
     }
 
-    var seedEnabled = app.Environment.IsDevelopment()
-        || app.Configuration.GetValue("Seed:Enabled", false);
-
-    if (seedEnabled)
+    var seed = app.Configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
+    if (app.Environment.IsDevelopment() || seed.Enabled)
     {
-        await IdentitySeeder.SeedAsync(app.Services);
+        await IdentitySeeder.SeedAsync(app.Services, seed);
     }
 }
 

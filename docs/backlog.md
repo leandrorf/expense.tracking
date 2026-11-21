@@ -386,7 +386,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (índice atualizado) e o PO ajusta as
     histórias seguintes ao que foi decidido.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **IDX-2** Clientes, escopos, CORS e usuário demo por configuração (ainda no monorepo).
+- ✅ **IDX-2** Clientes, escopos, CORS e usuário demo por configuração (ainda no monorepo).
+  (`SeedOptions` + `LoginPageOptions`; config do monorepo em `infra/identity/appsettings.Production.json`)
   - *Dado* o `identity` sem nenhum cliente no código, *quando* sobe com os clientes declarados na
     configuração (o compose do monorepo), *então* o login da SPA, o client credentials do serviço e
     o E2E funcionam como hoje.

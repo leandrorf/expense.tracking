@@ -3,6 +3,7 @@ using Expense.Tracking.Identity.Api.Setup;
 using Expense.Tracking.Identity.Application.Authentication;
 using Expense.Tracking.Identity.Application.Users;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Options;
 
 namespace Expense.Tracking.Identity.Api.Endpoints;
 
@@ -52,20 +53,21 @@ public static class AccountEndpoints
         });
 
         // Tela de login (HTML) hospedada pelo IdP, usada pelo fluxo de navegador do /oauth/authorize.
-        group.MapGet("/login", (HttpContext httpContext, string? returnUrl) =>
+        group.MapGet("/login", (HttpContext httpContext, IOptions<LoginPageOptions> page, string? returnUrl) =>
         {
             if (httpContext.User.Identity?.IsAuthenticated == true)
             {
                 return Results.Redirect(LoginPage.SafeReturnUrl(returnUrl));
             }
 
-            return Results.Content(LoginPage.Render(returnUrl ?? "/"), "text/html; charset=utf-8");
+            return Results.Content(LoginPage.Render(returnUrl ?? "/", hint: page.Value.Hint), "text/html; charset=utf-8");
         });
 
         // Submissao do formulario de login (form-urlencoded) -> sessao por cookie + redirect.
         group.MapPost("/login/submit", async (
             HttpContext httpContext,
             AuthenticateUserHandler handler,
+            IOptions<LoginPageOptions> page,
             CancellationToken cancellationToken) =>
         {
             var form = await httpContext.Request.ReadFormAsync(cancellationToken);
@@ -78,7 +80,7 @@ public static class AccountEndpoints
             if (result.IsFailure)
             {
                 return Results.Content(
-                    LoginPage.Render(returnUrl, "E-mail ou senha invalidos."),
+                    LoginPage.Render(returnUrl, "E-mail ou senha invalidos.", page.Value.Hint),
                     "text/html; charset=utf-8",
                     statusCode: StatusCodes.Status401Unauthorized);
             }

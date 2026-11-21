@@ -85,8 +85,20 @@ Endpoints:
 4. SPA recebe o `code` no `/callback`, troca por tokens em `/oauth/token` (com PKCE) via `fetch`.
 5. SPA chama `/connect/userinfo` com `Bearer` e renova via refresh token quando expira.
 
-CORS: o `identity` libera a origem da SPA (`Cors:AllowedOrigins`, default `http://localhost:5173`)
-para os endpoints chamados por `fetch` (`/oauth/token`, `/connect/userinfo`).
+CORS: o `identity` libera as origens de `Cors:AllowedOrigins` (no compose, a da SPA,
+`http://localhost:5173`) para os endpoints chamados por `fetch` (`/oauth/token`, `/connect/userinfo`).
+Sem configuração, nenhuma origem é liberada.
+
+**Clientes e usuários por configuração (IDX-2, [ADR-0003](adr/0003-identity-em-repositorio-proprio.md)):**
+o `identity` não conhece os consumidores no código. O seed cria o que estiver em `Seed:Clients`
+(dicionário indexado pelo `client_id`: `Type`, `Secret`, `RedirectUris`, `Scopes`, `GrantTypes`,
+`RequirePkce`) e `Seed:Users` (indexado por um nome lógico: `Email`, `Password`, `DisplayName`), e
+mostra `LoginPage:Hint` na tela de login. Roda com `Seed:Enabled` (ou em Development), é idempotente
+e dá a um cliente existente os escopos novos da configuração. Configuração inválida (grant
+desconhecido, cliente confidencial sem segredo, usuário sem e-mail) derruba a subida com a chave
+errada na mensagem, sem o valor de segredos. O monorepo declara os clientes dele em
+`infra/identity/appsettings.Production.json`, montado no container; segredos e senha do demo vêm
+das variáveis do compose (`IDENTITY_SERVICE_CLIENT_SECRET`, `IDENTITY_DEMO_PASSWORD`).
 
 A SPA implementa o PKCE e a troca de tokens **sem bibliotecas de terceiros** (Web Crypto API),
 guardando os tokens em `sessionStorage`. As telas (contas, cartões, lançamentos) chamam as

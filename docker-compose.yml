@@ -39,6 +39,13 @@ services:
       ConnectionStrings__IdentityDb: "server=identity-db;port=3306;database=${MYSQL_DATABASE:-expense_identity};user=${MYSQL_USER:-expense};password=${MYSQL_PASSWORD:-expense};"
       OAuth__Issuer: ${IDENTITY_ISSUER:-http://localhost:5080}
       Seed__Enabled: ${IDENTITY_SEED_ENABLED:-true}
+      # IDX-2 (ADR-0003): os clientes OAuth, o usuario demo e o CORS que este monorepo usa ficam em
+      # infra/identity/appsettings.Production.json; aqui so os segredos (valores de desenvolvimento).
+      Seed__Clients__expense-tracking-service__Secret: ${IDENTITY_SERVICE_CLIENT_SECRET:-dev-service-secret}
+      Seed__Users__demo__Password: ${IDENTITY_DEMO_PASSWORD:-Password123!}
+      LoginPage__Hint: "Demo: demo@expense.local / ${IDENTITY_DEMO_PASSWORD:-Password123!}"
+    volumes:
+      - ./infra/identity/appsettings.Production.json:/app/appsettings.Production.json:ro
     ports:
       - "${IDENTITY_HTTP_PORT:-5080}:8080"
     networks:
