@@ -1,0 +1,4 @@
+# Arquivos de exemplo: bytes exatos (codificacao e quebras de linha fazem parte do teste).
+*.ofx -text
+*.qfx -text
+*.csv -text

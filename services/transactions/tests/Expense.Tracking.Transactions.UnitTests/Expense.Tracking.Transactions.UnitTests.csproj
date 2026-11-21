@@ -16,6 +16,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- IMP: arquivos sinteticos de extrato/fatura lidos pelos testes de importacao. -->
+  <ItemGroup>
+    <None Include="Imports\Samples\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Domain\Expense.Tracking.Transactions.Domain.csproj" />
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Application\Expense.Tracking.Transactions.Application.csproj" />
