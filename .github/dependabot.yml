@@ -1,0 +1,14 @@
+# IDX-7 (ADR-0003): quando sair versao nova da imagem do identity
+# (ghcr.io/leandrorf/expense-identity), o Dependabot abre um PR trocando a versao fixada no
+# docker-compose.yml. O E2E do PR prova a compatibilidade antes do merge.
+# Restrito ao identity: atualizar MySQL, Jaeger, Collector e Prometheus seria outra decisao.
+version: 2
+updates:
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: ghcr.io/leandrorf/expense-identity
+    commit-message:
+      prefix: "chore(deps)"

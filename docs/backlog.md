@@ -431,7 +431,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
     client credentials e as claims `sub`/`scope` que os serviços usam.
   - *Dado* uma mudança que remove ou renomeia uma claim, *quando* o PR roda, *então* o teste falha.
   - Estimativa: 3 · **Should** · Dependências: IDX-3
-- 🔵 **IDX-7** Atualização de versão da imagem no monorepo.
+- ✅ **IDX-7** Atualização de versão da imagem no monorepo.
+  (`.github/dependabot.yml`, ecossistema `docker-compose`, semanal, restrito a `ghcr.io/leandrorf/expense-identity`)
   - *Dado* uma versão nova da imagem publicada, *quando* o Dependabot (ecossistema `docker-compose`)
     roda, *então* abre um PR no monorepo trocando a versão fixada, e o E2E do PR prova a
     compatibilidade.
