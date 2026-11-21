@@ -1,7 +1,7 @@
 # ADR-0003: Identity em repositório próprio, consumido como imagem versionada (épico IDX)
 
-- **Status:** Proposto
-- **Data:** 2026-11-21 (proposta)
+- **Status:** Aceito
+- **Data:** 2026-11-21 (proposta e aceite)
 - **Decisores:** dono do produto/repositório; análise preparada pelo time de desenvolvimento
 - **Relacionados:** épico IDX (história IDX-1), `docs/backlog.md`
 

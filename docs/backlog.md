@@ -352,7 +352,7 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
 - **Histórico pequeno.** Só 8 commits tocam `services/identity`, o que torna barato levar o
   histórico junto.
 
-**Decisões em aberto (registradas na ADR-0003, IDX-1; a recomendação vem primeiro):**
+**Decisões (aceitas pelo dono em 2026-11-21, registradas na ADR-0003; a recomendação de cada item foi a escolhida):**
 1. **Como o monorepo consome o `identity`.** Opções: (a) imagem Docker publicada no GitHub
    Container Registry (`ghcr.io/leandrorf/expense-identity`) com versão fixada no compose;
    (b) submódulo git; (c) o CI clona o outro repositório e faz o build. *Recomendação: (a)*. É o
@@ -380,8 +380,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
    client credentials, claims), para não quebrar consumidores sem perceber. O E2E do monorepo
    continua sendo a prova ponta a ponta.
 
-- 🟡 **IDX-1** ADR: identity em repositório próprio.
-  ([ADR-0003](adr/0003-identity-em-repositorio-proprio.md), Proposta em 2026-11-21)
+- ✅ **IDX-1** ADR: identity em repositório próprio.
+  ([ADR-0003](adr/0003-identity-em-repositorio-proprio.md), Aceita em 2026-11-21)
   - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (índice atualizado) e o PO ajusta as
     histórias seguintes ao que foi decidido.
