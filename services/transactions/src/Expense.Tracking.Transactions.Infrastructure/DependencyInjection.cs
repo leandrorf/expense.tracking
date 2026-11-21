@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
+using Expense.Tracking.Transactions.Application.CardPayments;
 using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Imports;
 using Expense.Tracking.Transactions.Application.Transactions;
@@ -29,6 +30,12 @@ public static class DependencyInjection
         services.AddScoped<ListTransactionsHandler>();
         services.AddScoped<GetTransactionHandler>();
         services.AddScoped<DeleteTransactionHandler>();
+
+        // INV-6: pagamentos de fatura (ADR-0005, decisao 6).
+        services.AddScoped<ICardPaymentRepository, CardPaymentRepository>();
+        services.AddScoped<RegisterCardPaymentHandler>();
+        services.AddScoped<ListCardPaymentsHandler>();
+        services.AddScoped<DeleteCardPaymentHandler>();
 
         // IMP-3/IMP-4: leitura de CSV, lotes e previa da importacao (ADR-0004).
         services.AddSingleton<ICsvTableReader, CsvHelperTableReader>();

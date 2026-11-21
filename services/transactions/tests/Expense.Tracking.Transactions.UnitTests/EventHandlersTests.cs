@@ -195,6 +195,8 @@ public sealed class EventHandlersTests
         public Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult(scope);
 
         public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult<bool?>(true);
     }
 
     private sealed class StubFeed(params FeedEvent[] events) : IEventFeed

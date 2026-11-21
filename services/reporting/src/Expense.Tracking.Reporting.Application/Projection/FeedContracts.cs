@@ -31,6 +31,8 @@ public static class FeedEventTypes
     public const string TransactionDeleted = "TransactionDeleted";
     public const string TransactionAccountScopeResolved = "TransactionAccountScopeResolved";
     public const string TransactionCardDetailsResolved = "TransactionCardDetailsResolved";
+    public const string CardInvoicePaid = "CardInvoicePaid";
+    public const string CardInvoicePaymentDeleted = "CardInvoicePaymentDeleted";
 
     /// <summary>Versao mais nova que o reporting le de cada tipo; as anteriores continuam valendo.</summary>
     public static int SupportedVersionOf(string eventType) => eventType == TransactionRegistered ? 2 : 1;
@@ -80,6 +82,23 @@ public sealed record TransactionCardDetailsResolvedV1(
 /// lancamento cujo <c>TransactionRegistered</c> saiu sem escopo.
 /// </summary>
 public sealed record TransactionAccountScopeResolvedV1(Guid TransactionId, Guid OwnerUserId, Guid AccountId, string AccountScope);
+
+/// <summary>
+/// Payload v1 do <c>CardInvoicePaid</c> (INV-6, ADR-0005): pagamento da fatura do mes de vencimento
+/// <see cref="InvoiceDueMonth"/> (<c>yyyy-MM</c>). Nao e lancamento.
+/// </summary>
+public sealed record CardInvoicePaidV1(
+    Guid PaymentId,
+    Guid OwnerUserId,
+    Guid CreditCardId,
+    string InvoiceDueMonth,
+    Guid AccountId,
+    decimal Amount,
+    string Currency,
+    DateOnly PaidOn);
+
+/// <summary>Payload v1 do <c>CardInvoicePaymentDeleted</c> (INV-6).</summary>
+public sealed record CardInvoicePaymentDeletedV1(Guid PaymentId, Guid OwnerUserId, Guid CreditCardId);
 
 /// <summary>Payload v1 do <c>TransactionDeleted</c>.</summary>
 public sealed record TransactionDeletedV1(Guid TransactionId, Guid OwnerUserId);

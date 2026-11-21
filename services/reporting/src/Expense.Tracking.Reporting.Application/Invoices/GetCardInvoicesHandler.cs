@@ -13,6 +13,12 @@ public sealed record CardTransactionRecord(
     Guid TransactionId, string TransactionType, string Category, string? Description, decimal Amount, string Currency,
     DateOnly OccurredOn, int Installments);
 
+/// <summary>INV-6: pagamento de fatura, lido da projecao.</summary>
+public sealed record CardPaymentRecord(Guid PaymentId, DateOnly InvoiceDueMonth, Guid AccountId, decimal Amount, DateOnly PaidOn);
+
+/// <summary>Pagamento de uma fatura, para a tela listar e excluir (<c>DELETE /transactions/card-payments/{id}</c>).</summary>
+public sealed record InvoicePaymentDto(Guid PaymentId, Guid AccountId, decimal Amount, DateOnly PaidOn);
+
 public sealed record InvoiceItemDto(
     Guid TransactionId, string? Description, string Category, DateOnly PurchaseDate, decimal Amount, int Installment, int Installments);
 
@@ -26,7 +32,8 @@ public sealed record InvoiceDto(
     decimal Paid,
     decimal Remaining,
     string Status,
-    IReadOnlyList<InvoiceItemDto> Items);
+    IReadOnlyList<InvoiceItemDto> Items,
+    IReadOnlyList<InvoicePaymentDto> Payments);
 
 /// <param name="CurrentDueMonth">Fatura aberta hoje (<c>yyyy-MM</c>), sempre presente na lista.</param>
 public sealed record CardInvoicesDto(
@@ -50,7 +57,8 @@ public sealed record InvoiceOptions(TimeZoneInfo TimeZone)
 /// <summary>
 /// INV-4 (ADR-0005): faturas de um cartao. O ciclo vem do accounts, na hora, com o token do usuario
 /// (cartao que o accounts nao devolve = 404); as compras vem da projecao; a regra e a do
-/// <see cref="InvoiceCalculator"/>. Pagamentos entram com a INV-6.
+/// <see cref="InvoiceCalculator"/>. Os pagamentos (INV-6) tambem vem da projecao e abatem a fatura
+/// do mes de vencimento que informam.
 /// </summary>
 public sealed class GetCardInvoicesHandler(
     ICardDirectory cards, IProjectionQueries projection, InvoiceOptions options, TimeProvider timeProvider)
@@ -75,7 +83,18 @@ public sealed class GetCardInvoicesHandler(
             r.TransactionId, r.Category, r.Amount, r.OccurredOn, r.Installments,
             IsRefund: r.TransactionType == "Income", Description: r.Description));
 
-        var invoices = InvoiceCalculator.Calculate(cycle, charges, [], today).ToList();
+        var payments = await projection.GetCardPaymentsAsync(ownerUserId, cardId, cancellationToken);
+        var paymentsByMonth = payments
+            .GroupBy(p => CardCycle.FirstDayOf(p.InvoiceDueMonth))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<InvoicePaymentDto>)g
+                    .OrderBy(p => p.PaidOn)
+                    .Select(p => new InvoicePaymentDto(p.PaymentId, p.AccountId, p.Amount, p.PaidOn))
+                    .ToList());
+
+        var invoices = InvoiceCalculator.Calculate(
+            cycle, charges, payments.Select(p => new InvoicePayment(p.InvoiceDueMonth, p.Amount)), today).ToList();
         if (invoices.All(i => i.Period.DueMonth != current))
         {
             var period = cycle.PeriodOf(current);
@@ -96,11 +115,11 @@ public sealed class GetCardInvoicesHandler(
             invoices
                 .Where(i => i.Period.DueMonth >= from && i.Period.DueMonth <= to)
                 .OrderBy(i => i.Period.DueMonth)
-                .Select(ToDto)
+                .Select(i => ToDto(i, paymentsByMonth.GetValueOrDefault(i.Period.DueMonth) ?? []))
                 .ToList());
     }
 
-    private static InvoiceDto ToDto(Invoice invoice) => new(
+    private static InvoiceDto ToDto(Invoice invoice, IReadOnlyList<InvoicePaymentDto> payments) => new(
         Month(invoice.Period.DueMonth),
         invoice.Period.StartDate,
         invoice.Period.ClosingDate,
@@ -111,7 +130,8 @@ public sealed class GetCardInvoicesHandler(
         invoice.Status.ToString(),
         invoice.Items
             .Select(i => new InvoiceItemDto(i.TransactionId, i.Description, i.Category, i.PurchaseDate, i.Amount, i.Installment, i.Installments))
-            .ToList());
+            .ToList(),
+        payments);
 
     private static string Month(DateOnly month) => month.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
 }

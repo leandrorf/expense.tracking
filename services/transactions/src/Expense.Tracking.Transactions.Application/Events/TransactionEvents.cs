@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Events;
@@ -10,6 +11,9 @@ namespace Expense.Tracking.Transactions.Application.Events;
 /// </summary>
 public abstract record TransactionEvent(Guid TransactionId, Guid OwnerUserId)
 {
+    /// <summary>Agregado do evento no outbox. Virtual para o pagamento de fatura tira-lo do payload.</summary>
+    public virtual Guid TransactionId { get; init; } = TransactionId;
+
     /// <summary>Nome do evento no feed (ex.: <c>TransactionRegistered</c>).</summary>
     [JsonIgnore]
     public abstract string EventType { get; }
@@ -115,6 +119,63 @@ public sealed record TransactionDeleted(Guid TransactionId, Guid OwnerUserId)
     : TransactionEvent(TransactionId, OwnerUserId)
 {
     public const string Name = "TransactionDeleted";
+
+    [JsonIgnore]
+    public override string EventType => Name;
+}
+
+/// <summary>
+/// INV-6 (ADR-0005, decisao 6): base dos eventos de pagamento de fatura. O agregado do outbox e o
+/// pagamento (<see cref="PaymentId"/>), nao um lancamento: o <c>transactionId</c> da base fica fora
+/// do payload para ninguem confundir o pagamento com um lancamento.
+/// </summary>
+public abstract record CardPaymentEvent(Guid PaymentId, Guid OwnerUserId)
+    : TransactionEvent(PaymentId, OwnerUserId)
+{
+    [JsonIgnore]
+    public override Guid TransactionId
+    {
+        get => base.TransactionId;
+        init => base.TransactionId = value;
+    }
+}
+
+/// <summary>Um pagamento de fatura foi registrado. Nunca e gasto: so abate a fatura do mes de vencimento.</summary>
+public sealed record CardInvoicePaid(
+    Guid PaymentId,
+    Guid OwnerUserId,
+    Guid CreditCardId,
+    string InvoiceDueMonth,
+    Guid AccountId,
+    decimal Amount,
+    string Currency,
+    DateOnly PaidOn)
+    : CardPaymentEvent(PaymentId, OwnerUserId)
+{
+    public const string Name = "CardInvoicePaid";
+
+    /// <summary>Formato do mes da fatura no payload, como na API de faturas do reporting.</summary>
+    public const string MonthFormat = "yyyy-MM";
+
+    [JsonIgnore]
+    public override string EventType => Name;
+
+    public static CardInvoicePaid From(CardPayment payment) => new(
+        payment.Id,
+        payment.OwnerUserId,
+        payment.CreditCardId,
+        payment.InvoiceDueMonth.ToString(MonthFormat, System.Globalization.CultureInfo.InvariantCulture),
+        payment.AccountId,
+        payment.Amount,
+        payment.Currency,
+        payment.PaidOn);
+}
+
+/// <summary>Um pagamento de fatura foi excluido (exclusao fisica; a fatura volta a situacao anterior).</summary>
+public sealed record CardInvoicePaymentDeleted(Guid PaymentId, Guid OwnerUserId, Guid CreditCardId)
+    : CardPaymentEvent(PaymentId, OwnerUserId)
+{
+    public const string Name = "CardInvoicePaymentDeleted";
 
     [JsonIgnore]
     public override string EventType => Name;

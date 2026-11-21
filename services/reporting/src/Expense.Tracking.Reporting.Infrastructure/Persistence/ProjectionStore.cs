@@ -25,6 +25,13 @@ internal sealed class ProjectionStore(ReportingDbContext dbContext) : IProjectio
 
     public void Remove(ProjectedTransaction transaction) => dbContext.Transactions.Remove(transaction);
 
+    public async Task<ProjectedCardPayment?> FindPaymentAsync(Guid paymentId, CancellationToken cancellationToken) =>
+        await dbContext.CardPayments.FindAsync([paymentId], cancellationToken);
+
+    public void AddPayment(ProjectedCardPayment payment) => dbContext.CardPayments.Add(payment);
+
+    public void RemovePayment(ProjectedCardPayment payment) => dbContext.CardPayments.Remove(payment);
+
     public void SetCheckpoint(long sequence)
     {
         if (_checkpoint is null)

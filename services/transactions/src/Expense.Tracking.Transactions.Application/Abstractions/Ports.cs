@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Application.Events;
+using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
@@ -62,6 +63,20 @@ public interface ICsvMappingRepository
     void Remove(SavedCsvMapping mapping);
 }
 
+/// <summary>INV-6: pagamentos de fatura (ADR-0005, decisao 6), sempre escopados pelo dono.</summary>
+public interface ICardPaymentRepository
+{
+    Task<CardPayment?> GetAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken);
+
+    /// <summary>Do dono, filtrando por cartao e/ou mes da fatura; mais recentes primeiro.</summary>
+    Task<IReadOnlyList<CardPayment>> ListAsync(
+        Guid ownerUserId, Guid? creditCardId, DateOnly? invoiceDueMonth, CancellationToken cancellationToken);
+
+    Task AddAsync(CardPayment payment, CancellationToken cancellationToken);
+
+    void Remove(CardPayment payment);
+}
+
 public interface IUnitOfWork
 {
     /// <exception cref="PersistenceConflictException">Outro processo gravou antes (chave unica ou concorrencia otimista).</exception>
@@ -101,6 +116,9 @@ public interface IAccountsClient
     Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken);
 
     Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken);
+
+    /// <summary>INV-6: se a conta esta ativa, ou <c>null</c> se ela nao existe ou nao pertence ao usuario.</summary>
+    Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken);
 }
 
 /// <summary>

@@ -162,6 +162,8 @@ public sealed class ConfirmImportHandlerTests
             Task.FromResult<string?>("Personal");
 
         public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult<bool?>(true);
     }
 
     private sealed class FixedTime : TimeProvider

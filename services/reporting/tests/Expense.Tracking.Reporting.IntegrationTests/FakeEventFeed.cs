@@ -66,6 +66,24 @@ public sealed class FakeEventFeed : IEventFeedClient
     public FeedEvent Deleted(Guid transactionId, Guid ownerUserId) =>
         Append(FeedEventTypes.TransactionDeleted, transactionId, ownerUserId, new { transactionId, ownerUserId });
 
+    /// <summary>INV-6: pagamento de fatura (<c>CardInvoicePaid</c> v1).</summary>
+    public FeedEvent InvoicePaid(
+        Guid paymentId, Guid ownerUserId, Guid cardId, string invoiceDueMonth, decimal amount, string paidOn = "2026-11-20") =>
+        Append(FeedEventTypes.CardInvoicePaid, paymentId, ownerUserId, new
+        {
+            paymentId,
+            ownerUserId,
+            creditCardId = cardId,
+            invoiceDueMonth,
+            accountId = Guid.NewGuid(),
+            amount,
+            currency = "BRL",
+            paidOn,
+        });
+
+    public FeedEvent InvoicePaymentDeleted(Guid paymentId, Guid ownerUserId, Guid cardId) =>
+        Append(FeedEventTypes.CardInvoicePaymentDeleted, paymentId, ownerUserId, new { paymentId, ownerUserId, creditCardId = cardId });
+
     public Task<FeedPage> ReadAsync(long afterSequence, int limit, CancellationToken cancellationToken)
     {
         lock (_events)

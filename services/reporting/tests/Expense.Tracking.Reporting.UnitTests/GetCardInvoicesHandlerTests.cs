@@ -58,6 +58,9 @@ public sealed class GetCardInvoicesHandlerTests
             Task.FromResult<IReadOnlyList<CardTransactionRecord>>(
                 [new(Guid.NewGuid(), "Expense", "Mercado", "Mercado", 100m, "BRL", new DateOnly(2026, 12, 1), 1)]);
 
+        public Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CardPaymentRecord>>([]);
+
         public Task<IReadOnlyList<TransactionRecord>> GetTransactionsAsync(Guid ownerUserId, ReportFilter filter, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TransactionRecord>>([]);
 

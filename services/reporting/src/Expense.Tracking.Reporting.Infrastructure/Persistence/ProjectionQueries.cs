@@ -46,6 +46,13 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
                 t.TransactionId, t.TransactionType, t.Category, t.Description, t.Amount, t.Currency, t.OccurredOn, t.Installments))
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(
+        Guid ownerUserId, Guid cardId, CancellationToken cancellationToken) =>
+        await dbContext.CardPayments.AsNoTracking()
+            .Where(p => p.OwnerUserId == ownerUserId && p.CreditCardId == cardId)
+            .Select(p => new CardPaymentRecord(p.PaymentId, p.InvoiceDueMonth, p.AccountId, p.Amount, p.PaidOn))
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
         var rows = await dbContext.Transactions.AsNoTracking()

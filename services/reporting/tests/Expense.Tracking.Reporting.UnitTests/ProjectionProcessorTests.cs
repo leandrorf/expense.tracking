@@ -201,6 +201,57 @@ public sealed class ProjectionProcessorTests
         Assert.Equal(card, Assert.Single(store.Rows.Values).CreditCardId);
     }
 
+    [Fact]
+    public async Task CardInvoicePaid_IsAnUpsertOutsideTheTransactions_AndDeletionRemovesIt()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (payment, card) = (Guid.NewGuid(), Guid.NewGuid());
+        var paid = InvoicePaid(feed, payment, card, "2026-12", 1500m);
+        feed.Redeliver(paid);
+
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+        store.Checkpoint = 0; // reconstrucao: reaplicar nao duplica
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        var row = Assert.Single(store.Payments.Values);
+        Assert.Equal((card, new DateOnly(2026, 12, 1), 1500m, new DateOnly(2026, 12, 15)),
+            (row.CreditCardId, row.InvoiceDueMonth, row.Amount, row.PaidOn));
+        Assert.Empty(store.Rows); // nunca vira lancamento
+
+        feed.Raw(FeedEventTypes.CardInvoicePaymentDeleted, 1, new { paymentId = payment, ownerUserId = Guid.Empty, creditCardId = card });
+        feed.Raw(FeedEventTypes.CardInvoicePaymentDeleted, 1, new { paymentId = Guid.NewGuid(), ownerUserId = Guid.Empty, creditCardId = card });
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(2, result.Applied);
+        Assert.Empty(store.Payments);
+    }
+
+    [Fact]
+    public async Task CardInvoicePaid_InAnUnknownVersion_StopsTheBatch()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        feed.Raw(FeedEventTypes.CardInvoicePaid, 2, new { paymentId = Guid.NewGuid() });
+
+        await Assert.ThrowsAsync<UnsupportedEventVersionException>(
+            () => Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None));
+        Assert.Equal(0, store.Saves);
+    }
+
+    private static FeedEvent InvoicePaid(Feed feed, Guid payment, Guid card, string dueMonth, decimal amount) =>
+        feed.Raw(FeedEventTypes.CardInvoicePaid, 1, new
+        {
+            paymentId = payment,
+            ownerUserId = Guid.Empty,
+            creditCardId = card,
+            invoiceDueMonth = dueMonth,
+            accountId = Guid.NewGuid(),
+            amount,
+            currency = "BRL",
+            paidOn = "2026-12-15",
+        });
+
     private static FeedEvent CardDetails(Feed feed, Guid tx, Guid card, string description) =>
         feed.Raw(FeedEventTypes.TransactionCardDetailsResolved, 1, new
         {
@@ -390,6 +441,15 @@ public sealed class ProjectionProcessorTests
             _pending.Remove(transaction.TransactionId);
             _pendingRemovals.Add(transaction.TransactionId);
         }
+
+        public Dictionary<Guid, ProjectedCardPayment> Payments { get; } = [];
+
+        public Task<ProjectedCardPayment?> FindPaymentAsync(Guid paymentId, CancellationToken cancellationToken) =>
+            Task.FromResult(Payments.GetValueOrDefault(paymentId));
+
+        public void AddPayment(ProjectedCardPayment payment) => Payments[payment.PaymentId] = payment;
+
+        public void RemovePayment(ProjectedCardPayment payment) => Payments.Remove(payment.PaymentId);
 
         public void SetCheckpoint(long sequence) => _pendingCheckpoint = sequence;
 

@@ -104,6 +104,16 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
                 await ApplyCardDetailsResolvedAsync(feedEvent, Read<TransactionCardDetailsResolvedV1>(feedEvent), cancellationToken);
                 return true;
 
+            case FeedEventTypes.CardInvoicePaid:
+                EnsureSupported(feedEvent);
+                await ApplyCardInvoicePaidAsync(feedEvent, Read<CardInvoicePaidV1>(feedEvent), cancellationToken);
+                return true;
+
+            case FeedEventTypes.CardInvoicePaymentDeleted:
+                EnsureSupported(feedEvent);
+                await ApplyCardInvoicePaymentDeletedAsync(Read<CardInvoicePaymentDeletedV1>(feedEvent), cancellationToken);
+                return true;
+
             default:
                 // Tipo novo que o reporting ainda nao usa: nao afeta a projecao.
                 return false;
@@ -167,6 +177,36 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         if (row is not null)
         {
             store.Remove(row);
+        }
+    }
+
+    // INV-6: upsert pelo id do pagamento, como o cadastro de lancamento (reler o evento nao duplica).
+    private async Task ApplyCardInvoicePaidAsync(FeedEvent feedEvent, CardInvoicePaidV1 e, CancellationToken cancellationToken)
+    {
+        var dueMonth = DateOnly.ParseExact(e.InvoiceDueMonth, "yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+        var row = await store.FindPaymentAsync(e.PaymentId, cancellationToken);
+        if (row is null)
+        {
+            row = new ProjectedCardPayment { PaymentId = e.PaymentId };
+            store.AddPayment(row);
+        }
+
+        row.OwnerUserId = e.OwnerUserId;
+        row.CreditCardId = e.CreditCardId;
+        row.InvoiceDueMonth = dueMonth;
+        row.AccountId = e.AccountId;
+        row.Amount = e.Amount;
+        row.Currency = e.Currency;
+        row.PaidOn = e.PaidOn;
+        row.LastEventSequence = feedEvent.Sequence;
+    }
+
+    private async Task ApplyCardInvoicePaymentDeletedAsync(CardInvoicePaymentDeletedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindPaymentAsync(e.PaymentId, cancellationToken);
+        if (row is not null)
+        {
+            store.RemovePayment(row);
         }
     }
 

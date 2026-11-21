@@ -58,6 +58,7 @@ app.MapHealthEndpoints();
 app.MapTransactionsEndpoints();
 app.MapEventsEndpoints();
 app.MapImportsEndpoints();
+app.MapCardPaymentsEndpoints();
 
 await InitializeDatabaseAsync(app);
 

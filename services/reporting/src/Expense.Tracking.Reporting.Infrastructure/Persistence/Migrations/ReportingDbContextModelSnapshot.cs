@@ -88,6 +88,55 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("budgets", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedCardPayment", b =>
+                {
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("payment_id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("CreditCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("credit_card_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime>("InvoiceDueMonth")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("invoice_due_month");
+
+                    b.Property<long>("LastEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<DateTime>("PaidOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("paid_on");
+
+                    b.HasKey("PaymentId");
+
+                    b.HasIndex("OwnerUserId", "CreditCardId")
+                        .HasDatabaseName("ix_projected_card_payments_owner_card");
+
+                    b.ToTable("projected_card_payments", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedTransaction", b =>
                 {
                     b.Property<Guid>("TransactionId")

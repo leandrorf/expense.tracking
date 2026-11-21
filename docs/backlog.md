@@ -940,7 +940,7 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* uma compra parcelada, *quando* olho o Resumo e os orçamentos, *então* ela conta inteira no
     mês da compra (sem mudança de comportamento).
   - Estimativa: 5 · **Should** · Dependências: INV-2
-- 🔵 **INV-6** Registrar e excluir o pagamento de uma fatura.
+- ✅ **INV-6** Registrar e excluir o pagamento de uma fatura.
   - *Dado* uma fatura de um cartão do usuário, *quando* registro um pagamento (conta de origem,
     valor, data), *então* ele é gravado com um `CardInvoicePaid` no outbox e a fatura passa a Paga ou
     Parcialmente paga.
@@ -949,6 +949,18 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* um pagamento registrado por engano, *quando* o excluo, *então* a fatura volta à situação
     anterior.
   - *Dado* cartão ou conta de outro usuário, *quando* tento pagar, *então* recebo 404.
+  - Feito assim: `POST /transactions/card-payments` (`creditCardId`, `invoiceDueMonth` em
+    `yyyy-MM`, `accountId`, `amount`, `paidOn`; `expenses.write`) grava em `card_payments` e põe o
+    `CardInvoicePaid` no outbox no mesmo commit; `DELETE /transactions/card-payments/{id}` grava o
+    `CardInvoicePaymentDeleted`; `GET` (`expenses.read`) lista os do dono, filtrando por cartão e
+    mês. Cartão e conta são validados no accounts com o token do usuário (404 `card.not_found` /
+    `account.not_found`); conta desativada = 400 `card_payment.account_inactive`. Mês inválido = 400
+    `card_payment.month_invalid`; valor ≤ 0 ou com mais de 2 casas = 400 do `money.*`. Os eventos têm
+    o pagamento como agregado: o payload traz `paymentId` e não traz `transactionId`. O reporting
+    projeta os pagamentos em `projected_card_payments`, separada dos lançamentos (por isso Resumo,
+    orçamentos e "Sem orçamento" não os enxergam), e a fatura passa a ter `paid`, `remaining` e a
+    lista `payments` (id, conta, valor, data), que a tela da INV-7 usa para excluir. Smoke com
+    pagamento, resumo inalterado e exclusão (31 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-4
 - 🔵 **INV-7** Faturas na SPA.
   - *Dado* o usuário logado, *quando* abre a fatura de um cartão (a partir da aba Cartões), *então*

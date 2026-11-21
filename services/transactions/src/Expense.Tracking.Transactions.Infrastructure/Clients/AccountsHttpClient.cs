@@ -23,6 +23,19 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
             ?? throw new InvalidOperationException("O accounts respondeu a conta sem o campo 'scope'.");
     }
 
+    public async Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync($"accounts/{accountId}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var account = await response.Content.ReadFromJsonAsync<AccountResponse>(cancellationToken);
+        return account?.IsActive
+            ?? throw new InvalidOperationException("O accounts respondeu a conta sem o campo 'isActive'.");
+    }
+
     public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) =>
         ExistsAsync($"credit-cards/{creditCardId}", cancellationToken);
 
@@ -46,5 +59,5 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
     }
 
     /// <summary>So o que o transactions usa da conta devolvida pelo accounts.</summary>
-    private sealed record AccountResponse(string? Scope);
+    private sealed record AccountResponse(string? Scope, bool? IsActive);
 }
