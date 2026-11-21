@@ -1,0 +1,56 @@
+using System.Globalization;
+using System.Security.Claims;
+using Expense.Tracking.Reporting.Api.Setup;
+using Expense.Tracking.Reporting.Application.Invoices;
+using Expense.Tracking.Reporting.Domain.Common;
+
+namespace Expense.Tracking.Reporting.Api.Endpoints;
+
+public static class InvoicesEndpoints
+{
+    private static readonly Error InvalidMonth =
+        Error.Validation("invoice.month_invalid", "Mes invalido: use o formato 'yyyy-MM'.");
+
+    public static IEndpointRouteBuilder MapInvoicesEndpoints(this IEndpointRouteBuilder app)
+    {
+        // INV-4 (ADR-0005): faturas de um cartao do dono. from/to recortam pelo mes de vencimento
+        // (yyyy-MM); sem from, comeca 12 faturas antes da atual; sem to, vai ate a ultima parcela.
+        app.MapGet("/reports/cards/{id:guid}/invoices", async (
+            Guid id, string? from, string? to, ClaimsPrincipal user, GetCardInvoicesHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseOptionalMonth(from, out var fromMonth) || !TryParseOptionalMonth(to, out var toMonth))
+            {
+                return HttpResults.Problem(InvalidMonth);
+            }
+
+            var result = await handler.HandleAsync(ownerUserId, id, fromMonth, toMonth, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        })
+        .WithTags("Reports")
+        .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        return app;
+    }
+
+    private static bool TryParseOptionalMonth(string? value, out DateOnly? month)
+    {
+        month = null;
+        if (value is null)
+        {
+            return true;
+        }
+
+        if (!DateOnly.TryParseExact(value, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        {
+            return false;
+        }
+
+        month = parsed;
+        return true;
+    }
+}

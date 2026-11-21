@@ -190,6 +190,9 @@ services:
       # EVT-3: o resumo le a projecao; o transactions so e lido pelo worker (feed /events).
       transactions:
         condition: service_started
+      # INV-4: a fatura le o ciclo do cartao no accounts, com o token do usuario.
+      accounts:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       # OBS-2/OBS-3: traces e metricas via OTLP/gRPC para o OpenTelemetry Collector.
@@ -199,6 +202,7 @@ services:
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"
       Jwt__Audience: expense-tracking-api
       Services__TransactionsBaseUrl: "http://transactions:8080"
+      Services__AccountsBaseUrl: "http://accounts:8080"
       Cors__AllowedOrigins__0: "http://localhost:${WEB_HTTP_PORT:-5173}"
       # EVT-2: projecao em banco proprio, lendo o feed /events do transactions com token de servico.
       ConnectionStrings__ReportingDb: "server=reporting-db;port=3306;database=${REPORTING_DB_NAME:-expense_reporting};user=${REPORTING_DB_USER:-expense};password=${REPORTING_DB_PASSWORD:-expense};"

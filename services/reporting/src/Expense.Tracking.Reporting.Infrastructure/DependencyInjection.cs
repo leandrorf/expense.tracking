@@ -1,5 +1,6 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Budgets;
+using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Application.Reports;
 using Expense.Tracking.Reporting.Infrastructure.Auth;
@@ -33,6 +34,8 @@ public static class DependencyInjection
         services.AddScoped<ChangeBudgetHandler>();
         services.AddScoped<GetBudgetStatusHandler>();
         services.AddScoped<GetCategorySuggestionsHandler>();
+        services.AddScoped<GetCardInvoicesHandler>();
+        services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();
 
         var projection = new ProjectionOptions(
@@ -65,7 +68,30 @@ public static class DependencyInjection
             client.BaseAddress = ToBaseUri(transactionsBaseUrl))
             .AddHttpMessageHandler<ServiceTokenHandler>();
 
+        // INV-4 (ADR-0005, decisao 3): ciclo do cartao lido no accounts com o token do usuario.
+        var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
+        services.AddHttpClient<ICardDirectory, AccountsCardDirectory>(client =>
+            client.BaseAddress = ToBaseUri(accountsBaseUrl));
+
         return services;
+    }
+
+    /// <summary>
+    /// Fuso do "hoje" das faturas; padrao Sao Paulo. Aceita id IANA ou do Windows; sem o fuso na
+    /// maquina (ex.: Windows sem ICU), cai para UTC e a situacao pode virar ate 3h antes.
+    /// </summary>
+    private static TimeZoneInfo ResolveTimeZone(string? id)
+    {
+        id ??= "America/Sao_Paulo";
+        if (TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone))
+        {
+            return zone;
+        }
+
+        return TimeZoneInfo.TryConvertIanaIdToWindowsId(id, out var windowsId) &&
+               TimeZoneInfo.TryFindSystemTimeZoneById(windowsId, out zone)
+            ? zone
+            : TimeZoneInfo.Utc;
     }
 
     private static Uri ToBaseUri(string url) => new(url.EndsWith('/') ? url : url + "/");

@@ -33,6 +33,27 @@ public sealed class FakeEventFeed : IEventFeedClient
             occurredOn,
         });
 
+    /// <summary>INV-2: compra (ou estorno) no cartao, no formato v2 do TransactionRegistered.</summary>
+    public FeedEvent CardPurchase(
+        Guid transactionId, Guid ownerUserId, Guid cardId, decimal amount, string occurredOn, int installments = 1,
+        string description = "Compra", string category = "Compras", string transactionType = "Expense") =>
+        Append(FeedEventTypes.TransactionRegistered, transactionId, ownerUserId, new
+        {
+            transactionId,
+            ownerUserId,
+            accountId = Guid.NewGuid(),
+            accountScope = "Personal",
+            transactionType,
+            paymentMethod = "CreditCard",
+            category,
+            amount,
+            currency = "BRL",
+            occurredOn,
+            description,
+            creditCardId = cardId,
+            installments,
+        }, version: 2);
+
     public FeedEvent ScopeResolved(Guid transactionId, Guid ownerUserId, string accountScope) =>
         Append(FeedEventTypes.TransactionAccountScopeResolved, transactionId, ownerUserId, new
         {

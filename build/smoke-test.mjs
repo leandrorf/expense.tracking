@@ -204,6 +204,35 @@ async function main() {
   } while ((reverted.totalExpense !== 312.5 || reverted.totalIncome !== 0) && Date.now() - undoStarted < 30_000);
   ok(reverted.totalExpense === 312.5 && reverted.totalIncome === 0,
     `resumo sem os importados depois de desfazer (gastos=${reverted.totalExpense}, receitas=${reverted.totalIncome}, em ${((Date.now() - undoStarted) / 1000).toFixed(1)} s)`);
+  // 14) Fatura do cartão (INV-4): compra no cartão aparece na fatura atual, com descrição e total.
+  const cardRes = await fetch(`${GATEWAY}/api/credit-cards`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: account.id, label: `Smoke ${Date.now()}`, brand: 'Visa', lastFourDigits: '4242', creditLimit: 5000, closingDay: 10, dueDay: 17 }),
+  });
+  const card = cardRes.status === 201 ? await cardRes.json() : {};
+  const purchaseRes = await fetch(`${GATEWAY}/api/transactions`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({
+      accountId: account.id, type: 'Expense', paymentMethod: 'CreditCard', creditCardId: card.id,
+      description: 'Smoke cartão', category: 'Smoke cartão', amount: 77.7, currency: 'BRL',
+      occurredOn: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  ok(cardRes.status === 201 && purchaseRes.status === 201,
+    `cartao e compra no cartao criados (status ${cardRes.status}/${purchaseRes.status})`);
+  let invoices;
+  const invoiceStarted = Date.now();
+  do {
+    if (invoices) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth });
+    invoices = res.status === 200 ? await res.json() : {};
+  } while (!(invoices.invoices ?? []).some((i) => i.total === 77.7) && Date.now() - invoiceStarted < 30_000);
+  const current = (invoices.invoices ?? []).find((i) => i.total === 77.7);
+  ok(current?.status === 'Open' && current.items?.[0]?.description === 'Smoke cartão',
+    `GET /api/reports/cards/{id}/invoices traz a compra na fatura ${current?.dueMonth} (${current?.status}, em ${((Date.now() - invoiceStarted) / 1000).toFixed(1)} s)`);
+  const unknownCard = await fetch(`${GATEWAY}/api/reports/cards/${crypto.randomUUID()}/invoices`, { headers: auth });
+  ok(unknownCard.status === 404, `fatura de cartao desconhecido responde 404 (status ${unknownCard.status})`);
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

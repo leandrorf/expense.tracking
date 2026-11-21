@@ -911,7 +911,7 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     paga, fechada. Fatura fechada só com estorno fica paga (nada a pagar). O item ainda não tem a
     descrição da compra, porque o evento não a leva (ponto para a INV-2).
   - Estimativa: 3 · **Must** · Dependências: INV-1
-- 🔵 **INV-4** API das faturas de um cartão.
+- ✅ **INV-4** API das faturas de um cartão. → `GET /reports/cards/{id}/invoices` (`GetCardInvoicesHandler`, `AccountsCardDirectory`).
   - *Dado* um cartão do usuário, *quando* consulto `GET /reports/cards/{id}/invoices`, *então*
     recebo as faturas (fechadas, a atual e as próximas com parcelas), cada uma com mês de
     vencimento, datas de fechamento e vencimento, total, pago, a pagar, situação e os itens (compra
@@ -919,6 +919,18 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* o cartão de outro usuário, *quando* consulto, *então* recebo 404; sem token, 401.
   - *Dado* uma compra excluída, *quando* a projeção aplica o `TransactionDeleted`, *então* ela e suas
     parcelas somem de todas as faturas.
+  - Feito assim: o `reporting` lê o cartão em `GET /credit-cards/{id}` do accounts com o token do
+    usuário (404 do accounts = `card.not_found`; outra falha vira erro 500, porque sem ciclo não há
+    fatura). As compras vêm da projeção (índice dono + cartão) e a regra é a da INV-3. A resposta traz
+    o cartão (apelido, final, dias), a moeda, `currentDueMonth` e as faturas, cada uma com
+    `dueMonth`, início, fechamento, vencimento, total, pago, a pagar, situação e itens (descrição,
+    categoria, data da compra, valor, parcela/de). A fatura atual sempre vem, mesmo vazia. Recorte
+    por `from`/`to` (`yyyy-MM`, mês de vencimento; 400 `invoice.month_invalid`); sem `from`, começa
+    12 faturas antes da atual, e sem `to`, vai até a última parcela. O "hoje" que decide a situação
+    usa `Reports:TimeZone` (padrão `America/Sao_Paulo`; o container tem o banco de fusos); sem o
+    fuso na máquina, cai para UTC. Pago fica 0 até a INV-6, então faturas antigas aparecem como
+    vencidas. Compose: `reporting` ganhou `Services__AccountsBaseUrl` e passa a depender do
+    `accounts`. Smoke com fatura e 404 (28 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-2, INV-3
 - 🔵 **INV-5** Compra parcelada.
   - *Dado* o formulário de lançamento com meio cartão de crédito, *quando* informo 10 parcelas,

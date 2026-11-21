@@ -1,3 +1,4 @@
+using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Projection;
@@ -17,6 +18,24 @@ public interface IProjectionQueries
 
     /// <summary>BDG-7: categorias dos lancamentos do dono, como digitadas, com quantas vezes cada uma.</summary>
     Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken);
+
+    /// <summary>INV-4: compras e estornos de um cartao do dono.</summary>
+    Task<IReadOnlyList<CardTransactionRecord>> GetCardTransactionsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// INV-4 (ADR-0005, decisao 3): cartao do usuario no accounts, lido na hora com o token dele.
+/// Nulo quando o cartao nao existe ou nao e do usuario.
+/// </summary>
+public interface ICardDirectory
+{
+    Task<CardInfo?> FindAsync(Guid cardId, CancellationToken cancellationToken);
+}
+
+/// <summary>Access token do usuario do request atual, para encaminhar ao accounts.</summary>
+public interface IUserTokenAccessor
+{
+    string? GetAccessToken();
 }
 
 /// <summary>EVT-2: le o feed de eventos do transactions (token de servico, escopo <c>events.read</c>).</summary>
