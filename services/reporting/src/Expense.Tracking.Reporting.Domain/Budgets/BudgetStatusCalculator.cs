@@ -5,10 +5,10 @@ namespace Expense.Tracking.Reporting.Domain.Budgets;
 /// <summary>Situacao do orcamento no mes (ADR-0002): calculada na leitura, sem notificacao.</summary>
 public enum BudgetHealth
 {
-    /// <summary>Consumido abaixo de 80% do limite.</summary>
+    /// <summary>Consumido abaixo do limiar de atencao do orcamento (padrao 80%).</summary>
     OnTrack = 1,
 
-    /// <summary>Consumido entre 80% e 100% do limite (inclusive).</summary>
+    /// <summary>Consumido entre o limiar de atencao e 100% do limite (inclusive).</summary>
     Warning = 2,
 
     /// <summary>Consumido acima do limite.</summary>
@@ -17,6 +17,7 @@ public enum BudgetHealth
 
 /// <param name="Remaining">Limite menos consumido; negativo quando estourado (o quanto passou).</param>
 /// <param name="Percent">Consumido sobre o limite, em %, com 2 casas.</param>
+/// <param name="WarningThreshold">Limiar de atencao do orcamento, em % (BDG-10).</param>
 public sealed record BudgetMonthStatus(
     Guid BudgetId,
     string Category,
@@ -26,7 +27,8 @@ public sealed record BudgetMonthStatus(
     decimal Spent,
     decimal Remaining,
     decimal Percent,
-    BudgetHealth Health);
+    BudgetHealth Health,
+    int WarningThreshold);
 
 public sealed record CategorySpending(string Category, decimal Total);
 
@@ -40,9 +42,6 @@ public sealed record UnbudgetedSpending(
 /// </summary>
 public static class BudgetStatusCalculator
 {
-    /// <summary>A partir deste percentual o orcamento entra em atencao.</summary>
-    public const decimal WarningThreshold = 80m;
-
     private const string ExpenseType = "Expense";
 
     /// <summary>
@@ -75,7 +74,8 @@ public static class BudgetStatusCalculator
                     spent,
                     limit - spent,
                     decimal.Round(ratio, 2, MidpointRounding.AwayFromZero),
-                    HealthFor(ratio));
+                    HealthFor(ratio, budget.WarningThreshold),
+                    budget.WarningThreshold);
             })
             .OrderBy(s => s.Scope)
             .ThenBy(s => CategoryKey.Normalize(s.Category), StringComparer.Ordinal)
@@ -122,10 +122,10 @@ public static class BudgetStatusCalculator
     private static string DisplayName(IEnumerable<TransactionRecord> sameCategory) =>
         CategorySuggestions.PreferredSpelling(sameCategory.Select(t => new CategoryUsage(t.Category, 1)));
 
-    private static BudgetHealth HealthFor(decimal percent) => percent switch
+    private static BudgetHealth HealthFor(decimal percent, int warningThreshold) => percent switch
     {
         > 100m => BudgetHealth.Exceeded,
-        >= WarningThreshold => BudgetHealth.Warning,
+        _ when percent >= warningThreshold => BudgetHealth.Warning,
         _ => BudgetHealth.OnTrack
     };
 }

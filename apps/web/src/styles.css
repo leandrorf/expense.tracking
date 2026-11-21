@@ -538,3 +538,23 @@ tr.budget-edit .row-form {
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Limiar de atenção (BDG-10) ---- */
+.progress {
+  position: relative;
+}
+
+/* Marca do limiar na barra de progresso. */
+.progress-threshold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #e2e8f0;
+  opacity: 0.7;
+}
+
+input.percent-input {
+  width: 4.5rem;
+}

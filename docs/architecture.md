@@ -230,7 +230,10 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   os que valem naquele mês, com o valor daquele mês. Cada item traz `limits` (vigências) e
   `closedFromMonth`.
 - `POST /budgets` (`expenses.write`) cria `{category, scope, amount, startMonth: "yyyy-MM",
-  currency?}` (moeda padrão BRL) e responde 201.
+  currency?, warningThreshold?}` (moeda padrão BRL, limiar padrão 80) e responde 201.
+- **Limiar de atenção (BDG-10)**: `PUT /budgets/{id}/warning-threshold {warningThreshold}`
+  (inteiro de 1 a 100, coluna `budgets.warning_threshold`). Não tem vigência: vale para todos os
+  meses do orçamento, inclusive os passados, porque o status é calculado na leitura.
 - **Vigência (BDG-3)**: `PUT /budgets/{id}/amount {amount, fromMonth}` muda o valor a partir de um
   mês; os meses anteriores ficam como estavam e vigências posteriores a `fromMonth` são
   substituídas. Tabela `budget_limits` (uma linha por vigência).
@@ -239,7 +242,7 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   categoria aceita um orçamento novo que comece no mês do encerramento ou depois.
 - Erros no formato `ProblemDetails` com `title` = código estável (`budget.category_invalid`,
   `budget.amount_invalid`, `budget.scope_invalid`, `budget.month_invalid`,
-  `budget.currency_invalid`, `budget.month_before_start`; 409: `budget.duplicate`,
+  `budget.currency_invalid`, `budget.month_before_start`, `budget.warning_threshold_invalid`; 409: `budget.duplicate`,
   `budget.closed`, `budget.already_closed`; 404: `budget.not_found`, inclusive para orçamento
   de outro usuário).
 - **Sugestão de categorias (BDG-7)**: `GET /budgets/categories` (`expenses.read` ou
@@ -257,8 +260,9 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   dos gastos do dono no mês, com o mesmo escopo, moeda e categoria normalizada, em qualquer conta e
   meio de pagamento, pela data do lançamento (compra no cartão conta no mês da compra). Receitas e
   escopo desconhecido não contam. `remaining` fica negativo quando estoura. `status`: `OnTrack`
-  (< 80%), `Warning` (80% a 100%), `Exceeded` (> 100%), calculado por `BudgetStatusCalculator`
-  (função pura no domínio).
+  (abaixo do limiar de atenção do orçamento, padrão 80%), `Warning` (do limiar a 100%),
+  `Exceeded` (> 100%), calculado por `BudgetStatusCalculator` (função pura no domínio). Cada item
+  traz o `warningThreshold` usado.
 - **Categoria normalizada** (`CategoryKey`): sem diferença de maiúsculas, acentos e espaços
   extras, calculada no domínio (os serviços rodam com `InvariantGlobalization`, então o mapeamento
   de acentos é explícito, sem `string.Normalize`).

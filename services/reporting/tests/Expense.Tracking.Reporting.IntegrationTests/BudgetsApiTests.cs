@@ -22,8 +22,8 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
 
     private static object Budget(
         string category = "Alimentação", string scope = "Personal", decimal amount = 1500m,
-        string startMonth = "2026-12", string? currency = null) =>
-        new { category, scope, amount, startMonth, currency };
+        string startMonth = "2026-12", string? currency = null, int? warningThreshold = null) =>
+        new { category, scope, amount, startMonth, currency, warningThreshold };
 
     [Fact]
     public async Task Create_ThenList_ShowsTheBudgetOnlyToItsOwner()
@@ -393,6 +393,46 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
 
         Assert.Empty(categories!);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
+    public async Task WarningThreshold_IsSetOnCreate_ChangedLater_AndDrivesTheStatus()
+    {
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        var id = await CreateAsync(client, Budget(amount: 1000m, startMonth: "2026-12", warningThreshold: 90));
+        _factory.EventFeed.Registered(Guid.NewGuid(), owner, "Personal", 850m, "Alimentação", occurredOn: "2026-12-02");
+        await _factory.DrainFeedAsync();
+
+        var at85 = Assert.Single(await StatusAsync(client, "2026-12"));
+        Assert.Equal("OnTrack", at85.GetProperty("status").GetString());
+        Assert.Equal(90, at85.GetProperty("warningThreshold").GetInt32());
+
+        var change = await client.PutAsJsonAsync($"/budgets/{id}/warning-threshold", new { warningThreshold = 85 });
+        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
+        Assert.Equal(85, (await change.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("warningThreshold").GetInt32());
+
+        Assert.Equal("Warning", Assert.Single(await StatusAsync(client, "2026-12")).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task WarningThreshold_DefaultsTo80_RejectsOutOfRange_AndHidesOthersBudgets()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var id = await CreateAsync(client, Budget());
+
+        var list = await client.GetFromJsonAsync<JsonElement>("/budgets");
+        var invalidCreate = await client.PostAsJsonAsync("/budgets", Budget(category: "Lazer", warningThreshold: 0));
+        var invalidChange = await client.PutAsJsonAsync($"/budgets/{id}/warning-threshold", new { warningThreshold = 101 });
+        var otherOwner = await ClientFor(Guid.NewGuid()).PutAsJsonAsync($"/budgets/{id}/warning-threshold", new { warningThreshold = 90 });
+        var readOnly = await ClientFor(Guid.NewGuid(), scope: "expenses.read")
+            .PutAsJsonAsync($"/budgets/{id}/warning-threshold", new { warningThreshold = 90 });
+
+        Assert.Equal(80, Assert.Single(list.EnumerateArray()).GetProperty("warningThreshold").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, invalidCreate.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidChange.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, otherOwner.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, readOnly.StatusCode);
     }
 
     [Fact]

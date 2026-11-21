@@ -57,6 +57,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(x => x.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(16).IsRequired();
             b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
             b.Property(x => x.StartMonth).HasColumnName("start_month").IsRequired();
+            b.Property(x => x.WarningThreshold).HasColumnName("warning_threshold")
+                .HasDefaultValue(Budget.DefaultWarningThreshold).IsRequired();
             b.Property(x => x.ClosedFromMonth).HasColumnName("closed_from_month");
             b.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
             b.Ignore(x => x.Limits);

@@ -40,6 +40,9 @@ public sealed class Budget
     public const int CategoryMaxLength = 60;
     public const string DefaultCurrency = "BRL";
 
+    /// <summary>ADR-0002: a partir deste percentual do limite o orcamento entra em atencao.</summary>
+    public const int DefaultWarningThreshold = 80;
+
     private readonly List<BudgetLimit> _limits = [];
 
     private Budget()
@@ -75,6 +78,12 @@ public sealed class Budget
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    /// <summary>
+    /// BDG-10: percentual do limite (1 a 100) a partir do qual o status e Atencao. Vale para todos
+    /// os meses do orcamento (o status e calculado na leitura, sem vigencia propria).
+    /// </summary>
+    public int WarningThreshold { get; private set; } = DefaultWarningThreshold;
+
     /// <summary>Vigencias de valor, em ordem de mes; a primeira comeca em <see cref="StartMonth"/>.</summary>
     public IReadOnlyList<BudgetLimit> Limits => _limits.OrderBy(l => l.EffectiveFrom).ToList();
 
@@ -88,7 +97,8 @@ public sealed class Budget
         decimal amount,
         string? currency,
         DateOnly startMonth,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int? warningThreshold = null)
     {
         var trimmed = category?.Trim() ?? string.Empty;
         if (trimmed.Length == 0 || trimmed.Length > CategoryMaxLength)
@@ -109,6 +119,12 @@ public sealed class Budget
                 "budget.currency_invalid", "Moeda deve ser um codigo ISO 4217 de 3 letras (ex.: BRL)."));
         }
 
+        var threshold = warningThreshold ?? DefaultWarningThreshold;
+        if (ValidateWarningThreshold(threshold) is { } thresholdError)
+        {
+            return Result.Failure<Budget>(thresholdError);
+        }
+
         if (!Enum.IsDefined(scope))
         {
             return Result.Failure<Budget>(Error.Validation(
@@ -127,7 +143,8 @@ public sealed class Budget
             Scope = scope,
             Currency = code,
             StartMonth = start,
-            CreatedAt = now
+            CreatedAt = now,
+            WarningThreshold = threshold
         };
         budget._limits.Add(new BudgetLimit(start, amount));
         return budget;
@@ -210,6 +227,18 @@ public sealed class Budget
         return Result.Success();
     }
 
+    /// <summary>BDG-10: muda o percentual a partir do qual o orcamento entra em atencao.</summary>
+    public Result ChangeWarningThreshold(int warningThreshold)
+    {
+        if (ValidateWarningThreshold(warningThreshold) is { } error)
+        {
+            return Result.Failure(error);
+        }
+
+        WarningThreshold = warningThreshold;
+        return Result.Success();
+    }
+
     /// <summary>
     /// Se este orcamento vale em algum mes a partir de <paramref name="startMonth"/> (um orcamento
     /// novo com a mesma categoria e escopo, comecando nesse mes, se sobreporia a ele).
@@ -220,6 +249,11 @@ public sealed class Budget
     private static Error? ValidateAmount(decimal amount) =>
         amount <= 0 || decimal.Round(amount, 2) != amount
             ? Error.Validation("budget.amount_invalid", "Valor deve ser maior que zero, com no maximo 2 casas decimais.")
+            : null;
+
+    private static Error? ValidateWarningThreshold(int warningThreshold) =>
+        warningThreshold is < 1 or > 100
+            ? Error.Validation("budget.warning_threshold_invalid", "Limiar de atencao deve ser um percentual de 1 a 100.")
             : null;
 
     private static DateOnly FirstDayOf(DateOnly month) => new(month.Year, month.Month, 1);
