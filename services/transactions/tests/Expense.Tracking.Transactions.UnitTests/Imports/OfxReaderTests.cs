@@ -248,6 +248,36 @@ public sealed class OfxReaderTests
         Assert.Equal("import.multiple_statements", result.Error.Code);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Read_HostileNesting_IsRejectedWithoutBlowingTheStack(bool xml)
+    {
+        // 100 mil niveis cabem em menos de 5 MB e derrubariam o processo numa busca recursiva.
+        const int depth = 100_000;
+        var open = string.Concat(Enumerable.Repeat("<A>", depth));
+        var close = string.Concat(Enumerable.Repeat("</A>", depth));
+        var content = xml
+            ? $"<?xml version=\"1.0\"?><OFX>{open}{close}</OFX>"
+            : $"{SgmlHeader}<OFX>{open}{close}</OFX>";
+
+        var result = OfxReader.Read(Utf8(content));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ImportErrors.FormatInvalidCode, result.Error.Code);
+    }
+
+    [Fact]
+    public void Read_MillionsOfElements_IsRejectedAsTooManyLines()
+    {
+        var transactions = string.Concat(Enumerable.Repeat("<STMTTRN><DTPOSTED>20261001<TRNAMT>-1.00<MEMO>X</STMTTRN>", 30_000));
+
+        var result = OfxReader.Read(Utf8(SgmlBank(transactions)));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("import.too_many_lines", result.Error.Code);
+    }
+
     [Fact]
     public void Read_InvalidCurrency_IsRejected()
     {

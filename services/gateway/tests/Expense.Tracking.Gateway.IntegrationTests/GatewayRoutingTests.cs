@@ -1,7 +1,9 @@
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Yarp.ReverseProxy.Configuration;
 
 namespace Expense.Tracking.Gateway.IntegrationTests;
 
@@ -41,6 +43,43 @@ public sealed class GatewayRoutingTests(GatewayRoutingTests.Factory factory) : I
         var response = await client.GetAsync(path);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public void ImportsRoute_GoesToTransactions_BeforeTheAccountsCatchAll()
+    {
+        // IMP-4: sem esta rota, /api/imports cairia no catch-all /api/** do accounts.
+        var config = _factory.Services.GetRequiredService<IProxyConfigProvider>().GetConfig();
+
+        var imports = Assert.Single(config.Routes, r => r.RouteId == "imports-api");
+        var catchAll = Assert.Single(config.Routes, r => r.RouteId == "accounts-api");
+        Assert.Equal("/api/imports/{**catch-all}", imports.Match.Path);
+        Assert.Equal("transactions", imports.ClusterId);
+        Assert.Equal("authenticated", imports.AuthorizationPolicy);
+        Assert.True(imports.Order < catchAll.Order);
+    }
+
+    [Fact]
+    public async Task ImportsRoute_WithoutToken_ReturnsUnauthorized()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync("/api/imports", new StringContent("x"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImportsRoute_BodyAboveTheLimit_IsRejectedAtTheEdge()
+    {
+        // Recusado antes de autenticar e de repassar: o arquivo grande nao chega ao transactions.
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var content = new ByteArrayContent(new byte[ImportsLimits.MaxRequestBytes + 1]);
+
+        var response = await client.PostAsync("/api/imports", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("import.file_too_large", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

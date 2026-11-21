@@ -1,0 +1,249 @@
+using Expense.Tracking.Transactions.Domain.Common;
+using Expense.Tracking.Transactions.Domain.Transactions;
+
+namespace Expense.Tracking.Transactions.Domain.Imports;
+
+public enum ImportFormat
+{
+    Ofx = 0,
+    Csv = 1
+}
+
+public enum ImportBatchStatus
+{
+    Pending = 0,
+    Confirmed = 1,
+    Discarded = 2
+}
+
+/// <summary>Situacao de uma linha na previa (ADR-0004, decisoes 3 e 6).</summary>
+public enum ImportLineStatus
+{
+    /// <summary>Linha nova, incluida por padrao.</summary>
+    New = 0,
+
+    /// <summary>Ja existe lancamento com a mesma chave externa na conta: fica de fora.</summary>
+    Duplicate = 1,
+
+    /// <summary>Data, valor ou descricao invalidos no arquivo: nao pode ser incluida.</summary>
+    Invalid = 2,
+
+    /// <summary>Credito na fatura do cartao (pagamento da fatura, estorno): fora por padrao.</summary>
+    ExcludedByDefault = 3
+}
+
+/// <summary>
+/// Lote de importacao (IMP-4, ADR-0004 decisao 2): o que foi lido de um arquivo, guardado como
+/// previa ate ser confirmado ou descartado. O arquivo original nao e guardado, so as linhas.
+/// </summary>
+public sealed class ImportBatch
+{
+    public const int MaxLines = 5_000;
+    public const long MaxFileBytes = 5 * 1024 * 1024;
+    public static readonly TimeSpan PendingLifetime = TimeSpan.FromDays(7);
+
+    private readonly List<ImportLine> _lines = [];
+
+    private ImportBatch(
+        Guid id, Guid ownerUserId, Guid accountId, Guid? creditCardId, ImportFormat format, StatementKind kind,
+        string currency, PaymentMethod defaultPaymentMethod, DateTimeOffset createdAtUtc)
+    {
+        Id = id;
+        OwnerUserId = ownerUserId;
+        AccountId = accountId;
+        CreditCardId = creditCardId;
+        Format = format;
+        Kind = kind;
+        Currency = currency;
+        DefaultPaymentMethod = defaultPaymentMethod;
+        Status = ImportBatchStatus.Pending;
+        CreatedAtUtc = createdAtUtc;
+        ExpiresAtUtc = createdAtUtc + PendingLifetime;
+    }
+
+    public Guid Id { get; private set; }
+
+    public Guid OwnerUserId { get; private set; }
+
+    public Guid AccountId { get; private set; }
+
+    public Guid? CreditCardId { get; private set; }
+
+    public ImportFormat Format { get; private set; }
+
+    public StatementKind Kind { get; private set; }
+
+    public string Currency { get; private set; }
+
+    public PaymentMethod DefaultPaymentMethod { get; private set; }
+
+    public ImportBatchStatus Status { get; private set; }
+
+    public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    public DateTimeOffset ExpiresAtUtc { get; private set; }
+
+    public IReadOnlyList<ImportLine> Lines => _lines;
+
+    /// <summary>
+    /// Monta a previa (meio de pagamento por <see cref="ResolvePaymentMethod"/>).
+    /// <paramref name="existingExternalIds"/> sao as chaves ja lancadas na conta, que viram
+    /// <see cref="ImportLineStatus.Duplicate"/>.
+    /// </summary>
+    public static Result<ImportBatch> Create(
+        Guid ownerUserId, Guid accountId, Guid? creditCardId, PaymentMethod? defaultPaymentMethod,
+        ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
+        DateTimeOffset nowUtc)
+    {
+        if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
+        {
+            return Result.Failure<ImportBatch>(Error.Validation("import.owner_account_required", "Dono e conta sao obrigatorios."));
+        }
+
+        if (statement.Lines.Count > MaxLines)
+        {
+            return Result.Failure<ImportBatch>(ImportErrors.TooManyLines);
+        }
+
+        var paymentMethod = ResolvePaymentMethod(statement.Kind, creditCardId, defaultPaymentMethod);
+        if (paymentMethod.IsFailure)
+        {
+            return Result.Failure<ImportBatch>(paymentMethod.Error);
+        }
+
+        var batch = new ImportBatch(
+            Guid.NewGuid(), ownerUserId, accountId, creditCardId, format, statement.Kind,
+            statement.Currency, paymentMethod.Value, nowUtc);
+
+        foreach (var line in statement.Lines)
+        {
+            batch._lines.Add(ImportLine.From(batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds));
+        }
+
+        return batch;
+    }
+
+    /// <summary>
+    /// Meio de pagamento das linhas (ADR-0004, decisao 5): fatura exige cartao e usa
+    /// <see cref="PaymentMethod.CreditCard"/>; extrato nao aceita cartao e exige um meio padrao.
+    /// </summary>
+    public static Result<PaymentMethod> ResolvePaymentMethod(
+        StatementKind kind, Guid? creditCardId, PaymentMethod? defaultPaymentMethod)
+    {
+        if (kind == StatementKind.CreditCard)
+        {
+            return creditCardId is null
+                ? Result.Failure<PaymentMethod>(ImportErrors.CardRequired)
+                : PaymentMethod.CreditCard;
+        }
+
+        if (creditCardId is not null)
+        {
+            return Result.Failure<PaymentMethod>(ImportErrors.CardNotAllowed);
+        }
+
+        return defaultPaymentMethod switch
+        {
+            null => Result.Failure<PaymentMethod>(ImportErrors.PaymentMethodRequired),
+            PaymentMethod.CreditCard => Result.Failure<PaymentMethod>(ImportErrors.CreditCardOnBankStatement),
+            { } method => method,
+        };
+    }
+
+    public bool IsExpired(DateTimeOffset nowUtc) => Status == ImportBatchStatus.Pending && nowUtc >= ExpiresAtUtc;
+}
+
+/// <summary>Uma linha da previa, com o que vai virar lancamento se for incluida.</summary>
+public sealed class ImportLine
+{
+    /// <summary>Tamanho maximo da chave externa: o FITID do OFX vai ate 255 caracteres.</summary>
+    public const int ExternalIdMaxLength = 255;
+
+    private ImportLine(Guid id, Guid batchId, int number)
+    {
+        Id = id;
+        BatchId = batchId;
+        Number = number;
+        Description = string.Empty;
+    }
+
+    public Guid Id { get; private set; }
+
+    public Guid BatchId { get; private set; }
+
+    /// <summary>Lancamento no OFX (ordem) ou linha no CSV (como o usuario ve no arquivo).</summary>
+    public int Number { get; private set; }
+
+    public DateOnly? OccurredOn { get; private set; }
+
+    /// <summary>Valor sempre positivo, como no lancamento; o sentido esta em <see cref="Type"/>.</summary>
+    public decimal? Amount { get; private set; }
+
+    public TransactionType? Type { get; private set; }
+
+    public string Description { get; private set; }
+
+    public string? ExternalId { get; private set; }
+
+    public PaymentMethod? PaymentMethod { get; private set; }
+
+    /// <summary>Categoria sugerida ou escolhida; obrigatoria para confirmar uma linha incluida (IMP-5).</summary>
+    public string? Category { get; private set; }
+
+    public ImportLineStatus Status { get; private set; }
+
+    public bool Included { get; private set; }
+
+    public string? Problem { get; private set; }
+
+    internal static ImportLine From(
+        Guid batchId, StatementLine source, StatementKind kind, PaymentMethod paymentMethod,
+        IReadOnlySet<string> existingExternalIds)
+    {
+        var line = new ImportLine(Guid.NewGuid(), batchId, source.Number)
+        {
+            // O lancamento aceita ate 200 caracteres; memo de banco maior que isso e cortado.
+            Description = Truncate(source.Description, Transaction.DescriptionMaxLength),
+        };
+
+        if (!source.IsValid)
+        {
+            line.Status = ImportLineStatus.Invalid;
+            line.Problem = source.Problem;
+            return line;
+        }
+
+        if (source.ExternalId is { Length: > ExternalIdMaxLength })
+        {
+            line.Status = ImportLineStatus.Invalid;
+            line.Problem = "Identificador do lancamento no arquivo e longo demais.";
+            return line;
+        }
+
+        var amount = source.Amount!.Value;
+        line.OccurredOn = source.Date;
+        line.Amount = Math.Abs(amount);
+        line.Type = amount < 0 ? TransactionType.Expense : TransactionType.Income;
+        line.ExternalId = source.ExternalId;
+        line.PaymentMethod = paymentMethod;
+
+        if (source.ExternalId is not null && existingExternalIds.Contains(source.ExternalId))
+        {
+            line.Status = ImportLineStatus.Duplicate;
+        }
+        else if (kind == StatementKind.CreditCard && line.Type == TransactionType.Income)
+        {
+            line.Status = ImportLineStatus.ExcludedByDefault;
+        }
+        else
+        {
+            line.Status = ImportLineStatus.New;
+            line.Included = true;
+        }
+
+        return line;
+    }
+
+    private static string Truncate(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength].TrimEnd();
+}

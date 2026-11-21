@@ -1,4 +1,5 @@
 using System.Text;
+using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
 using Expense.Tracking.Transactions.Infrastructure.Imports;
@@ -298,6 +299,35 @@ public sealed class CsvImportTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(ImportErrors.FormatInvalidCode, result.Error.Code);
+    }
+
+    [Fact]
+    public void Read_TooManyColumns_IsRejected()
+    {
+        var result = Reader.Read(Encoding.UTF8.GetBytes(string.Join(';', Enumerable.Repeat("x", 10_000)) + "\n"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ImportErrors.FormatInvalidCode, result.Error.Code);
+    }
+
+    [Fact]
+    public void Read_MoreRowsThanTheLimit_StopsReadingAndIsRejected()
+    {
+        // 5 MB de linhas curtas seriam milhoes de registros na memoria.
+        var content = string.Concat(Enumerable.Repeat("a\n", 2_000_000));
+
+        var result = Reader.Read(Encoding.UTF8.GetBytes(content));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("import.too_many_lines", result.Error.Code);
+    }
+
+    [Fact]
+    public void Read_ExactlyTheRowLimit_IsAccepted()
+    {
+        var content = string.Concat(Enumerable.Repeat("01/10/2026;X;-1,00\n", ICsvTableReader.MaxRows));
+
+        Assert.Equal(ICsvTableReader.MaxRows, Table(content).Rows.Count);
     }
 
     [Fact]

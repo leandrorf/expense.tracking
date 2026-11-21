@@ -44,6 +44,16 @@ internal static class OfxDocument
 {
     private const int HeaderProbeLength = 1024;
 
+    /// <summary>
+    /// Limites contra arquivo hostil (IMP-4): um OFX real tem 8 niveis e ~6 elementos por
+    /// lancamento. Sem eles, 5 MB de tags aninhadas estouram a pilha de quem percorre a arvore, e
+    /// milhoes de elementos ocupam a memoria antes do limite de linhas ser conferido.
+    /// </summary>
+    internal const int MaxDepth = 32;
+    internal const int MaxElements = 100_000;
+
+    private static readonly Error TooDeep = ImportErrors.FormatInvalid("O OFX tem aninhamento alem do esperado.");
+
     public static Result<OfxNode> Parse(ReadOnlySpan<byte> content)
     {
         var bytes = content;
@@ -84,6 +94,7 @@ internal static class OfxDocument
         var root = new OfxNode(string.Empty);
         var stack = new Stack<OfxNode>();
         stack.Push(root);
+        var elements = 0;
 
         try
         {
@@ -94,6 +105,16 @@ internal static class OfxDocument
                 switch (reader.NodeType)
                 {
                     case XmlNodeType.Element:
+                        if (++elements > MaxElements)
+                        {
+                            return Result.Failure<OfxNode>(ImportErrors.TooManyLines);
+                        }
+
+                        if (stack.Count > MaxDepth)
+                        {
+                            return Result.Failure<OfxNode>(TooDeep);
+                        }
+
                         var node = new OfxNode(reader.LocalName.ToUpperInvariant());
                         stack.Peek().Children.Add(node);
                         if (!reader.IsEmptyElement)
@@ -136,6 +157,7 @@ internal static class OfxDocument
         var root = new OfxNode(string.Empty);
         var stack = new Stack<OfxNode>();
         stack.Push(root);
+        var elements = 0;
         OfxNode? opened = null;  // abriu e ainda nao se sabe se e folha ou agregado
         OfxNode? leaf = null;    // folha recem-lida, cujo fechamento (opcional) pode vir a seguir
 
@@ -200,6 +222,16 @@ internal static class OfxDocument
             if (tag.Length == 0)
             {
                 return Result.Failure<OfxNode>(ImportErrors.FormatInvalid("O OFX esta malformado."));
+            }
+
+            if (++elements > MaxElements)
+            {
+                return Result.Failure<OfxNode>(ImportErrors.TooManyLines);
+            }
+
+            if (stack.Count > MaxDepth)
+            {
+                return Result.Failure<OfxNode>(TooDeep);
             }
 
             var node = new OfxNode(tag.Split(' ', 2)[0].ToUpperInvariant());

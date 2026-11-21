@@ -142,6 +142,37 @@ async function main() {
   ok(status.spent === 300 && status.remaining === 1200 && status.status === 'OnTrack',
     `GET /api/budgets/status reflete o gasto (spent=${status.spent}, remaining=${status.remaining}, status=${status.status}, em ${((Date.now() - statusStarted) / 1000).toFixed(1)} s)`);
 
+  // 11) Importação (IMP-4): envia um OFX sintético e lê a prévia; arquivo grande demais é barrado.
+  const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+  const ofx = ['OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', 'CHARSET:1252', '',
+    '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL<BANKTRANLIST>',
+    `<STMTTRN><DTPOSTED>${day}<TRNAMT>-42.00<FITID>SMOKE-${Date.now()}-1<MEMO>Smoke import</STMTTRN>`,
+    `<STMTTRN><DTPOSTED>${day}<TRNAMT>100.00<FITID>SMOKE-${Date.now()}-2<MEMO>Smoke receita</STMTTRN>`,
+    '</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>'].join('\r\n');
+  const upload = (content, name) => {
+    const form = new FormData();
+    form.append('file', new Blob([content]), name);
+    form.append('accountId', account.id);
+    form.append('paymentMethod', 'Pix');
+    return fetch(`${GATEWAY}/api/imports`, {
+      method: 'POST', headers: { Authorization: auth.Authorization }, body: form,
+      signal: AbortSignal.timeout(30_000),
+    });
+  };
+  const importRes = await upload(ofx, 'smoke.ofx');
+  const batch = importRes.status === 201 ? await importRes.json() : {};
+  ok(importRes.status === 201 && batch.status === 'Pending' && batch.summary?.new === 2,
+    `POST /api/imports criou o lote pendente (status ${importRes.status}, novas=${batch.summary?.new})`);
+  const batchRes = await fetch(`${GATEWAY}/api/imports/${batch.id}`, { headers: auth });
+  ok(batchRes.status === 200 && (await batchRes.json()).lines?.length === 2,
+    `GET /api/imports/{id} devolve a previa (status ${batchRes.status})`);
+  // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
+  // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
+  const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')
+    .then((res) => `status ${res.status}`, (err) => (err.name === 'TimeoutError' ? 'timeout' : 'conexao encerrada'));
+  ok(big === 'status 400' || big === 'status 413' || big === 'conexao encerrada',
+    `POST /api/imports com 6 MB e recusado (${big})`);
+
   console.log(`\nRESULTADO: ${pass} passaram, ${fail} falharam`);
   process.exit(fail === 0 ? 0 : 1);
 }
