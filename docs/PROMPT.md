@@ -63,11 +63,12 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 - Contrato de meios de pagamento: **unificado** (code canônico = nome do enum).
 - **CI**: GitHub Actions com build + unitários + integração por serviço e Cypress E2E; o `main` exige os 6 checks verdes.
 - **Observabilidade**: logs JSON com correlation id, tracing OpenTelemetry → Jaeger, métricas via OpenTelemetry Collector → Prometheus, health `/health/live` e `/health/ready`.
+- **Orçamentos** ([ADR-0002](adr/0002-orcamentos-no-reporting.md), épico BDG): limite mensal por categoria e escopo PF/PJ, com vigência, acompanhamento do mês (Dentro/Atenção/Estourado, limiar configurável), gastos sem orçamento e sugestão de categorias; mora no `reporting`, ao lado da projeção.
 - **Reporting por eventos** ([ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md)): outbox do `transactions` exposto como feed HTTP; o `reporting` mantém uma projeção em banco próprio e o Resumo lê só dela (métrica de atraso no Prometheus). Lançamentos anteriores ao outbox ganharam o escopo PF/PJ por evento.
 
 ### Próximos passos conhecidos
-Todos os épicos do backlog estão concluídos. Candidatos a novos épicos (ainda não refinados pelo PO,
-ver `docs/backlog.md`): orçamentos/metas por categoria e escopo, importação de extrato (CSV/OFX),
+Épico em refinamento: **IMP — importação de extrato e fatura (CSV/OFX)** em `docs/backlog.md`,
+com decisões em aberto para a ADR-0003. Candidatos a novos épicos (ainda não refinados pelo PO):
 fechamento de fatura de cartão e previsão de caixa, exportação contábil PJ.
 
 ---
@@ -92,3 +93,4 @@ documento** como fonte de requisito e delegam execução técnica aos agents esp
 | 2026-11-19 | Épicos CI (pipeline + gate do `main`) e OBS (logs, tracing, métricas/health) concluídos. | backlog CI/OBS |
 | 2026-11-19 | `reporting` deixa de ser agregador sem banco: passa a manter projeção por eventos em `expense_reporting` (ADR-0001, épico EVT). Novos escopos de serviço `events.read` e `accounts.scopes.read`. | épico EVT |
 | 2026-11-20 | Documento e agents de processo (`.claude/agents/`) passam a ser versionados no repositório. | pedido do usuário |
+| 2026-11-21 | Épico BDG (orçamentos por categoria e escopo, ADR-0002) concluído; `reporting` passa a ter dado escrito pelo usuário. Épico IMP (importação CSV/OFX) refinado no backlog. | épicos BDG/IMP |
