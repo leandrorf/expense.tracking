@@ -210,6 +210,12 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("description");
 
+                    b.Property<string>("DescriptionKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("description_key");
+
                     b.Property<string>("ExternalId")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
@@ -255,6 +261,8 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerUserId");
 
                     b.HasIndex("OwnerUserId", "AccountId");
+
+                    b.HasIndex("OwnerUserId", "DescriptionKey");
 
                     b.HasIndex("OwnerUserId", "OccurredOn");
 

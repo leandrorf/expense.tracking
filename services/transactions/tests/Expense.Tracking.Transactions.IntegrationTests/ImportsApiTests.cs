@@ -711,6 +711,71 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         Assert.Equal(5, (await TransactionsOfAsync(client, accountId)).Count);
     }
 
+    // ---------- IMP-6: sugestoes pelo historico ----------
+
+    private static byte[] OfxWithMemos(params string[] memos) => Encoding.Latin1.GetBytes(string.Join("\r\n",
+    [
+        "OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "CHARSET:1252", "",
+        "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL<BANKTRANLIST>",
+        .. memos.Select((m, i) => $"<STMTTRN><DTPOSTED>20261102<TRNAMT>-{i + 1}.00<FITID>H-{i}<MEMO>{m}</STMTTRN>"),
+        "</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>",
+    ]));
+
+    [Fact]
+    public async Task Upload_SuggestsTheMostRecentCategoryOfTheSameDescription_FromAnyAccountOfTheOwner()
+    {
+        var owner = Guid.NewGuid();
+        var otherAccount = Guid.NewGuid();
+        await SeedTransactionAsync(owner, otherAccount, "UBER *TRIP", "Viagem", DateTimeOffset.UtcNow.AddDays(-30));
+        await SeedTransactionAsync(owner, otherAccount, "UBER *TRIP", "Transporte", DateTimeOffset.UtcNow.AddDays(-1));
+        // Historico de outro usuario nunca entra.
+        await SeedTransactionAsync(Guid.NewGuid(), Guid.NewGuid(), "PADARIA", "Alheia", DateTimeOffset.UtcNow);
+
+        var batch = await Json(await ClientFor(owner).PostAsync("/imports",
+            Upload(OfxWithMemos("Uber   *Trip", "PADARIA"), "extrato.ofx", Guid.NewGuid(), paymentMethod: "Pix")));
+
+        var lines = batch.GetProperty("lines").EnumerateArray().ToList();
+        Assert.Equal("Transporte", lines[0].GetProperty("category").GetString());
+        Assert.Equal(JsonValueKind.Null, lines[1].GetProperty("category").ValueKind);
+    }
+
+    [Fact]
+    public async Task Upload_BankStatement_MemoHintsSuggestTheMethod_OtherwiseTheBatchDefault()
+    {
+        var batch = await Json(await ClientFor(Guid.NewGuid()).PostAsync("/imports",
+            Upload(Sample("extrato-conta-ofx1.ofx"), "extrato.ofx", Guid.NewGuid(), paymentMethod: "DebitCard")));
+
+        var methods = batch.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("paymentMethod").GetString());
+        // Padaria, "PIX ENVIADO", salario, "PAG BOLETO", padaria.
+        Assert.Equal(["DebitCard", "Pix", "DebitCard", "Boleto", "DebitCard"], methods);
+    }
+
+    [Fact]
+    public async Task Confirm_SuggestedCategoryIsKept_WhenTheUserDoesNotChangeIt()
+    {
+        var owner = Guid.NewGuid();
+        await SeedTransactionAsync(owner, Guid.NewGuid(), "PADARIA", "Padaria", DateTimeOffset.UtcNow);
+        var client = ClientFor(owner);
+        var accountId = Guid.NewGuid();
+        var batch = await Json(await client.PostAsync("/imports",
+            Upload(OfxWithMemos("Padaria"), "extrato.ofx", accountId, paymentMethod: "Pix")));
+
+        // Confirma sem decisao nenhuma: vale o que a previa sugeriu.
+        var response = await client.PostAsJsonAsync($"/imports/{batch.GetProperty("id").GetGuid()}/confirm", new { lines = Array.Empty<object>() });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Padaria", (await TransactionsOfAsync(client, accountId)).Single().GetProperty("category").GetString());
+    }
+
+    private async Task SeedTransactionAsync(Guid owner, Guid accountId, string description, string category, DateTimeOffset createdAtUtc)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        db.Transactions.Add(Transaction.Create(owner, accountId, TransactionType.Expense, PaymentMethod.Pix, null,
+            description, category, 10m, "BRL", new DateOnly(2026, 10, 5), null, createdAtUtc).Value);
+        await db.SaveChangesAsync();
+    }
+
     private async Task<int> CountBatchesAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();

@@ -634,12 +634,22 @@ produto (2026-11-21).
     paralelo → 20 importadas + 20 duplicadas. Contador `transactions.imports.lines`
     (`result`=imported|duplicate, `format`) no Prometheus.
   - Estimativa: 5 · **Must** · Dependências: IMP-4
-- 🔵 **IMP-6** Sugerir categoria e meio de pagamento pelo histórico.
+- ✅ **IMP-6** Sugerir categoria e meio de pagamento pelo histórico. → `Transaction.DescriptionKey`, `FindLatestCategoriesAsync`, `Domain/Imports/PaymentMethodHints`.
   - *Dado* lançamentos anteriores com a descrição "UBER *TRIP" na categoria "Transporte", *quando*
     importo uma linha com "Uber *Trip", *então* a categoria sugerida é "Transporte" (descrição
     normalizada, a categoria mais recente vence).
   - *Dado* um memo com "PIX" ou "BOLETO" num extrato de conta, *quando* a prévia é montada, *então*
     o meio sugerido é Pix ou Boleto; sem pista, vale o meio padrão do lote.
+  - Feito assim: o lançamento ganhou `description_key` (maiúsculas e espaços simples, a mesma
+    normalização da impressão digital), com índice (dono, chave) e backfill na migração
+    `TransactionDescriptionKey`. A prévia busca, para as descrições do arquivo, a categoria do
+    lançamento **criado por último** com a mesma chave, em qualquer conta do usuário (nunca de outro
+    usuário). "Mais recente" é a última categoria usada (`created_at_utc`), não a data do gasto: quem
+    recategoriza um estabelecimento vê a escolha nova na próxima importação. A sugestão só vai para
+    linhas que podem entrar (novas e fora por padrão), e confirmar sem mexer mantém a sugestão.
+    Pistas no memo, por palavra inteira e só em extrato de conta: PIX → Pix, BOLETO → Boleto,
+    TED → Transferência, SAQUE → Dinheiro; com mais de uma, vale a primeira no texto. Na SPA, os
+    campos da prévia já vêm preenchidos; "aplicar às sem categoria" não sobrescreve a sugestão.
   - Estimativa: 3 · **Should** · Dependências: IMP-4
 - ✅ **IMP-7** Aba Importar na SPA: envio, prévia e confirmação. → `views/ImportView.tsx`, `api/imports.ts`.
   - *Dado* o usuário logado, *quando* abre **Importar**, escolhe a conta (e o cartão, se for fatura)

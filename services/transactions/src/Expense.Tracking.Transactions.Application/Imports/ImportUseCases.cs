@@ -80,9 +80,17 @@ public sealed class PreviewImportHandler(
         var existing = await transactions.FindExistingExternalIdsAsync(
             command.OwnerUserId, command.AccountId, keys, cancellationToken);
 
+        // IMP-6: ultima categoria usada para a mesma descricao, em qualquer conta do usuario.
+        var descriptionKeys = statement.Value.Lines
+            .Where(l => l.IsValid)
+            .Select(l => Transaction.DescriptionKeyOf(ImportLine.DescriptionFrom(l.Description)))
+            .ToList();
+        var categoryHistory = await transactions.FindLatestCategoriesAsync(
+            command.OwnerUserId, descriptionKeys, cancellationToken);
+
         var batch = ImportBatch.Create(
             command.OwnerUserId, command.AccountId, command.CreditCardId, command.DefaultPaymentMethod,
-            format.Value, statement.Value, existing, timeProvider.GetUtcNow());
+            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory);
         if (batch.IsFailure)
         {
             return Result.Failure<ImportBatchDto>(batch.Error);

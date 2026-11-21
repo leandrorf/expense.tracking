@@ -139,6 +139,10 @@ public sealed class UndoImportHandlerTests
 
         public List<Transaction> Removed { get; } = [];
 
+        public Task<IReadOnlyDictionary<string, string>> FindLatestCategoriesAsync(
+            Guid ownerUserId, IReadOnlyCollection<string> descriptionKeys, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
+
         public Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(
             Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Transaction>>(Existing.Where(t => t.ImportBatchId == importBatchId).ToList());

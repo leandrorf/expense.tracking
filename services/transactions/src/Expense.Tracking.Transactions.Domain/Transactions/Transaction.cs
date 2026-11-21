@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Domain.Common;
+using Expense.Tracking.Transactions.Domain.Imports;
 
 namespace Expense.Tracking.Transactions.Domain.Transactions;
 
@@ -24,6 +25,7 @@ public sealed class Transaction
         PaymentMethod = paymentMethod;
         CreditCardId = creditCardId;
         Description = description;
+        DescriptionKey = DescriptionKeyOf(description);
         Category = category;
         Amount = amount;
         Currency = currency;
@@ -46,6 +48,12 @@ public sealed class Transaction
     public Guid? CreditCardId { get; private set; }
 
     public string Description { get; private set; }
+
+    /// <summary>
+    /// IMP-6: descricao comparavel (maiusculas, espacos simples), para achar no historico a
+    /// categoria de uma linha importada. "Uber *Trip" e "UBER  *TRIP" tem a mesma chave.
+    /// </summary>
+    public string DescriptionKey { get; private set; } = string.Empty;
 
     public string Category { get; private set; }
 
@@ -143,6 +151,9 @@ public sealed class Transaction
         result.Value.ImportBatchId = importBatchId;
         return result;
     }
+
+    /// <summary>A mesma normalizacao da impressao digital da importacao (ADR-0004, decisao 3).</summary>
+    public static string DescriptionKeyOf(string description) => StatementFingerprint.NormalizeDescription(description);
 
     public void Delete()
     {

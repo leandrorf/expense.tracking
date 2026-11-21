@@ -25,6 +25,7 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
 
         builder.Property(t => t.CreditCardId).HasColumnName("credit_card_id");
         builder.Property(t => t.Description).HasColumnName("description").HasMaxLength(Transaction.DescriptionMaxLength).IsRequired();
+        builder.Property(t => t.DescriptionKey).HasColumnName("description_key").HasMaxLength(Transaction.DescriptionMaxLength).IsRequired();
         builder.Property(t => t.Category).HasColumnName("category").HasMaxLength(Transaction.CategoryMaxLength).IsRequired();
         builder.Property(t => t.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
         builder.Property(t => t.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
@@ -43,5 +44,8 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         // Lancamentos digitados tem external_id nulo, e o MySQL aceita varios nulos no indice unico.
         builder.HasIndex(t => new { t.OwnerUserId, t.AccountId, t.ExternalId }).IsUnique();
         builder.HasIndex(t => t.ImportBatchId);
+
+        // IMP-6: categoria pelo historico (mesma descricao normalizada, do mesmo dono).
+        builder.HasIndex(t => new { t.OwnerUserId, t.DescriptionKey });
     }
 }

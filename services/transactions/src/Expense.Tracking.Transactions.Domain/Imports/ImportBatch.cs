@@ -51,6 +51,8 @@ public sealed record ImportLineDecision(Guid LineId, bool? Included, string? Cat
 public sealed class ImportBatch
 {
     public const int MaxLines = 5_000;
+
+    private static readonly IReadOnlyDictionary<string, string> EmptyHistory = new Dictionary<string, string>();
     public const long MaxFileBytes = 5 * 1024 * 1024;
     public static readonly TimeSpan PendingLifetime = TimeSpan.FromDays(7);
 
@@ -104,12 +106,14 @@ public sealed class ImportBatch
     /// <summary>
     /// Monta a previa (meio de pagamento por <see cref="ResolvePaymentMethod"/>).
     /// <paramref name="existingExternalIds"/> sao as chaves ja lancadas na conta, que viram
-    /// <see cref="ImportLineStatus.Duplicate"/>.
+    /// <see cref="ImportLineStatus.Duplicate"/>. <paramref name="categoryHistory"/> (IMP-6) e a
+    /// ultima categoria usada por chave de descricao (<see cref="Transaction.DescriptionKeyOf"/>):
+    /// vira a categoria sugerida das linhas que podem entrar.
     /// </summary>
     public static Result<ImportBatch> Create(
         Guid ownerUserId, Guid accountId, Guid? creditCardId, PaymentMethod? defaultPaymentMethod,
         ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -133,7 +137,9 @@ public sealed class ImportBatch
 
         foreach (var line in statement.Lines)
         {
-            batch._lines.Add(ImportLine.From(batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds));
+            batch._lines.Add(ImportLine.From(
+                batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds,
+                categoryHistory ?? EmptyHistory));
         }
 
         return batch;
@@ -357,12 +363,11 @@ public sealed class ImportLine
 
     internal static ImportLine From(
         Guid batchId, StatementLine source, StatementKind kind, PaymentMethod paymentMethod,
-        IReadOnlySet<string> existingExternalIds)
+        IReadOnlySet<string> existingExternalIds, IReadOnlyDictionary<string, string> categoryHistory)
     {
         var line = new ImportLine(Guid.NewGuid(), batchId, source.Number)
         {
-            // O lancamento aceita ate 200 caracteres; memo de banco maior que isso e cortado.
-            Description = Truncate(source.Description, Transaction.DescriptionMaxLength),
+            Description = DescriptionFrom(source.Description),
         };
 
         if (!source.IsValid)
@@ -384,7 +389,10 @@ public sealed class ImportLine
         line.Amount = Math.Abs(amount);
         line.Type = amount < 0 ? TransactionType.Expense : TransactionType.Income;
         line.ExternalId = source.ExternalId;
-        line.PaymentMethod = paymentMethod;
+        // Extrato: pista no memo ("PIX", "BOLETO"...) sugere o meio; sem pista, vale o do lote (IMP-6).
+        line.PaymentMethod = kind == StatementKind.BankAccount
+            ? PaymentMethodHints.Suggest(source.Description) ?? paymentMethod
+            : paymentMethod;
 
         if (source.ExternalId is not null && existingExternalIds.Contains(source.ExternalId))
         {
@@ -400,9 +408,16 @@ public sealed class ImportLine
             line.Included = true;
         }
 
+        if (line.CanBeIncluded &&
+            categoryHistory.TryGetValue(Transaction.DescriptionKeyOf(line.Description), out var category))
+        {
+            line.Category = category;
+        }
+
         return line;
     }
 
-    private static string Truncate(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..maxLength].TrimEnd();
+    /// <summary>O lancamento aceita ate 200 caracteres; memo de banco maior que isso e cortado.</summary>
+    public static string DescriptionFrom(string memo) =>
+        memo.Length <= Transaction.DescriptionMaxLength ? memo : memo[..Transaction.DescriptionMaxLength].TrimEnd();
 }
