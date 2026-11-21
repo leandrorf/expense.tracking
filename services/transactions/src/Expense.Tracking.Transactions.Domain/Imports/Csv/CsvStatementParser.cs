@@ -13,15 +13,7 @@ public static class CsvStatementParser
     public static Result<ParsedStatement> Parse(
         CsvTable table, CsvColumnMapping mapping, StatementKind kind, string currency = ParsedStatement.DefaultCurrency)
     {
-        var columns = new[] { mapping.DateColumn, mapping.DescriptionColumn, mapping.AmountColumn, mapping.DebitColumn, mapping.CreditColumn }
-            .Where(c => c is not null)
-            .Select(c => c!.Value)
-            .ToList();
-
-        if (columns.Any(c => c < 0) || columns.Count != columns.Distinct().Count() ||
-            (mapping.AmountColumn is null && (mapping.DebitColumn is null || mapping.CreditColumn is null)) ||
-            (mapping.AmountColumn is not null && (mapping.DebitColumn is not null || mapping.CreditColumn is not null)) ||
-            mapping.DecimalSeparator is not (',' or '.'))
+        if (!mapping.IsValid)
         {
             return Result.Failure<ParsedStatement>(ImportErrors.MappingInvalid);
         }

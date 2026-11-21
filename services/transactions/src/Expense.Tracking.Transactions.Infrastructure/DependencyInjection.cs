@@ -33,11 +33,15 @@ public static class DependencyInjection
         // IMP-3/IMP-4: leitura de CSV, lotes e previa da importacao (ADR-0004).
         services.AddSingleton<ICsvTableReader, CsvHelperTableReader>();
         services.AddScoped<IImportBatchRepository, ImportBatchRepository>();
+        services.AddScoped<ICsvMappingRepository, CsvMappingRepository>();
         services.AddScoped<PreviewImportHandler>();
         services.AddScoped<ProposeCsvMappingHandler>();
         services.AddScoped<GetImportHandler>();
         services.AddScoped<ConfirmImportHandler>();
         services.AddScoped<UndoImportHandler>();
+        services.AddScoped<ListCsvMappingsHandler>();
+        services.AddScoped<SaveCsvMappingHandler>();
+        services.AddScoped<DeleteCsvMappingHandler>();
         services.AddSingleton<ImportMetrics>();
 
         // EVT-1: outbox transacional + feed de eventos (ADR-0001).

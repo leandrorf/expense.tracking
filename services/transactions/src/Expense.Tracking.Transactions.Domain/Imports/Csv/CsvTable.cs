@@ -34,4 +34,24 @@ public sealed record CsvColumnMapping(
     bool InvertSign = false)
 {
     public bool UsesDebitCredit => AmountColumn is null;
+
+    /// <summary>
+    /// Colunas nao negativas e distintas; valor numa coluna so ou debito e credito separados (nunca
+    /// os dois); separador decimal ',' ou '.'.
+    /// </summary>
+    public bool IsValid
+    {
+        get
+        {
+            var columns = new[] { DateColumn, DescriptionColumn, AmountColumn, DebitColumn, CreditColumn }
+                .Where(c => c is not null)
+                .Select(c => c!.Value)
+                .ToList();
+
+            return columns.All(c => c >= 0) && columns.Count == columns.Distinct().Count() &&
+                (AmountColumn is null ? DebitColumn is not null && CreditColumn is not null
+                                      : DebitColumn is null && CreditColumn is null) &&
+                DecimalSeparator is ',' or '.';
+        }
+    }
 }

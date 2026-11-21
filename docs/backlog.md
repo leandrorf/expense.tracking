@@ -463,7 +463,7 @@ de escrita para a conta `leandrorf` (`gh` ativo, ver memória do projeto).
 
 ---
 
-## 🟡 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *In Progress*
+## 🟢 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *Done*
 **Problema:** todo lançamento hoje é digitado à mão, um por um. Quem tem dezenas de gastos por mês
 em cartão e conta (PF e PJ) desiste de registrar, e aí o Resumo e os orçamentos ficam incompletos.
 **Objetivo (outcome):** o usuário importa o extrato da conta ou a fatura do cartão que o banco já
@@ -709,9 +709,18 @@ produto (2026-11-21).
     linhas já lançadas vêm duplicadas; o pagamento da fatura, que nunca foi lançado, continua fora
     por padrão (não há o que deduplicar). Suíte E2E 7/7, já no job do CI.
   - Estimativa: 5 · **Must** · Dependências: IMP-7, IMP-8
-- 🔵 **IMP-11** Guardar o mapeamento de CSV por banco.
+- ✅ **IMP-11** Guardar o mapeamento de CSV por banco. → `SavedCsvMapping`, `/imports/csv/mappings`; seletor e "Salvar como" em `views/CsvMappingStep.tsx`.
   - *Dado* um mapeamento confirmado para um CSV, *quando* salvo com um nome ("Banco X — fatura"),
     *então* nas próximas importações ele aparece para escolher, sem remapear.
+  - Feito assim: tabela `csv_mappings` no `transactions` (migração `SavedCsvMappings`), com o
+    mapeamento e o cabeçalho do arquivo em JSON (só os nomes das colunas, nunca as linhas). Nome
+    único por usuário sem diferença de maiúsculas: salvar de novo com o mesmo nome substitui (200;
+    novo = 201). Até 50 por usuário (409 `import.mappings_limit`); `GET`, `POST` e
+    `DELETE /imports/csv/mappings`, sempre do dono (404 para o de outro). A validação do mapeamento
+    passou para `CsvColumnMapping.IsValid`, a mesma usada na leitura do CSV. Na SPA, o passo de
+    colunas lista os salvos e já escolhe o do arquivo com o mesmo cabeçalho; "Salvar como" grava
+    ao ver a prévia; dá para excluir o escolhido. Mapeamento que aponta para coluna que o arquivo
+    não tem bloqueia a prévia.
   - Estimativa: 3 · **Could** · Dependências: IMP-8
 
 **Fora do escopo (Won't, nesta versão):** conexão direta com o banco (Open Finance); importar PDF de
