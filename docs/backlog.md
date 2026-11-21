@@ -397,7 +397,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
     clientes e sem usuário demo (nada de padrão escondido no código).
   - Origem do CORS e texto de demo da tela de login vêm da mesma configuração.
   - Estimativa: 5 · **Must** · Dependências: IDX-1
-- 🔵 **IDX-3** Repositório `expense-identity` com histórico, build e CI próprios.
+- ✅ **IDX-3** Repositório `expense-identity` com histórico, build e CI próprios.
+  ([leandrorf/expense-identity](https://github.com/leandrorf/expense-identity): histórico via `git subtree split`, CI `build & test` + `docker image`, ruleset `main gate` id 27785008)
   - *Dado* o repositório novo criado com o histórico de `services/identity`, *quando* um PR é aberto
     nele, *então* o CI roda build, testes unitários e de integração e fica verde.
   - Build autônomo: cópias de `Directory.Build.props`, `Directory.Packages.props` (só os pacotes
