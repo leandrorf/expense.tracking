@@ -119,7 +119,7 @@ Servidor OAuth2/OIDC sem bibliotecas de terceiros.
 
 ---
 
-## 🔵 EPIC BDG — Orçamentos por categoria e escopo (PF/PJ)  · *To Do*
+## 🟢 EPIC BDG — Orçamentos por categoria e escopo (PF/PJ)  · *Done*
 **Problema:** hoje o usuário só vê quanto **já gastou** (Resumo). Ele não tem como saber, durante o
 mês, se um gasto PF ou PJ está saindo do planejado, e só percebe o estouro depois de fechado o mês.
 **Objetivo (outcome):** para cada categoria que importa, o usuário define um limite mensal separado
@@ -314,8 +314,218 @@ QA; contrato da API (rota, payload, erros) descrito na história de backend ante
 
 ---
 
+## 🔵 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *To Do*
+**Problema:** todo lançamento hoje é digitado à mão, um por um. Quem tem dezenas de gastos por mês
+em cartão e conta (PF e PJ) desiste de registrar, e aí o Resumo e os orçamentos ficam incompletos.
+**Objetivo (outcome):** o usuário importa o extrato da conta ou a fatura do cartão que o banco já
+entrega (OFX ou CSV), confere uma prévia com categoria e meio de pagamento sugeridos e confirma. Os
+lançamentos entram com o escopo PF/PJ da conta escolhida, sem duplicar o que já existe, e passam a
+contar no Resumo e nos orçamentos como qualquer outro.
+**Métricas de sucesso:** (1) importar um extrato de um mês leva poucos minutos, contra digitar
+linha a linha; (2) reimportar o mesmo arquivo não cria nenhum lançamento repetido; (3) depois da
+confirmação, o Resumo e o acompanhamento dos orçamentos refletem os lançamentos importados (salvo a
+defasagem da projeção); (4) as jornadas PF (extrato OFX) e PJ (fatura do cartão) passam no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → Domínio ("controle de gastos PF e PJ"; meios cartão, Pix,
+dinheiro, transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do dono do
+produto (2026-11-21).
+
+**Achados no código que moldam o épico:**
+- **Não há edição de lançamento** (só criar e excluir). Uma categoria errada na importação só se
+  corrige excluindo e lançando de novo, e a categoria pesa no consumido dos orçamentos. Por isso a
+  categoria precisa ser conferida **antes** de confirmar, na prévia.
+- **Categoria e descrição são obrigatórias** (`Transaction.Create`: descrição até 200, categoria
+  até 60 caracteres). Extrato e fatura não trazem categoria; o memo do banco vira a descrição.
+- **Valor sempre positivo** (`Money` recusa ≤ 0); o sentido vem do `TransactionType`
+  (`Expense`/`Income`). Débitos do extrato viram gasto e créditos viram receita.
+- **Cartão de crédito exige `creditCardId`** e os outros meios não aceitam cartão. Os meios são
+  `Cash`, `Pix`, `Boleto`, `CreditCard`, `DebitCard`, `BankTransfer`. O OFX não diz se um débito foi
+  Pix, boleto ou TED; quando muito, o memo dá pistas ("PIX ENVIADO", "PAG BOLETO").
+- **Não existe identificador externo nem deduplicação.** O lançamento não guarda a origem, então
+  hoje nada impede o mesmo gasto de entrar duas vezes.
+- **Cada criação valida conta e cartão no `accounts` por HTTP** (`IAccountsClient`). Importar
+  centenas de linhas reaproveitando o caso de uso atual faria centenas de chamadas; a importação
+  valida a conta e o cartão **uma vez por lote**.
+- **Cada lançamento gera um `TransactionRegistered` no outbox**, então os importados chegam à
+  projeção do `reporting` sem mudança no feed (ADR-0001). Uma importação grande só aumenta o atraso
+  momentâneo da projeção (métrica `reporting.projection.lag`).
+- **Não há upload de arquivo em nenhum serviço** (nenhum endpoint `multipart`). Limites de tamanho,
+  validação de formato e cuidado com dados sensíveis (extrato bancário) entram pela primeira vez.
+- **Sem bibliotecas pagas** (decisão do projeto). As bibliotecas OFX para .NET estão abandonadas;
+  para CSV, o `CsvHelper` tem licença livre (MS-PL/Apache 2.0).
+
+**Decisões em aberto (registrar na ADR-0003, IMP-1; a recomendação vem primeiro):**
+1. **Onde mora a importação.** Opções: (a) módulo no `transactions`; (b) serviço novo `imports`.
+   *Recomendação: (a)*. Quem cria lançamentos e escreve no outbox é o `transactions`; um serviço
+   novo teria de chamar a API dele linha a linha ou dividir o banco. A leitura do arquivo fica em
+   classes puras, fáceis de extrair se um dia virar serviço.
+2. **Prévia guardada no servidor ou no navegador.** Opções: (a) lote de importação persistido
+   (`import_batches`/`import_lines`, status *Pendente → Confirmado/Descartado*); (b) sem estado: o
+   servidor só lê o arquivo e a SPA devolve as linhas na confirmação. *Recomendação: (a)*. Dá
+   confirmação idempotente (clique duplo ou reenvio não duplica), deduplicação feita no servidor
+   sobre o que ele mesmo leu, e o id do lote serve para desfazer a importação (IMP-9). Lotes
+   pendentes expiram em 7 dias.
+3. **Deduplicação.** *Recomendação:* cada linha ganha uma **chave externa** por conta. No OFX é o
+   `FITID` do banco. No CSV é uma impressão digital de data, valor e descrição normalizada, mais a
+   ordem da linha entre as idênticas do mesmo dia (dois cafés iguais no mesmo dia são dois gastos).
+   Coluna `external_id` no lançamento, índice único (dono, conta, `external_id`). Na prévia, a linha
+   já importada aparece como **duplicada** e fica de fora por padrão. Um lançamento excluído pode ser
+   importado de novo.
+4. **Categoria.** *Recomendação:* toda linha incluída precisa de categoria antes de confirmar
+   (não existe "A classificar" automático, porque não dá para editar depois). A prévia já vem
+   preenchida pelo histórico (mesma descrição normalizada → última categoria usada, IMP-6), com
+   sugestões da BDG-7 e "aplicar às selecionadas".
+5. **Meio de pagamento.** *Recomendação:* fatura de cartão (OFX `CREDITCARDMSGSRSV1` ou CSV marcado
+   como fatura) → `CreditCard` com o cartão escolhido no lote. Extrato de conta → o usuário escolhe
+   um meio padrão para o lote (ex.: Pix) e pode trocar por linha. Pistas no memo ("PIX", "BOLETO",
+   "TED", "SAQUE") viram sugestão, sem decidir sozinhas.
+6. **Créditos e pagamento de fatura.** *Recomendação:* crédito no extrato de conta vira **receita**
+   (incluída por padrão). Crédito na fatura do cartão (pagamento da fatura, estorno) fica **fora por
+   padrão**: o pagamento da fatura não é gasto nem receita, e contá-lo duplicaria os gastos do
+   cartão. O usuário pode incluir um estorno como receita na prévia.
+7. **Leitura dos arquivos.** *Recomendação:* leitor de OFX próprio (OFX 1.x em SGML e 2.x em XML,
+   com DTD e entidades externas desligadas), `CsvHelper` para CSV. CSV com mapeamento de colunas
+   (data, descrição, valor ou débito/crédito separados), separador `;` ou `,`, decimal com vírgula,
+   datas `dd/MM/yyyy` e `yyyy-MM-dd`, codificação UTF-8 ou Windows-1252 (bancos brasileiros).
+8. **Limites e dados sensíveis.** *Recomendação:* arquivo até 5 MB e 5.000 linhas, só `.ofx`,
+   `.qfx` e `.csv`. O arquivo original **não é guardado** (só as linhas lidas, no lote) e nunca vai
+   para log, trace ou mensagem de erro; os dados do lote seguem a mesma regra de dono (404 para lote
+   de outro usuário). Escopos OAuth: reaproveitar `expenses.write` (importar é lançar).
+9. **Rota.** *Recomendação:* `/imports` no `transactions`, exposto como `/api/imports/**` no
+   gateway, antes do catch-all `/api/**`.
+
+- 🔵 **IMP-1** ADR-0003: onde mora a importação e regras do modelo.
+  - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0003 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O).
+  - *Dado* um OFX 1.x (SGML, Windows-1252) de extrato de conta corrente de banco brasileiro,
+    *quando* é lido, *então* cada `STMTTRN` vira uma linha com data, valor com sinal, memo e `FITID`.
+  - *Dado* um OFX 2.x (XML) de fatura de cartão (`CREDITCARDMSGSRSV1`), *quando* é lido, *então* as
+    compras vêm como débito e o pagamento da fatura como crédito, e o arquivo é reconhecido como
+    fatura de cartão.
+  - *Dado* um OFX com `<!DOCTYPE>` ou entidade externa, *quando* é lido, *então* nada é resolvido
+    (sem XXE) e o arquivo é recusado com erro de formato.
+  - *Dado* um arquivo truncado ou que não é OFX, *quando* é lido, *então* o erro diz o motivo sem
+    ecoar o conteúdo do arquivo.
+  - Testes unitários com arquivos de exemplo **sintéticos** (nunca extrato real) no repositório.
+  - Estimativa: 5 · **Must** · Dependências: IMP-1
+- 🔵 **IMP-3** Ler CSV com mapeamento de colunas (domínio, sem I/O).
+  - *Dado* um CSV com `;`, decimal com vírgula e data `dd/MM/yyyy`, *quando* é lido com o
+    mapeamento (data → coluna 1, descrição → coluna 2, valor → coluna 3), *então* as linhas saem com
+    data, valor com sinal e descrição.
+  - *Dado* um CSV com colunas separadas de débito e crédito, *quando* é lido, *então* débito vira
+    valor negativo e crédito positivo.
+  - *Dado* um CSV sem mapeamento informado, *quando* é lido, *então* o leitor detecta separador e
+    cabeçalho e propõe um mapeamento, que a SPA mostra para o usuário confirmar (IMP-8).
+  - *Dado* uma linha com data ou valor inválido, *quando* é lida, *então* ela sai marcada como
+    **inválida** (com o motivo), sem derrubar o arquivo inteiro.
+  - Impressão digital de cada linha para a deduplicação (decisão 3), com teste de dois gastos
+    idênticos no mesmo dia.
+  - Estimativa: 5 · **Must** · Dependências: IMP-1
+- 🔵 **IMP-4** Enviar o arquivo e ver a prévia (API).
+  - *Dado* um usuário com `expenses.write` e uma conta dele, *quando* envia um OFX em
+    `POST /imports` (multipart, com a conta e, se for fatura, o cartão), *então* recebe o lote
+    *Pendente* com as linhas: tipo (gasto/receita), data, valor, descrição, meio e categoria
+    sugeridos, e a situação de cada uma (nova, **duplicada**, inválida, fora por padrão).
+  - *Dado* linhas que já existem como lançamento na mesma conta, *quando* a prévia é montada,
+    *então* elas aparecem como duplicadas e não incluídas.
+  - *Dado* uma conta ou cartão de outro usuário, *quando* envia, *então* recebe 404 (o `accounts`
+    é consultado uma vez por lote).
+  - *Dado* um arquivo acima de 5 MB, com mais de 5.000 linhas ou de formato não aceito, *quando*
+    envia, *então* recebe 400 com código estável (`import.file_too_large`, `import.too_many_lines`,
+    `import.format_invalid`), e o conteúdo do arquivo não aparece em log, trace nem resposta.
+  - `GET /imports/{id}` devolve o lote; lote de outro usuário = 404. Rota `/api/imports/**` no gateway.
+  - Estimativa: 5 · **Must** · Dependências: IMP-2, IMP-3
+- 🔵 **IMP-5** Confirmar a importação (API).
+  - *Dado* um lote pendente, *quando* confirmo com as linhas incluídas, cada uma com categoria e meio
+    de pagamento, *então* os lançamentos são criados numa transação só, cada um com seu `external_id`,
+    e um `TransactionRegistered` por lançamento entra no outbox.
+  - *Dado* uma linha incluída sem categoria, *quando* confirmo, *então* nada é criado e a resposta
+    aponta as linhas pendentes.
+  - *Dado* o mesmo lote confirmado duas vezes (clique duplo, reenvio), *quando* a segunda
+    confirmação chega, *então* nenhum lançamento é duplicado e a resposta é a mesma da primeira.
+  - *Dado* uma corrida em que outra importação criou o mesmo `external_id`, *quando* confirmo,
+    *então* o índice único impede a duplicata e a linha volta como duplicada.
+  - *Dado* a confirmação, *quando* a projeção processa os eventos, *então* o Resumo e o status dos
+    orçamentos do mês incluem os importados no escopo PF/PJ da conta.
+  - Estimativa: 5 · **Must** · Dependências: IMP-4
+- 🔵 **IMP-6** Sugerir categoria e meio de pagamento pelo histórico.
+  - *Dado* lançamentos anteriores com a descrição "UBER *TRIP" na categoria "Transporte", *quando*
+    importo uma linha com "Uber *Trip", *então* a categoria sugerida é "Transporte" (descrição
+    normalizada, a categoria mais recente vence).
+  - *Dado* um memo com "PIX" ou "BOLETO" num extrato de conta, *quando* a prévia é montada, *então*
+    o meio sugerido é Pix ou Boleto; sem pista, vale o meio padrão do lote.
+  - Estimativa: 3 · **Should** · Dependências: IMP-4
+- 🔵 **IMP-7** Aba Importar na SPA: envio, prévia e confirmação.
+  - *Dado* o usuário logado, *quando* abre **Importar**, escolhe a conta (e o cartão, se for fatura)
+    e envia o arquivo, *então* vê a prévia em tabela, com as duplicadas e as inválidas destacadas e
+    fora da seleção.
+  - *Dado* a prévia, *quando* edita categoria ou meio de uma linha, ou aplica uma categoria às linhas
+    selecionadas, *então* o botão Confirmar só habilita quando toda linha incluída tem categoria.
+  - *Dado* a confirmação, *quando* termina, *então* vê o resumo (quantas importadas, duplicadas e
+    ignoradas) e um atalho para os Lançamentos.
+  - Campo de categoria com as sugestões da BDG-7; `data-cy` nos elementos usados pelo E2E;
+    acessível por teclado.
+  - Estimativa: 5 · **Must** · Dependências: IMP-5
+- 🔵 **IMP-8** Mapeamento de colunas do CSV na SPA.
+  - *Dado* um CSV enviado, *quando* o servidor propõe o mapeamento, *então* vejo as primeiras linhas
+    do arquivo e escolho qual coluna é data, descrição e valor (ou débito e crédito) antes da prévia.
+  - Estimativa: 3 · **Must** · Dependências: IMP-3, IMP-7
+- 🔵 **IMP-9** Desfazer uma importação.
+  - *Dado* um lote confirmado, *quando* desfaço, *então* os lançamentos criados por ele (e ainda não
+    excluídos) são excluídos, cada um com seu `TransactionDeleted`, e o Resumo e os orçamentos voltam
+    ao que eram depois da projeção.
+  - *Dado* um lote de outro usuário, *quando* tento desfazer, *então* recebo 404.
+  - Estimativa: 3 · **Should** · Dependências: IMP-5
+- 🔵 **IMP-10** E2E Cypress: importações PF e PJ.
+  - *Dado* uma conta PF e um OFX sintético de extrato, *quando* importo com categorias e confirmo,
+    *então* os lançamentos aparecem na aba Lançamentos e o Resumo reflete o total (esperando a
+    projeção, como o `cy.waitForSummary`).
+  - *Dado* uma conta PJ com cartão e um CSV sintético de fatura, *quando* importo, *então* o
+    pagamento da fatura fica fora e o orçamento PJ da categoria sobe (`cy.waitForBudget`).
+  - *Dado* o mesmo arquivo importado de novo, *quando* vejo a prévia, *então* todas as linhas vêm
+    como duplicadas.
+  - Estimativa: 5 · **Must** · Dependências: IMP-7, IMP-8
+- 🔵 **IMP-11** Guardar o mapeamento de CSV por banco.
+  - *Dado* um mapeamento confirmado para um CSV, *quando* salvo com um nome ("Banco X — fatura"),
+    *então* nas próximas importações ele aparece para escolher, sem remapear.
+  - Estimativa: 3 · **Could** · Dependências: IMP-8
+
+**Fora do escopo (Won't, nesta versão):** conexão direta com o banco (Open Finance); importar PDF de
+fatura; editar lançamento já confirmado (continua sendo excluir e lançar de novo); conciliação de
+fatura de cartão (fica com o épico de fechamento de fatura); regras automáticas de categorização
+além do histórico; conversão de moeda (o lote usa a moeda do arquivo, padrão BRL).
+
+**Priorização (MoSCoW):** Must = IMP-1, 2, 3, 4, 5, 7, 8, 10 (35 pts), o mínimo para importar os dois
+formatos com prévia e provar ponta a ponta nos dois escopos. Should = IMP-6, 9 (6 pts): a IMP-6 tira
+o trabalho manual que sobra (categorizar linha a linha) e a IMP-9 é a rede de segurança de uma
+importação errada, já que não há edição. Could = IMP-11 (3 pts). Total: 44 pts.
+
+**Definition of Ready (por história):** decisões da IMP-1 aceitas; arquivos de exemplo sintéticos
+(OFX 1.x, OFX 2.x, CSV de extrato e de fatura) no repositório antes das histórias de leitura;
+contrato da API descrito na história de backend antes da de frontend.
+
+**Definition of Done do épico:**
+- CI verde no PR: `build & test` dos serviços afetados e `Cypress E2E` (os 6 checks exigidos no
+  `main`).
+- Testes unitários da leitura de OFX e CSV (formatos, codificações, linhas inválidas, XXE) e da
+  deduplicação.
+- Testes de integração (WebApplicationFactory): isolamento por dono (404 em lote, conta ou cartão
+  alheio), 401/403 por escopo, limites de arquivo, confirmação idempotente, corrida no índice único,
+  eventos no outbox.
+- Revisão de segurança do upload (tamanho, formato, XXE, dados sensíveis fora de log e trace) pelo
+  `security-specialist` antes do merge da IMP-4.
+- E2E das jornadas PF e PJ (IMP-10) no job do CI; smoke test (`build/smoke-test.mjs`) cobrindo
+  enviar, confirmar e ler o lançamento pelo gateway.
+- Migração EF no `expense_transactions`; logs, traces e métricas HTTP chegando pelo pipeline da OBS
+  (contadores de linhas importadas e duplicadas).
+- `docs/architecture.md`, a ADR-0003 e o histórico do `docs/PROMPT.md` atualizados; validado ao vivo
+  no `docker compose`.
+
+---
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
-- Importação de extrato/fatura (CSV/OFX).
 - Fechamento de fatura de cartão e previsão de caixa.
 - Exportação contábil (relatório PJ para o contador).
