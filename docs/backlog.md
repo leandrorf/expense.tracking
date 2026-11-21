@@ -756,7 +756,7 @@ contrato da API descrito na história de backend antes da de frontend.
 
 ---
 
-## 🔵 EPIC INV — Fatura de cartão e previsão de caixa  · *To Do*
+## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress*
 **Problema:** o cartão de crédito é o meio mais usado, mas o produto só enxerga a compra no dia em
 que ela aconteceu. O usuário não sabe quanto vai pagar na próxima fatura, em que dia, nem quanto as
 compras de hoje vão pesar no caixa dos próximos meses. Para piorar, pagar a fatura pela conta e
@@ -799,7 +799,7 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
 - **Exclusão é física e não há edição.** Uma compra parcelada errada se corrige excluindo e lançando
   de novo; a fatura e a previsão precisam acompanhar a exclusão (`TransactionDeleted`).
 
-**Decisões em aberto (vão para a ADR da INV-1; abaixo, a recomendação de cada uma):**
+**Decisões (aceitas na [ADR-0005](adr/0005-fatura-de-cartao-e-previsao-de-caixa.md), INV-1; ficou a recomendação de cada uma):**
 1. **Onde a fatura é calculada.** Opções: (a) no `reporting`, a partir da projeção, como os
    orçamentos (ADR-0002); (b) no `transactions`, que já tem o `CreditCardId` e chama o accounts.
    *Recomendação: (a)*. Fatura e previsão são leitura e agregação; as escritas (compra, parcelas,
@@ -859,10 +859,16 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     `/transactions/card-payments` (escopo `expenses.write`). Tudo pela rota existente do gateway; o
     cartão de outro usuário dá 404.
 
-- 🔵 **INV-1** ADR: fatura, parcelas, pagamento e previsão de caixa.
+- ✅ **INV-1** ADR: fatura, parcelas, pagamento e previsão de caixa. → [ADR-0005](adr/0005-fatura-de-cartao-e-previsao-de-caixa.md), Aceita.
   - *Dado* as decisões em aberto 1 a 11 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (0005, com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: `TransactionCardDetailsResolved` aplicado
+    só em linha que já existe na projeção; cartão que o accounts não devolve ao usuário = 404;
+    parcelas acima de 1 só com `CreditCard`; saldo devedor de fatura vencida não passa para a seguinte
+    (rotativo fora); na previsão, faturas pelo total do mês de vencimento, com pago e a pagar, e o
+    pagamento de fatura não conta de novo; conta de origem do pagamento = qualquer conta ativa do
+    usuário; `expenses.read` para ler pagamentos.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **INV-2** Cartão e parcelas no evento, com backfill dos lançamentos anteriores.
   - *Dado* uma compra no cartão, *quando* é registrada, *então* o `TransactionRegistered` sai na
