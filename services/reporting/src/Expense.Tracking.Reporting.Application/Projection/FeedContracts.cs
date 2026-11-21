@@ -30,7 +30,10 @@ public static class FeedEventTypes
     public const string TransactionRegistered = "TransactionRegistered";
     public const string TransactionDeleted = "TransactionDeleted";
     public const string TransactionAccountScopeResolved = "TransactionAccountScopeResolved";
-    public const int SupportedVersion = 1;
+    public const string TransactionCardDetailsResolved = "TransactionCardDetailsResolved";
+
+    /// <summary>Versao mais nova que o reporting le de cada tipo; as anteriores continuam valendo.</summary>
+    public static int SupportedVersionOf(string eventType) => eventType == TransactionRegistered ? 2 : 1;
 }
 
 /// <summary>Payload v1 do <c>TransactionRegistered</c>.</summary>
@@ -47,6 +50,32 @@ public sealed record TransactionRegisteredV1(
     DateOnly OccurredOn);
 
 /// <summary>
+/// Payload v2 do <c>TransactionRegistered</c> (INV-2, ADR-0005): v1 mais descricao, cartao (nulo
+/// fora do cartao) e parcelas.
+/// </summary>
+public sealed record TransactionRegisteredV2(
+    Guid TransactionId,
+    Guid OwnerUserId,
+    Guid AccountId,
+    string? AccountScope,
+    string TransactionType,
+    string PaymentMethod,
+    string Category,
+    decimal Amount,
+    string Currency,
+    DateOnly OccurredOn,
+    string? Description,
+    Guid? CreditCardId,
+    int Installments);
+
+/// <summary>
+/// Payload v1 do <c>TransactionCardDetailsResolved</c> (INV-2): descricao, cartao e parcelas de uma
+/// compra no cartao cujo <c>TransactionRegistered</c> saiu na v1.
+/// </summary>
+public sealed record TransactionCardDetailsResolvedV1(
+    Guid TransactionId, Guid OwnerUserId, string Description, Guid CreditCardId, int Installments);
+
+/// <summary>
 /// Payload v1 do <c>TransactionAccountScopeResolved</c> (EVT-4): escopo descoberto depois para um
 /// lancamento cujo <c>TransactionRegistered</c> saiu sem escopo.
 /// </summary>
@@ -60,7 +89,7 @@ public sealed record TransactionDeletedV1(Guid TransactionId, Guid OwnerUserId);
 /// abortado sem avancar o checkpoint: pular o evento perderia dados em silencio.
 /// </summary>
 public sealed class UnsupportedEventVersionException(FeedEvent feedEvent)
-    : Exception($"Evento {feedEvent.EventType} v{feedEvent.Version} (sequencia {feedEvent.Sequence}) nao suportado; o reporting le a v{FeedEventTypes.SupportedVersion}.")
+    : Exception($"Evento {feedEvent.EventType} v{feedEvent.Version} (sequencia {feedEvent.Sequence}) nao suportado; o reporting le ate a v{FeedEventTypes.SupportedVersionOf(feedEvent.EventType)}.")
 {
     public FeedEvent FeedEvent { get; } = feedEvent;
 }

@@ -23,6 +23,11 @@ public abstract record TransactionEvent(Guid TransactionId, Guid OwnerUserId)
 /// Um lancamento foi criado. Carrega o que a projecao do reporting precisa, incluindo o escopo
 /// PF/PJ da conta (imutavel no accounts). <see cref="AccountScope"/> e nulo so nos eventos da
 /// carga inicial de lancamentos anteriores ao outbox, cujo escopo o transactions nao conhece.
+/// <para>
+/// Versao 2 (INV-2, ADR-0005, decisao 2): acrescenta <see cref="Description"/>,
+/// <see cref="CreditCardId"/> (nulo fora do cartao) e <see cref="Installments"/> (1 a vista), para a
+/// fatura do cartao. Os eventos v1 ja gravados continuam no feed como estao.
+/// </para>
 /// </summary>
 public sealed record TransactionRegistered(
     Guid TransactionId,
@@ -34,13 +39,21 @@ public sealed record TransactionRegistered(
     string Category,
     decimal Amount,
     string Currency,
-    DateOnly OccurredOn)
+    DateOnly OccurredOn,
+    string Description,
+    Guid? CreditCardId,
+    int Installments)
     : TransactionEvent(TransactionId, OwnerUserId)
 {
     public const string Name = "TransactionRegistered";
 
+    public const int CurrentVersion = 2;
+
     [JsonIgnore]
     public override string EventType => Name;
+
+    [JsonIgnore]
+    public override int Version => CurrentVersion;
 
     public static TransactionRegistered From(Transaction transaction, string? accountScope) => new(
         transaction.Id,
@@ -52,7 +65,30 @@ public sealed record TransactionRegistered(
         transaction.Category,
         transaction.Amount,
         transaction.Currency,
-        transaction.OccurredOn);
+        transaction.OccurredOn,
+        transaction.Description,
+        transaction.CreditCardId,
+        transaction.Installments);
+}
+
+/// <summary>
+/// INV-2 (ADR-0005, decisao 2): descricao, cartao e parcelas de uma compra no cartao cujo
+/// <see cref="TransactionRegistered"/> saiu na versao 1, sem esses campos. Completa o evento sem
+/// reescrever o log, como o <see cref="TransactionAccountScopeResolved"/>. Consumidores aplicam so
+/// se o lancamento ainda existir.
+/// </summary>
+public sealed record TransactionCardDetailsResolved(
+    Guid TransactionId,
+    Guid OwnerUserId,
+    string Description,
+    Guid CreditCardId,
+    int Installments)
+    : TransactionEvent(TransactionId, OwnerUserId)
+{
+    public const string Name = "TransactionCardDetailsResolved";
+
+    [JsonIgnore]
+    public override string EventType => Name;
 }
 
 /// <summary>

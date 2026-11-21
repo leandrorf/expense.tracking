@@ -42,7 +42,7 @@ public sealed partial class EventsFeedTests(TransactionsApiFactory factory) : IC
         var events = EventsFor(await ReadAllEventsAsync(ServiceClient()), transactionId);
         var registered = Assert.Single(events);
         Assert.Equal("TransactionRegistered", registered.GetProperty("eventType").GetString());
-        Assert.Equal(1, registered.GetProperty("version").GetInt32());
+        Assert.Equal(2, registered.GetProperty("version").GetInt32());
         Assert.Equal(owner, registered.GetProperty("ownerUserId").GetGuid());
         Assert.NotEqual(Guid.Empty, registered.GetProperty("eventId").GetGuid());
         Assert.Matches(TraceParentPattern(), registered.GetProperty("traceParent").GetString());
@@ -57,6 +57,82 @@ public sealed partial class EventsFeedTests(TransactionsApiFactory factory) : IC
         Assert.Equal(250.75m, payload.GetProperty("amount").GetDecimal());
         Assert.Equal("BRL", payload.GetProperty("currency").GetString());
         Assert.Equal("2026-01-15", payload.GetProperty("occurredOn").GetString());
+        // v2 (INV-2): descricao, cartao (nulo fora do cartao) e parcelas.
+        Assert.Equal("Almoco", payload.GetProperty("description").GetString());
+        Assert.Equal(JsonValueKind.Null, payload.GetProperty("creditCardId").ValueKind);
+        Assert.Equal(1, payload.GetProperty("installments").GetInt32());
+    }
+
+    [Fact]
+    public async Task CreateCardPurchase_RecordsTheCardInTheV2Event()
+    {
+        var owner = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        var response = await UserClient(owner).PostAsJsonAsync("/transactions", new
+        {
+            accountId, type = "Expense", paymentMethod = "CreditCard", creditCardId = cardId, description = "Notebook",
+            category = "Eletronicos", amount = 3000m, currency = "BRL", occurredOn = "2026-11-20",
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var transactionId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var payload = Assert.Single(EventsFor(await ReadAllEventsAsync(ServiceClient()), transactionId)).GetProperty("payload");
+
+        Assert.Equal(cardId, payload.GetProperty("creditCardId").GetGuid());
+        Assert.Equal(1, payload.GetProperty("installments").GetInt32());
+        Assert.Equal("Notebook", payload.GetProperty("description").GetString());
+    }
+
+    [Fact]
+    public async Task CardDetailsBackfill_CompletesCardPurchasesWithAV1Event_Once()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        var cardId = Guid.NewGuid();
+        Transaction NewTransaction(PaymentMethod method, Guid? card, string description) => Transaction.Create(
+            Guid.NewGuid(), Guid.NewGuid(), TransactionType.Expense, method, card,
+            description, "Mercado", 80m, "BRL", new DateOnly(2025, 12, 1), null, DateTimeOffset.UtcNow).Value;
+        var legacyCard = NewTransaction(PaymentMethod.CreditCard, cardId, "Compra antiga");
+        var legacyPix = NewTransaction(PaymentMethod.Pix, null, "Pix antigo");
+        db.Transactions.AddRange(legacyCard, legacyPix);
+        // Eventos v1, como gravados antes da INV-2.
+        foreach (var legacy in new[] { legacyCard, legacyPix })
+        {
+            db.OutboxEvents.Add(new OutboxEvent
+            {
+                EventId = Guid.NewGuid(), EventType = "TransactionRegistered", Version = 1, AggregateId = legacy.Id,
+                OwnerUserId = legacy.OwnerUserId, OccurredAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5), Payload = "{}",
+            });
+        }
+
+        await db.SaveChangesAsync();
+        // Compra no cartao ja com evento v2: nao precisa de backfill.
+        var current = await CreateCardPurchaseAsync();
+
+        var first = await CardDetailsBackfill.RunAsync(db, TimeProvider.System);
+        var second = await CardDetailsBackfill.RunAsync(db, TimeProvider.System);
+
+        Assert.True(first >= 1);
+        Assert.Equal(0, second);
+        var events = await ReadAllEventsAsync(ServiceClient());
+        var resolved = Assert.Single(EventsFor(events, legacyCard.Id), e => e.GetProperty("eventType").GetString() == "TransactionCardDetailsResolved");
+        var payload = resolved.GetProperty("payload");
+        Assert.Equal((cardId, 1, "Compra antiga"),
+            (payload.GetProperty("creditCardId").GetGuid(), payload.GetProperty("installments").GetInt32(), payload.GetProperty("description").GetString()));
+        Assert.DoesNotContain(EventsFor(events, legacyPix.Id), e => e.GetProperty("eventType").GetString() == "TransactionCardDetailsResolved");
+        Assert.DoesNotContain(EventsFor(events, current), e => e.GetProperty("eventType").GetString() == "TransactionCardDetailsResolved");
+    }
+
+    private async Task<Guid> CreateCardPurchaseAsync()
+    {
+        var response = await UserClient(Guid.NewGuid()).PostAsJsonAsync("/transactions", new
+        {
+            accountId = Guid.NewGuid(), type = "Expense", paymentMethod = "CreditCard", creditCardId = Guid.NewGuid(),
+            description = "Atual", category = "X", amount = 10m, currency = "BRL", occurredOn = "2026-11-20",
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
     [Fact]
