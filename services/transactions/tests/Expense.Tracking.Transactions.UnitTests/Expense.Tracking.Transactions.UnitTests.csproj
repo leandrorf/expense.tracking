@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Domain\Expense.Tracking.Transactions.Domain.csproj" />
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Application\Expense.Tracking.Transactions.Application.csproj" />
+    <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Infrastructure\Expense.Tracking.Transactions.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

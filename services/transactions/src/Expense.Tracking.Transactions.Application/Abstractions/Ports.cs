@@ -1,4 +1,6 @@
 using Expense.Tracking.Transactions.Application.Events;
+using Expense.Tracking.Transactions.Domain.Common;
+using Expense.Tracking.Transactions.Domain.Imports.Csv;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Abstractions;
@@ -49,6 +51,15 @@ public interface IAccountsClient
     Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken);
 
     Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// IMP-3: separa os bytes de um CSV em celulas (codificacao, separador, aspas). Sem I/O: o arquivo
+/// ja esta em memoria. Erros nunca citam o conteudo do arquivo (ADR-0004, decisao 8).
+/// </summary>
+public interface ICsvTableReader
+{
+    Result<CsvTable> Read(ReadOnlySpan<byte> content);
 }
 
 /// <summary>Fornece o access token do usuario atual para encaminhar em chamadas entre servicos.</summary>
