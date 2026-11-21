@@ -756,7 +756,234 @@ contrato da API descrito na história de backend antes da de frontend.
 
 ---
 
+## 🔵 EPIC INV — Fatura de cartão e previsão de caixa  · *To Do*
+**Problema:** o cartão de crédito é o meio mais usado, mas o produto só enxerga a compra no dia em
+que ela aconteceu. O usuário não sabe quanto vai pagar na próxima fatura, em que dia, nem quanto as
+compras de hoje vão pesar no caixa dos próximos meses. Para piorar, pagar a fatura pela conta e
+registrar esse pagamento como gasto conta o mesmo dinheiro duas vezes (as compras no cartão e o
+pagamento delas).
+**Objetivo (outcome):** para cada cartão, o usuário vê a fatura atual (aberta), as próximas e as já
+fechadas, com total, data de fechamento, vencimento e situação (aberta, fechada, paga, parcialmente
+paga, vencida). Registra o pagamento da fatura sem que ele vire gasto. Vê uma previsão de caixa
+mês a mês, que junta o que já está lançado com data futura e as faturas a vencer, separada por
+escopo PF/PJ.
+**Métricas de sucesso:** (1) o total de uma fatura fechada bate com a soma das compras do ciclo
+(conferido contra a fatura importada do banco); (2) nenhum pagamento de fatura entra como gasto no
+Resumo ou nos orçamentos; (3) a previsão dos próximos meses mostra o que sai por causa do cartão,
+inclusive parcelas; (4) as jornadas PF e PJ (comprar, fechar, pagar, prever) passam no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → Domínio ("controle de gastos PF e PJ"; cartões de crédito com
+ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do produto
+(2026-11-21). Recebe a "conciliação de fatura de cartão" que o épico IMP deixou fora do escopo.
+
+**Achados no código que moldam o épico:**
+- **O cartão já tem ciclo:** `CreditCard` (accounts) guarda `ClosingDay` e `DueDay` (1 a 28, de
+  propósito, para todo mês ter o dia) e `CreditLimit`. Não há edição de cartão: só criar e
+  desativar. Mudar o dia de fechamento hoje é criar outro cartão.
+- **Não existe fatura.** Nada agrupa as compras de um cartão por ciclo; o lançamento só tem
+  `OccurredOn` e `CreditCardId`. Resumo e orçamentos contam pela data da compra (competência), e
+  isso continua certo para eles: a fatura é a visão de **caixa**, não de competência.
+- **O evento não leva o cartão.** `TransactionRegistered` (EVT-1) tem conta, escopo, meio, categoria,
+  valor e data, mas **não** o `CreditCardId`. A projeção do `reporting` (`ProjectedTransaction`)
+  também não. Sem isso, o lado de leitura não sabe de que cartão é cada compra.
+- **O reporting não fala com o accounts.** Desde o EVT, ele só lê o feed de eventos; não conhece o
+  ciclo nem o limite dos cartões.
+- **Não há parcelamento.** Uma compra em 10x vira um lançamento só, com o valor cheio na data da
+  compra. Para a fatura e para o caixa, isso está errado: cada parcela cai numa fatura.
+- **Não há saldo de conta.** `Account` não tem saldo inicial nem saldo corrente; o produto registra
+  fluxos, não posição. Uma previsão de "saldo" precisaria de um ponto de partida que não existe.
+- **Pagamento de fatura vira gasto hoje.** Na importação, o crédito da fatura (o pagamento) já fica
+  fora por padrão (IMP). Mas no **extrato da conta** a mesma saída ("PAG FATURA") é um débito comum
+  e entra como gasto, duplicando as compras do cartão. Lançar o pagamento à mão tem o mesmo efeito.
+- **Lançamento com data futura é aceito** (`Transaction.Create` não limita a data). É o que permite
+  uma previsão a partir do que já está lançado, sem recorrência.
+- **Exclusão é física e não há edição.** Uma compra parcelada errada se corrige excluindo e lançando
+  de novo; a fatura e a previsão precisam acompanhar a exclusão (`TransactionDeleted`).
+
+**Decisões em aberto (vão para a ADR da INV-1; abaixo, a recomendação de cada uma):**
+1. **Onde a fatura é calculada.** Opções: (a) no `reporting`, a partir da projeção, como os
+   orçamentos (ADR-0002); (b) no `transactions`, que já tem o `CreditCardId` e chama o accounts.
+   *Recomendação: (a)*. Fatura e previsão são leitura e agregação; as escritas (compra, parcelas,
+   pagamento) ficam no `transactions`. Custa levar o cartão e as parcelas no evento (decisão 2) e o
+   `reporting` ler o ciclo dos cartões no accounts (decisão 3). A (b) evita mudar o evento, mas
+   espalha o lado de leitura em dois serviços: a previsão de caixa precisaria das faturas e dos demais
+   lançamentos juntos.
+2. **Contrato do evento.** *Recomendação:* `TransactionRegistered` **versão 2**, com `CreditCardId` e
+   `Installments` (1 quando à vista). O `reporting` aceita v1 e v2. Os lançamentos anteriores ganham
+   os campos por um backfill no `transactions`, no padrão da EVT-4: um
+   `TransactionCardDetailsResolved` por lançamento de cartão já existente, idempotente.
+3. **Ciclo do cartão no reporting.** Opções: (a) ler `GET /credit-cards` no accounts na hora da
+   consulta, com o token do usuário (poucos cartões por usuário); (b) eventos de cartão do accounts
+   para uma projeção. *Recomendação: (a)*. O ciclo não muda (não há edição de cartão), a consulta é
+   barata e evita um segundo feed de eventos. Se um dia o cartão ganhar edição, a (b) volta à mesa.
+4. **Em que fatura cai uma compra.** *Recomendação:* compra **até o dia de fechamento** (inclusive)
+   cai na fatura que fecha naquele mês; **depois** dele, na do mês seguinte. O vencimento é no mesmo
+   mês do fechamento quando `DueDay > ClosingDay`, e no mês seguinte quando não. A fatura é
+   identificada por cartão e **mês de vencimento** (`2026-12`), como o banco a chama. Sem calendário
+   de dias úteis: fechamento e vencimento no fim de semana ficam no dia cadastrado (o banco costuma
+   adiar o vencimento; registrar como limitação conhecida).
+5. **Parcelamento.** Opções: (a) fora do escopo: a compra entra cheia na fatura da compra;
+   (b) compra com número de parcelas (2 a 24), **um lançamento só**, e a fatura distribui as parcelas
+   nas faturas seguintes; (c) N lançamentos, um por parcela. *Recomendação: (b)*. Resumo e orçamentos
+   seguem contando a compra inteira na data da compra (competência, sem mudar a BDG nem o Resumo);
+   só fatura, limite e previsão olham as parcelas. Excluir a compra tira todas as parcelas de uma vez.
+   A parcela é `valor / n` arredondada a centavos, com a diferença na primeira. Juros de parcelamento
+   ficam de fora (o valor lançado já é o total).
+6. **Pagamento de fatura.** Opções: (a) lançamento de um tipo novo (nem gasto nem receita);
+   (b) registro próprio, `card_payments` no `transactions` (cartão, mês de vencimento da fatura, conta
+   de onde saiu, valor, data), com o evento `CardInvoicePaid` no outbox. *Recomendação: (b)*. O
+   pagamento não é gasto: não pode cair no Resumo, nos orçamentos, no "Sem orçamento" nem nas
+   sugestões de categoria, e um tipo novo de lançamento obrigaria todos esses pontos a filtrá-lo.
+   Pagamento parcial e pagamento acima do total são aceitos (a diferença fica visível na fatura).
+   Excluir o pagamento é permitido (`CardInvoicePaymentDeleted`).
+7. **Situação da fatura.** *Recomendação:* calculada, nunca guardada. **Aberta** até o fechamento;
+   **Fechada** entre o fechamento e o vencimento; **Paga** quando os pagamentos cobrem o total;
+   **Parcialmente paga** quando cobrem parte; **Vencida** depois do vencimento sem cobrir o total.
+   Estorno (receita no cartão) abate do total da fatura em que cai.
+8. **Previsão de caixa.** Opções: (a) fluxo mês a mês (entradas, saídas fora do cartão, faturas a
+   vencer e o resultado do mês), sem saldo; (b) saldo projetado, exigindo saldo inicial por conta.
+   *Recomendação: (a)* no Must, com horizonte de 6 meses a partir do mês atual, por escopo PF/PJ e
+   total. Cartão entra pela **fatura no mês de vencimento**, nunca pela data da compra (senão conta
+   duas vezes). Pagamentos de fatura já feitos saem do que falta pagar. A (b) vira uma história Could
+   (saldo inicial informado pelo usuário). A previsão só conhece o que está lançado: não há
+   recorrência, e isso precisa estar escrito na tela.
+9. **Limite disponível.** *Recomendação:* limite menos o que ainda não foi pago de todas as faturas
+   do cartão, **incluindo parcelas futuras** (é assim que o banco reserva o limite). Só leitura, sem
+   bloquear lançamento acima do limite (o produto registra, não autoriza).
+10. **Pagamento de fatura no extrato importado.** *Recomendação:* na prévia de um extrato de conta, a
+    linha cujo memo indica pagamento de fatura ("PAG FATURA", "PAGAMENTO FATURA", "PGTO CARTAO") vem
+    sugerida como **pagamento de fatura** de um cartão da conta (escolhido pelo usuário quando houver
+    mais de um), e a confirmação cria o `card_payment` em vez de um gasto. Reaproveita as pistas no
+    memo da IMP-6.
+11. **Rotas e escopos.** *Recomendação:* faturas em `GET /reports/cards/{id}/invoices` e previsão em
+    `GET /reports/cash-forecast` (reporting, escopo `expenses.read`); pagamentos em
+    `/transactions/card-payments` (escopo `expenses.write`). Tudo pela rota existente do gateway; o
+    cartão de outro usuário dá 404.
+
+- 🔵 **INV-1** ADR: fatura, parcelas, pagamento e previsão de caixa.
+  - *Dado* as decisões em aberto 1 a 11 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR é registrada como **Aceita** em `docs/adr/` (0005, com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **INV-2** Cartão e parcelas no evento, com backfill dos lançamentos anteriores.
+  - *Dado* uma compra no cartão, *quando* é registrada, *então* o `TransactionRegistered` sai na
+    versão 2 com `creditCardId` e `installments`, e a projeção do `reporting` guarda os dois.
+  - *Dado* lançamentos de cartão gravados antes da v2, *quando* o `transactions` sobe, *então* cada um
+    ganha um `TransactionCardDetailsResolved` uma vez só (reiniciar não duplica) e a projeção é
+    completada.
+  - *Dado* um evento v1 ainda no feed, *quando* o `reporting` o lê, *então* ele é aplicado como antes
+    (à vista, sem cartão até o backfill).
+  - Estimativa: 5 · **Must** · Dependências: INV-1
+- 🔵 **INV-3** Regra do ciclo: fatura de cada compra e de cada parcela (domínio, sem I/O).
+  - *Dado* um cartão que fecha no dia 10 e vence no dia 17, *quando* a compra é no dia 10, *então*
+    cai na fatura que vence dia 17 do mesmo mês; no dia 11, na do mês seguinte.
+  - *Dado* um cartão que fecha no dia 25 e vence no dia 5, *quando* a compra é no dia 20 de
+    novembro, *então* a fatura vence em 5 de dezembro.
+  - *Dado* uma compra de R$ 100,00 em 3x, *quando* é distribuída, *então* as parcelas são 33,34,
+    33,33 e 33,33 em três faturas seguidas, a partir da fatura da compra.
+  - *Dado* uma receita no cartão (estorno), *quando* cai num ciclo, *então* abate do total daquela
+    fatura.
+  - Estimativa: 3 · **Must** · Dependências: INV-1
+- 🔵 **INV-4** API das faturas de um cartão.
+  - *Dado* um cartão do usuário, *quando* consulto `GET /reports/cards/{id}/invoices`, *então*
+    recebo as faturas (fechadas, a atual e as próximas com parcelas), cada uma com mês de
+    vencimento, datas de fechamento e vencimento, total, pago, a pagar, situação e os itens (compra
+    ou parcela "3/10").
+  - *Dado* o cartão de outro usuário, *quando* consulto, *então* recebo 404; sem token, 401.
+  - *Dado* uma compra excluída, *quando* a projeção aplica o `TransactionDeleted`, *então* ela e suas
+    parcelas somem de todas as faturas.
+  - Estimativa: 5 · **Must** · Dependências: INV-2, INV-3
+- 🔵 **INV-5** Compra parcelada.
+  - *Dado* o formulário de lançamento com meio cartão de crédito, *quando* informo 10 parcelas,
+    *então* o lançamento é criado com `installments = 10` e o valor total.
+  - *Dado* parcelas fora de 1 a 24, ou parcelas num meio que não é cartão de crédito, *quando* envio,
+    *então* recebo 400 com código estável.
+  - *Dado* uma compra parcelada, *quando* olho o Resumo e os orçamentos, *então* ela conta inteira no
+    mês da compra (sem mudança de comportamento).
+  - Estimativa: 5 · **Should** · Dependências: INV-2
+- 🔵 **INV-6** Registrar e excluir o pagamento de uma fatura.
+  - *Dado* uma fatura de um cartão do usuário, *quando* registro um pagamento (conta de origem,
+    valor, data), *então* ele é gravado com um `CardInvoicePaid` no outbox e a fatura passa a Paga ou
+    Parcialmente paga.
+  - *Dado* um pagamento registrado, *quando* olho o Resumo, os orçamentos e o "Sem orçamento",
+    *então* ele não aparece como gasto em nenhum deles.
+  - *Dado* um pagamento registrado por engano, *quando* o excluo, *então* a fatura volta à situação
+    anterior.
+  - *Dado* cartão ou conta de outro usuário, *quando* tento pagar, *então* recebo 404.
+  - Estimativa: 5 · **Must** · Dependências: INV-4
+- 🔵 **INV-7** Faturas na SPA.
+  - *Dado* o usuário logado, *quando* abre a fatura de um cartão (a partir da aba Cartões), *então*
+    vê a fatura atual e navega pelas anteriores e próximas, com total, vencimento, situação e itens.
+  - *Dado* uma fatura fechada ou vencida, *quando* clica em "Registrar pagamento", *então* informa
+    conta, valor (o que falta, por padrão) e data, e a situação muda.
+  - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
+- 🔵 **INV-8** API da previsão de caixa.
+  - *Dado* lançamentos com data futura, compras no cartão e pagamentos, *quando* consulto
+    `GET /reports/cash-forecast?months=6`, *então* recebo, por mês e por escopo (PF, PJ e total):
+    entradas, saídas fora do cartão, faturas a vencer (o que falta pagar) e o resultado do mês.
+  - *Dado* uma compra no cartão em 10x, *quando* olho a previsão, *então* cada parcela aparece no mês
+    de vencimento da sua fatura, e a compra não aparece de novo na data em que foi feita.
+  - *Dado* uma fatura já paga, *quando* olho a previsão, *então* ela não conta como saída a vencer.
+  - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
+- 🔵 **INV-9** Previsão de caixa na SPA.
+  - *Dado* o usuário logado, *quando* abre a previsão, *então* vê os próximos 6 meses com entradas,
+    saídas, faturas e resultado, com filtro PF/PJ, e um aviso de que só entra o que já está lançado.
+  - Estimativa: 3 · **Must** · Dependências: INV-8
+- 🔵 **INV-10** Limite disponível do cartão.
+  - *Dado* um cartão com limite de R$ 5.000,00 e R$ 1.200,00 a pagar (incluindo parcelas futuras),
+    *quando* olho o cartão, *então* vejo R$ 3.800,00 disponíveis, sem bloquear novos lançamentos.
+  - Estimativa: 3 · **Should** · Dependências: INV-4
+- 🔵 **INV-11** Pagamento de fatura reconhecido na importação do extrato.
+  - *Dado* um extrato de conta com a linha "PAG FATURA CARTAO", *quando* vejo a prévia, *então* ela
+    vem sugerida como pagamento de fatura de um cartão da conta, e confirmar cria o pagamento, não
+    um gasto.
+  - *Dado* a sugestão errada, *quando* troco a linha para lançamento comum, *então* ela entra como
+    gasto, como hoje.
+  - Estimativa: 3 · **Should** · Dependências: INV-6, IMP-6
+- 🔵 **INV-12** E2E Cypress: fatura e previsão nas jornadas PF e PJ.
+  - *Dado* um cartão PF, *quando* lanço uma compra à vista e outra em 3x, *então* a fatura atual e as
+    duas seguintes mostram as parcelas e a previsão mostra cada uma no mês de vencimento.
+  - *Dado* um cartão PJ com fatura fechada, *quando* registro o pagamento, *então* a fatura fica Paga,
+    a previsão deixa de contá-la e o Resumo PJ não ganha gasto novo.
+  - Estimativa: 5 · **Must** · Dependências: INV-7, INV-9
+- 🔵 **INV-13** Saldo inicial por conta na previsão.
+  - *Dado* uma conta com saldo informado pelo usuário numa data, *quando* olho a previsão, *então*
+    vejo também o saldo projetado no fim de cada mês, por escopo.
+  - Estimativa: 3 · **Could** · Dependências: INV-8
+
+**Fora do escopo (Won't, nesta versão):** editar o ciclo do cartão (continua sendo criar outro
+cartão); calendário de dias úteis e feriados no fechamento e no vencimento; juros, multa e
+rotativo; IOF e compras em moeda estrangeira; recorrência de lançamentos (assinaturas, salário) na
+previsão; antecipação de parcelas; notificação de vencimento por e-mail ou push; conciliação
+automática do total calculado com o total da fatura importada do banco.
+
+**Priorização (MoSCoW):** Must = INV-1, 2, 3, 4, 6, 7, 8, 9, 12 (38 pts), o mínimo para ver a
+fatura, pagá-la sem duplicar gasto e prever o caixa, provado ponta a ponta nos dois escopos.
+Should = INV-5, 10, 11 (11 pts): parcelamento é o que mais muda a previsão no uso real e o Should
+mais valioso; limite e o pagamento reconhecido na importação vêm em seguida. Could = INV-13 (3 pts).
+Total: 52 pts. Sugestão de ordem: INV-1 → 3 (domínio puro, em paralelo com a 2) → 2 → 4 → 6 → 7 →
+8 → 9 → 12, e os Should depois.
+
+**Definition of Ready (por história):** decisões da INV-1 aceitas; exemplos de ciclo (fechamento
+antes e depois do vencimento, compra no dia do fechamento, parcelas atravessando o ano) escritos
+como casos de teste antes da INV-3; contrato da API descrito na história de backend antes da de
+frontend.
+
+**Definition of Done do épico:**
+- CI verde no PR: `build & test` dos serviços afetados e `Cypress E2E` (os 5 checks exigidos no
+  `main`).
+- Testes unitários da regra do ciclo e das parcelas (INV-3), da situação da fatura e da previsão.
+- Testes de integração: isolamento por dono (404 em cartão, conta e pagamento alheios), 401/403 por
+  escopo, evento v1 e v2 lado a lado, backfill idempotente, pagamento fora do Resumo e dos
+  orçamentos.
+- E2E das jornadas PF e PJ (INV-12) no job do CI; smoke test (`build/smoke-test.mjs`) cobrindo
+  compra no cartão, fatura, pagamento e previsão pelo gateway.
+- Migrações EF no `expense_transactions` e no `expense_reporting`; métricas da projeção
+  (`reporting.projection.lag`) acompanhadas durante o backfill.
+- `docs/architecture.md`, a ADR da INV-1 e o histórico do `docs/PROMPT.md` atualizados; validado ao
+  vivo no `docker compose`.
+
+---
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
-- Fechamento de fatura de cartão e previsão de caixa.
 - Exportação contábil (relatório PJ para o contador).
