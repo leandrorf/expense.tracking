@@ -552,7 +552,7 @@ produto (2026-11-21).
     Kestrel e no gateway; id do lote guardado em cada lançamento criado (para a IMP-9);
     `CreditCard` não aceito como meio em extrato de conta.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O).
+- ✅ **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O). → `Domain/Imports/Ofx/OfxReader`; exemplos sintéticos em `tests/.../Imports/Samples/`.
   - *Dado* um OFX 1.x (SGML, Windows-1252) de extrato de conta corrente de banco brasileiro,
     *quando* é lido, *então* cada `STMTTRN` vira uma linha com data, valor com sinal, memo e `FITID`.
   - *Dado* um OFX 2.x (XML) de fatura de cartão (`CREDITCARDMSGSRSV1`), *quando* é lido, *então* as
@@ -563,6 +563,10 @@ produto (2026-11-21).
   - *Dado* um arquivo truncado ou que não é OFX, *quando* é lido, *então* o erro diz o motivo sem
     ecoar o conteúdo do arquivo.
   - Testes unitários com arquivos de exemplo **sintéticos** (nunca extrato real) no repositório.
+  - Feito também: `FITID` repetido no mesmo arquivo (há bancos que repetem) vira `FITID#2`, `#3`…;
+    valor com vírgula decimal aceito; descrição pelo `MEMO`, ou `NAME` sem `MEMO`; arquivo com mais
+    de uma conta recusado com `import.multiple_statements`. Linha sem `FITID` fica sem chave: a
+    IMP-4 usa a impressão digital da IMP-3 como alternativa.
   - Estimativa: 5 · **Must** · Dependências: IMP-1
 - 🔵 **IMP-3** Ler CSV com mapeamento de colunas (domínio, sem I/O).
   - *Dado* um CSV com `;`, decimal com vírgula e data `dd/MM/yyyy`, *quando* é lido com o
