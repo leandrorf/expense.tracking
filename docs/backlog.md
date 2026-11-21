@@ -314,6 +314,149 @@ QA; contrato da API (rota, payload, erros) descrito na história de backend ante
 
 ---
 
+## 🔵 EPIC IDX — Identity em repositório próprio  · *To Do*
+**Problema:** o projeto é de microserviços em tempo de execução (cada serviço com processo, banco e
+deploy próprios), mas o `identity` ainda nasce, compila, testa e é versionado junto com os
+consumidores dele. Uma mudança no servidor de autenticação passa pelo CI de todo o monorepo, e uma
+mudança nos consumidores pode exigir mexer no código do `identity` (clientes e escopos fixos nele).
+**Objetivo (outcome):** o `identity` vive em um repositório próprio, com CI, versionamento e imagem
+Docker próprios. O monorepo passa a consumi-lo como qualquer serviço externo (imagem com versão
+fixada) e é dono da própria configuração de clientes OAuth, escopos e usuário demo, sem precisar de
+release do `identity` para isso.
+**Métricas de sucesso:** (1) o monorepo não tem mais código do `identity` e o stack sobe só com a
+imagem publicada; (2) um cliente ou escopo novo no monorepo não exige mudança no repositório do
+`identity`; (3) o E2E do monorepo continua verde contra a versão fixada da imagem; (4) o repositório
+do `identity` tem CI próprio verde e o `main` dele protegido.
+**Rastreabilidade:** `docs/PROMPT.md` → Arquitetura ("microserviços backend", "OAuth2 próprio").
+Iniciativa pedida pelo dono do produto (2026-11-21).
+
+**Achados no código que moldam o épico:**
+- **Sem referência de código entre serviços.** O `identity` não usa projeto de outro serviço (nenhum
+  `ProjectReference` fora de `services/identity`). A separação é de build, CI e configuração.
+- **Build compartilhado.** O `identity` herda `Directory.Build.props` (net10.0, nullable,
+  `InvariantGlobalization`), `Directory.Packages.props` (versões centrais) e `NuGet.config` da raiz.
+  O `Dockerfile` usa a raiz do monorepo como contexto. No repositório novo, esses arquivos viram
+  cópias próprias (as versões de pacote podem divergir entre os repositórios com o tempo).
+- **Configuração dos consumidores escrita no código.** O `IdentitySeeder` fixa o cliente da SPA
+  (redirect `http://localhost:5173/callback`, escopos `expenses.*`), o cliente
+  `expense-tracking-service` com `events.read` e `accounts.scopes.read` (EVT-1, EVT-4) e o usuário
+  `demo@expense.local`; o CORS e a tela de login também citam a SPA e o usuário demo. Hoje, cada
+  escopo de serviço novo (como os do EVT) exigiu mudar o `identity`.
+- **Todos dependem dele em tempo de execução.** No `docker-compose.yml`, os outros 4 serviços e a
+  SPA apontam para `identity:8080` (JWKS interno, token endpoint de serviço) e para o issuer
+  público `http://localhost:5080`. O contrato que precisa ficar estável é o OIDC: discovery, JWKS,
+  `/oauth/authorize`, `/oauth/token` e as claims `sub`/`scope`.
+- **CI e gate.** A matriz do `ci.yml` tem `identity`; o ruleset `main gate (CI-3)` exige o check
+  `build & test (identity)`; o `e2e.yml` sobe o stack com `--build` (inclusive o `identity`) e o
+  login do Cypress passa pela tela dele.
+- **Histórico pequeno.** Só 8 commits tocam `services/identity`, o que torna barato levar o
+  histórico junto.
+
+**Decisões em aberto (registrar na próxima ADR livre, IDX-1; a recomendação vem primeiro):**
+1. **Como o monorepo consome o `identity`.** Opções: (a) imagem Docker publicada no GitHub
+   Container Registry (`ghcr.io/leandrorf/expense-identity`) com versão fixada no compose;
+   (b) submódulo git; (c) o CI clona o outro repositório e faz o build. *Recomendação: (a)*. É o
+   jeito de consumir um serviço independente: o monorepo nem compila o `identity`. (b) e (c)
+   mantêm o acoplamento de build que o épico quer remover.
+2. **Versão.** *Recomendação:* SemVer com tag git (`v1.0.0`) gerando a imagem com a mesma tag; o
+   monorepo fixa a versão exata (nunca `latest`) e sobe de versão por PR, que roda o E2E. Mudança
+   incompatível no contrato OIDC (claims, rotas, escopos) = versão major.
+3. **Nome e visibilidade.** *Recomendação:* repositório `leandrorf/expense-identity`, **público**
+   como o atual, e imagem pública no GHCR, para o compose e o CI do monorepo baixarem sem
+   credencial.
+4. **Histórico.** *Recomendação:* levar o histórico de `services/identity` com `git filter-repo`
+   (8 commits) e remover a pasta do monorepo só depois que a imagem publicada estiver em uso.
+5. **Configuração dos clientes.** *Recomendação:* clientes OAuth, escopos, origens de CORS e usuário
+   demo saem do código e passam a vir de configuração (`Seed:Clients`, `Seed:Users`, `Cors:AllowedOrigins`),
+   com o seed continuando idempotente e reconciliando escopos. O `docker-compose.yml` do monorepo
+   passa a declarar os clientes dele. Sem configuração, o `identity` sobe sem cliente nenhum.
+   **Feito antes da extração, ainda no monorepo** (IDX-2), para separar a mudança de comportamento
+   da mudança de lugar.
+6. **Desenvolvimento local.** *Recomendação:* o compose usa a imagem por padrão; um
+   `docker-compose.identity-local.yml` opcional faz o build a partir de um clone local do
+   repositório do `identity` (caminho por variável), para testar as duas mudanças juntas.
+7. **Proteção do contrato.** *Recomendação:* o repositório do `identity` roda, no CI, um teste de
+   contrato OIDC contra o container (discovery, JWKS, Authorization Code + PKCE, refresh,
+   client credentials, claims), para não quebrar consumidores sem perceber. O E2E do monorepo
+   continua sendo a prova ponta a ponta.
+
+- 🔵 **IDX-1** ADR: identity em repositório próprio.
+  - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR é registrada como **Aceita** em `docs/adr/` (índice atualizado) e o PO ajusta as
+    histórias seguintes ao que foi decidido.
+  - Numeração: a próxima livre (0003 se vier antes da IMP-1 do épico IMP).
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **IDX-2** Clientes, escopos, CORS e usuário demo por configuração (ainda no monorepo).
+  - *Dado* o `identity` sem nenhum cliente no código, *quando* sobe com os clientes declarados na
+    configuração (o compose do monorepo), *então* o login da SPA, o client credentials do serviço e
+    o E2E funcionam como hoje.
+  - *Dado* um escopo novo adicionado só na configuração de um cliente existente, *quando* o
+    `identity` reinicia, *então* o cliente passa a ter o escopo sem recriar o banco (reconciliação).
+  - *Dado* nenhuma configuração de cliente, *quando* o `identity` sobe, *então* ele funciona sem
+    clientes e sem usuário demo (nada de padrão escondido no código).
+  - Origem do CORS e texto de demo da tela de login vêm da mesma configuração.
+  - Estimativa: 5 · **Must** · Dependências: IDX-1
+- 🔵 **IDX-3** Repositório `expense-identity` com histórico, build e CI próprios.
+  - *Dado* o repositório novo criado com o histórico de `services/identity`, *quando* um PR é aberto
+    nele, *então* o CI roda build, testes unitários e de integração e fica verde.
+  - Build autônomo: cópias de `Directory.Build.props`, `Directory.Packages.props` (só os pacotes
+    usados) e `NuGet.config`; `Dockerfile` com a raiz do próprio repositório como contexto.
+  - `main` protegido por ruleset (check de build e teste obrigatório, sem force-push), no mesmo
+    padrão do CI-3.
+  - Estimativa: 3 · **Must** · Dependências: IDX-2
+- 🔵 **IDX-4** Publicar a imagem versionada no GHCR.
+  - *Dado* uma tag `vX.Y.Z` no repositório do `identity`, *quando* o workflow de release roda,
+    *então* a imagem `ghcr.io/leandrorf/expense-identity:X.Y.Z` é publicada, pública, com os
+    rótulos OCI de origem e versão.
+  - *Dado* um push sem tag, *quando* o CI roda, *então* a imagem é construída (para pegar erro de
+    Dockerfile) mas não é publicada.
+  - Estimativa: 3 · **Must** · Dependências: IDX-3
+- 🔵 **IDX-5** Monorepo consome a imagem e remove o código do `identity`.
+  - *Dado* o `docker-compose.yml` com `image: ghcr.io/leandrorf/expense-identity:<versão fixada>`,
+    *quando* subo o stack, *então* tudo funciona sem `services/identity` no repositório (smoke 17/17).
+  - *Dado* um PR no monorepo, *quando* o CI roda, *então* a matriz não tem mais `identity`, o
+    `e2e.yml` baixa a imagem fixada e o Cypress passa.
+  - Ruleset do `main` sem o check `build & test (identity)` (mudança feita no mesmo PR, para o gate
+    não travar esperando um check que não existe mais).
+  - `docker-compose.identity-local.yml` opcional para build a partir de um clone local; README com
+    os dois jeitos.
+  - Estimativa: 5 · **Must** · Dependências: IDX-4
+- 🔵 **IDX-6** Teste de contrato OIDC no repositório do `identity`.
+  - *Dado* o container do `identity` com um cliente de teste configurado, *quando* o CI roda o teste
+    de contrato, *então* ele valida discovery, JWKS, Authorization Code + PKCE, refresh com rotação,
+    client credentials e as claims `sub`/`scope` que os serviços usam.
+  - *Dado* uma mudança que remove ou renomeia uma claim, *quando* o PR roda, *então* o teste falha.
+  - Estimativa: 3 · **Should** · Dependências: IDX-3
+- 🔵 **IDX-7** Atualização de versão da imagem no monorepo.
+  - *Dado* uma versão nova da imagem publicada, *quando* o Dependabot (ecossistema `docker-compose`)
+    roda, *então* abre um PR no monorepo trocando a versão fixada, e o E2E do PR prova a
+    compatibilidade.
+  - Estimativa: 2 · **Should** · Dependências: IDX-5
+
+**Fora do escopo (Won't, nesta versão):** extrair os outros serviços (`accounts`, `transactions`,
+`reporting`, `gateway`) para repositórios próprios (avaliar depois desta experiência); biblioteca
+NuGet compartilhada entre repositórios; deploy em nuvem ou orquestrador (Kubernetes); mudar o
+protocolo ou as claims do OAuth2.
+
+**Priorização (MoSCoW):** Must = IDX-1, 2, 3, 4, 5 (18 pts), o mínimo para o monorepo rodar e testar
+sem o código do `identity`. Should = IDX-6, 7 (5 pts): protegem o contrato e mantêm a versão em dia
+sem trabalho manual. Total: 23 pts. **Independente do épico IMP** (que mexe no `transactions`); a
+recomendação é fazer o IDX primeiro, porque ele muda o CI e o gate que todos os PRs seguintes usam.
+
+**Definition of Ready (por história):** decisões da IDX-1 aceitas; repositório e GHCR com permissão
+de escrita para a conta `leandrorf` (`gh` ativo, ver memória do projeto).
+
+**Definition of Done do épico:**
+- CI verde nos dois repositórios; `main` protegido nos dois.
+- O monorepo sobe e passa no smoke e no E2E só com a imagem publicada, sem `services/identity`.
+- Configuração dos clientes OAuth do monorepo declarada no próprio monorepo.
+- Testes de integração do `identity` cobrindo o seed por configuração (reconciliação de escopos,
+  sem configuração = sem clientes).
+- `docs/architecture.md`, a ADR, o `README.md` dos dois repositórios, o histórico do
+  `docs/PROMPT.md` e a memória do projeto atualizados.
+
+---
+
 ## 🔵 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *To Do*
 **Problema:** todo lançamento hoje é digitado à mão, um por um. Quem tem dezenas de gastos por mês
 em cartão e conta (PF e PJ) desiste de registrar, e aí o Resumo e os orçamentos ficam incompletos.
@@ -353,7 +496,7 @@ produto (2026-11-21).
 - **Sem bibliotecas pagas** (decisão do projeto). As bibliotecas OFX para .NET estão abandonadas;
   para CSV, o `CsvHelper` tem licença livre (MS-PL/Apache 2.0).
 
-**Decisões em aberto (registrar na ADR-0003, IMP-1; a recomendação vem primeiro):**
+**Decisões em aberto (registrar na próxima ADR livre, IMP-1; a recomendação vem primeiro):**
 1. **Onde mora a importação.** Opções: (a) módulo no `transactions`; (b) serviço novo `imports`.
    *Recomendação: (a)*. Quem cria lançamentos e escreve no outbox é o `transactions`; um serviço
    novo teria de chamar a API dele linha a linha ou dividir o banco. A leitura do arquivo fica em
@@ -393,10 +536,11 @@ produto (2026-11-21).
 9. **Rota.** *Recomendação:* `/imports` no `transactions`, exposto como `/api/imports/**` no
    gateway, antes do catch-all `/api/**`.
 
-- 🔵 **IMP-1** ADR-0003: onde mora a importação e regras do modelo.
+- 🔵 **IMP-1** ADR: onde mora a importação e regras do modelo.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
-    *então* a ADR-0003 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    *então* a ADR é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Numeração: a próxima livre (depende de vir antes ou depois da IDX-1).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O).
   - *Dado* um OFX 1.x (SGML, Windows-1252) de extrato de conta corrente de banco brasileiro,
@@ -520,8 +664,8 @@ contrato da API descrito na história de backend antes da de frontend.
   enviar, confirmar e ler o lançamento pelo gateway.
 - Migração EF no `expense_transactions`; logs, traces e métricas HTTP chegando pelo pipeline da OBS
   (contadores de linhas importadas e duplicadas).
-- `docs/architecture.md`, a ADR-0003 e o histórico do `docs/PROMPT.md` atualizados; validado ao vivo
-  no `docker compose`.
+- `docs/architecture.md`, a ADR da IMP-1 e o histórico do `docs/PROMPT.md` atualizados; validado ao
+  vivo no `docker compose`.
 
 ---
 

@@ -67,8 +67,9 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 - **Reporting por eventos** ([ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md)): outbox do `transactions` exposto como feed HTTP; o `reporting` mantém uma projeção em banco próprio e o Resumo lê só dela (métrica de atraso no Prometheus). Lançamentos anteriores ao outbox ganharam o escopo PF/PJ por evento.
 
 ### Próximos passos conhecidos
-Épico em refinamento: **IMP — importação de extrato e fatura (CSV/OFX)** em `docs/backlog.md`,
-com decisões em aberto para a ADR-0003. Candidatos a novos épicos (ainda não refinados pelo PO):
+Épicos em refinamento em `docs/backlog.md`, cada um com decisões em aberto para uma ADR:
+**IDX — identity em repositório próprio** (o monorepo passa a consumir o `identity` como imagem
+versionada; recomendado primeiro) e **IMP — importação de extrato e fatura (CSV/OFX)**. Candidatos a novos épicos (ainda não refinados pelo PO):
 fechamento de fatura de cartão e previsão de caixa, exportação contábil PJ.
 
 ---
@@ -94,3 +95,4 @@ documento** como fonte de requisito e delegam execução técnica aos agents esp
 | 2026-11-19 | `reporting` deixa de ser agregador sem banco: passa a manter projeção por eventos em `expense_reporting` (ADR-0001, épico EVT). Novos escopos de serviço `events.read` e `accounts.scopes.read`. | épico EVT |
 | 2026-11-20 | Documento e agents de processo (`.claude/agents/`) passam a ser versionados no repositório. | pedido do usuário |
 | 2026-11-21 | Épico BDG (orçamentos por categoria e escopo, ADR-0002) concluído; `reporting` passa a ter dado escrito pelo usuário. Épico IMP (importação CSV/OFX) refinado no backlog. | épicos BDG/IMP |
+| 2026-11-21 | Iniciativa de levar o `identity` para um repositório próprio (épico IDX): o projeto segue microserviços também no versionamento, começando pela autenticação. | pedido do usuário |
