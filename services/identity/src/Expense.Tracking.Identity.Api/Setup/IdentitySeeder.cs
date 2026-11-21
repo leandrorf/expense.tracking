@@ -7,97 +7,81 @@ using Microsoft.EntityFrameworkCore;
 namespace Expense.Tracking.Identity.Api.Setup;
 
 /// <summary>
-/// Semeia dados de desenvolvimento: um cliente SPA publico, um cliente de servico
-/// confidencial e um usuario demo. Idempotente.
+/// Semeia os clientes OAuth e os usuarios declarados em <see cref="SeedOptions"/> (IDX-2). Idempotente:
+/// cliente existente so ganha os escopos novos da configuracao (bancos antigos recebem escopo novo
+/// sem recriar o cliente); usuario existente fica como esta.
 /// </summary>
 public static class IdentitySeeder
 {
-    public const string SpaClientId = "expense-tracking-spa";
-    public const string ServiceClientId = "expense-tracking-service";
-    public const string DemoUserEmail = "demo@expense.local";
-    public const string DemoUserPassword = "Password123!";
-    public const string ServiceClientSecret = "dev-service-secret";
-
-    public static async Task SeedAsync(IServiceProvider services, CancellationToken cancellationToken = default)
+    public static async Task SeedAsync(IServiceProvider services, SeedOptions options, CancellationToken cancellationToken = default)
     {
+        var errors = options.Validate();
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException("Configuracao de seed invalida:" + Environment.NewLine + string.Join(Environment.NewLine, errors));
+        }
+
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-        var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
-        var now = timeProvider.GetUtcNow();
+        var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
 
-        await SeedSpaClientAsync(db, now, cancellationToken);
-        await SeedServiceClientAsync(db, passwordHasher, now, cancellationToken);
-        await SeedDemoUserAsync(db, passwordHasher, now, cancellationToken);
+        foreach (var (clientId, client) in options.Clients)
+        {
+            await SeedClientAsync(db, passwordHasher, clientId, client, now, cancellationToken);
+        }
+
+        foreach (var (name, user) in options.Users)
+        {
+            await SeedUserAsync(db, passwordHasher, name, user, now, cancellationToken);
+        }
 
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SeedSpaClientAsync(IdentityDbContext db, DateTimeOffset now, CancellationToken ct)
+    private static async Task SeedClientAsync(
+        IdentityDbContext db, IPasswordHasher hasher, string clientId, SeedClientOptions options, DateTimeOffset now, CancellationToken ct)
     {
-        if (await db.Clients.AnyAsync(c => c.ClientId == SpaClientId, ct))
-        {
-            return;
-        }
-
-        var spa = OAuthClient.Create(
-            clientId: SpaClientId,
-            displayName: "Expense Tracking SPA",
-            type: ClientType.Public,
-            clientSecretHash: null,
-            redirectUris: ["http://localhost:5173/callback", "http://localhost:5173/silent-renew"],
-            allowedScopes: ["openid", "profile", "offline_access", "expenses.read", "expenses.write"],
-            allowedGrantTypes: [GrantType.AuthorizationCode, GrantType.RefreshToken],
-            nowUtc: now,
-            requirePkce: true);
-
-        db.Clients.Add(spa);
-    }
-
-    /// <summary>
-    /// Escopos do cliente de servico. <c>events.read</c> (EVT-1) da acesso ao feed de eventos do
-    /// transactions, lido pelo reporting. <c>accounts.scopes.read</c> (EVT-4) da acesso ao escopo
-    /// PF/PJ das contas no accounts, usado pelo transactions para completar eventos legados.
-    /// </summary>
-    private static readonly string[] ServiceClientScopes = ["expenses.read", "expenses.write", "events.read", "accounts.scopes.read"];
-
-    private static async Task SeedServiceClientAsync(IdentityDbContext db, IPasswordHasher hasher, DateTimeOffset now, CancellationToken ct)
-    {
-        var existing = await db.Clients.FirstOrDefaultAsync(c => c.ClientId == ServiceClientId, ct);
+        var existing = await db.Clients.FirstOrDefaultAsync(c => c.ClientId == clientId, ct);
         if (existing is not null)
         {
-            // Bancos criados antes de um escopo novo recebem o escopo sem recriar o cliente.
-            existing.AllowScopes(ServiceClientScopes);
+            existing.AllowScopes(options.Scopes);
             return;
         }
 
-        var service = OAuthClient.Create(
-            clientId: ServiceClientId,
-            displayName: "Expense Tracking Service (M2M)",
-            type: ClientType.Confidential,
-            clientSecretHash: hasher.Hash(ServiceClientSecret),
-            redirectUris: [],
-            allowedScopes: ServiceClientScopes,
-            allowedGrantTypes: [GrantType.ClientCredentials],
+        db.Clients.Add(OAuthClient.Create(
+            clientId: clientId,
+            displayName: string.IsNullOrWhiteSpace(options.DisplayName) ? clientId : options.DisplayName,
+            type: options.Type,
+            clientSecretHash: options.Type == ClientType.Confidential ? hasher.Hash(options.Secret!) : null,
+            redirectUris: options.RedirectUris,
+            allowedScopes: options.Scopes,
+            allowedGrantTypes: options.GrantTypes,
             nowUtc: now,
-            requirePkce: false);
-
-        db.Clients.Add(service);
+            requirePkce: options.RequirePkce));
     }
 
-    private static async Task SeedDemoUserAsync(IdentityDbContext db, IPasswordHasher hasher, DateTimeOffset now, CancellationToken ct)
+    private static async Task SeedUserAsync(
+        IdentityDbContext db, IPasswordHasher hasher, string name, SeedUserOptions options, DateTimeOffset now, CancellationToken ct)
     {
-        var email = Email.Create(DemoUserEmail);
-        if (email.IsFailure || await db.Users.AnyAsync(u => u.Email == email.Value, ct))
+        var email = Email.Create(options.Email!);
+        if (email.IsFailure)
+        {
+            throw new InvalidOperationException($"Configuracao de seed invalida: {SeedOptions.SectionName}:Users:{name}:Email: {email.Error.Description}");
+        }
+
+        if (await db.Users.AnyAsync(u => u.Email == email.Value, ct))
         {
             return;
         }
 
-        var passwordHash = PasswordHash.Create(hasher.Hash(DemoUserPassword));
-        var user = User.Register(email.Value, passwordHash.Value, "Demo User", now);
-        if (user.IsSuccess)
+        var passwordHash = PasswordHash.Create(hasher.Hash(options.Password!));
+        var user = User.Register(email.Value, passwordHash.Value, string.IsNullOrWhiteSpace(options.DisplayName) ? name : options.DisplayName, now);
+        if (user.IsFailure)
         {
-            db.Users.Add(user.Value);
+            throw new InvalidOperationException($"Configuracao de seed invalida: {SeedOptions.SectionName}:Users:{name}: {user.Error.Description}");
         }
+
+        db.Users.Add(user.Value);
     }
 }

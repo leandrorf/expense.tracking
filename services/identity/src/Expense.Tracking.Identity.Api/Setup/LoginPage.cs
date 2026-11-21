@@ -2,6 +2,15 @@ using System.Net;
 
 namespace Expense.Tracking.Identity.Api.Setup;
 
+/// <summary>IDX-2: textos da tela de login que dependem de quem roda o Identity.</summary>
+public sealed class LoginPageOptions
+{
+    public const string SectionName = "LoginPage";
+
+    /// <summary>Dica exibida abaixo do formulario (ex.: credenciais do usuario demo); vazio = sem dica.</summary>
+    public string? Hint { get; set; }
+}
+
 /// <summary>Renderiza a tela de login minima hospedada pelo proprio Identity Provider.</summary>
 public static class LoginPage
 {
@@ -11,12 +20,15 @@ public static class LoginPage
             ? returnUrl
             : "/";
 
-    public static string Render(string returnUrl, string? error = null)
+    public static string Render(string returnUrl, string? error = null, string? hint = null)
     {
         var safeReturn = WebUtility.HtmlEncode(SafeReturnUrl(returnUrl));
         var errorBlock = error is null
             ? string.Empty
             : $"<p class=\"error\" role=\"alert\">{WebUtility.HtmlEncode(error)}</p>";
+        var hintBlock = string.IsNullOrWhiteSpace(hint)
+            ? string.Empty
+            : $"<p class=\"hint\">{WebUtility.HtmlEncode(hint)}</p>";
 
         return $$"""
         <!doctype html>
@@ -53,7 +65,7 @@ public static class LoginPage
             <label for="password">Senha</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required />
             <button type="submit">Entrar</button>
-            <p class="hint">Demo: demo@expense.local / Password123!</p>
+            {{hintBlock}}
           </form>
         </body>
         </html>

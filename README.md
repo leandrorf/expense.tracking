@@ -73,11 +73,16 @@ banco, acessíveis; 503 se não). `/health` continua como alias de `/health/live
 As APIs de recurso podem ser acessadas direto (`:5090/accounts`) ou via gateway
 (`:8080/api/accounts`), sempre com `Authorization: Bearer <token>`.
 
-Com o seed habilitado, são criados:
+Com o seed habilitado, o `identity` cria os clientes e o usuário declarados em
+`infra/identity/appsettings.Production.json` (segredos pelas variáveis do compose):
 
 - Cliente SPA público: `expense-tracking-spa` (redirect `http://localhost:5173/callback`)
 - Cliente de serviço confidencial: `expense-tracking-service` / `dev-service-secret`
-- Usuário demo: `demo@expense.local` / `Password123!`
+  (`IDENTITY_SERVICE_CLIENT_SECRET`)
+- Usuário demo: `demo@expense.local` / `Password123!` (`IDENTITY_DEMO_PASSWORD`)
+
+Cliente ou escopo novo para um serviço deste repositório entra nesse arquivo, sem mudar o código
+do `identity` (ADR-0003).
 
 Abra `http://localhost:5173`, clique em **Entrar**, autentique com o usuário demo e use as
 abas **Resumo / Lançamentos / Contas / Cartões** (a SPA chama as APIs pelo gateway). Verificações rápidas:
