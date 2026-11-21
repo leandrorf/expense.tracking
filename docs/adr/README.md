@@ -10,3 +10,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 | [0002](0002-orcamentos-no-reporting.md) | Orçamentos por categoria ficam no reporting (épico BDG) | Aceito | 2026-11-20 |
 | [0003](0003-identity-em-repositorio-proprio.md) | Identity em repositório próprio, consumido como imagem versionada (épico IDX) | Aceito | 2026-11-21 |
 | [0004](0004-importacao-csv-ofx-no-transactions.md) | Importação de extrato e fatura (CSV/OFX) no transactions, com lote persistido (épico IMP) | Aceito | 2026-11-21 |
+| [0005](0005-fatura-de-cartao-e-previsao-de-caixa.md) | Fatura de cartão e previsão de caixa no reporting, com parcelas e pagamento de fatura (épico INV) | Aceito | 2026-11-21 |
