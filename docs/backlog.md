@@ -406,7 +406,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
   - `main` protegido por ruleset (check de build e teste obrigatório, sem force-push), no mesmo
     padrão do CI-3.
   - Estimativa: 3 · **Must** · Dependências: IDX-2
-- 🔵 **IDX-4** Publicar a imagem versionada no GHCR.
+- ✅ **IDX-4** Publicar a imagem versionada no GHCR.
+  (workflow `Release` no `expense-identity`; `ghcr.io/leandrorf/expense-identity:1.0.0` pública, tag `v1.0.0`)
   - *Dado* uma tag `vX.Y.Z` no repositório do `identity`, *quando* o workflow de release roda,
     *então* a imagem `ghcr.io/leandrorf/expense-identity:X.Y.Z` é publicada, pública, com os
     rótulos OCI de origem e versão.
