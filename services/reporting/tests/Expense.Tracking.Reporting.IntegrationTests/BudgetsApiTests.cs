@@ -364,6 +364,38 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task Categories_SuggestsTheOwnersCategories_FromTransactionsAndBudgets()
+    {
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        await CreateAsync(client, Budget(category: "Fornecedores", scope: "Business", amount: 5000m, startMonth: "2026-12"));
+        var feed = _factory.EventFeed;
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 10m, "Alimentação", occurredOn: "2026-12-02");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 10m, "Alimentação", occurredOn: "2026-12-03");
+        feed.Registered(Guid.NewGuid(), owner, "Business", 10m, "alimentacao ", occurredOn: "2026-12-04");
+        feed.Registered(Guid.NewGuid(), owner, "Business", 10m, "Combustível", occurredOn: "2026-12-05", paymentMethod: "CreditCard");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 10m, "fornecedores", occurredOn: "2026-12-06");
+        // Outro usuario: nao aparece.
+        feed.Registered(Guid.NewGuid(), Guid.NewGuid(), "Personal", 10m, "Segredo", occurredOn: "2026-12-02");
+        await _factory.DrainFeedAsync();
+
+        var categories = await client.GetFromJsonAsync<string[]>("/budgets/categories");
+
+        // "Fornecedores" (orcamento) x "fornecedores" (lancamento) empatam em uso: vale a ordem ordinal.
+        Assert.Equal(["Alimentação", "Combustível", "Fornecedores"], categories!);
+    }
+
+    [Fact]
+    public async Task Categories_ForANewUser_IsEmpty_AndRequiresAToken()
+    {
+        var categories = await ClientFor(Guid.NewGuid()).GetFromJsonAsync<string[]>("/budgets/categories");
+        var anonymous = await _factory.CreateClient().GetAsync("/budgets/categories");
+
+        Assert.Empty(categories!);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
     public async Task Status_IsExceeded_AndGoesBackWhenTheExpenseIsDeleted()
     {
         var owner = Guid.NewGuid();

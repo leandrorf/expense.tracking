@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Projection;
+using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Projection;
 using Expense.Tracking.Reporting.Domain.Reports;
 
@@ -13,6 +14,9 @@ public sealed record ReportFilter(Guid? AccountId = null, DateOnly? From = null,
 public interface IProjectionQueries
 {
     Task<IReadOnlyList<TransactionRecord>> GetTransactionsAsync(Guid ownerUserId, ReportFilter filter, CancellationToken cancellationToken);
+
+    /// <summary>BDG-7: categorias dos lancamentos do dono, como digitadas, com quantas vezes cada uma.</summary>
+    Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken);
 }
 
 /// <summary>EVT-2: le o feed de eventos do transactions (token de servico, escopo <c>events.read</c>).</summary>

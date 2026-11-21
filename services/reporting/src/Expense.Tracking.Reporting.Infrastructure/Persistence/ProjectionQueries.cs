@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Reports;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,5 +35,15 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
             .Select(t => new TransactionRecord(
                 t.AccountId, t.TransactionType, t.PaymentMethod, t.Category, t.Amount, t.Currency, t.AccountScope))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Transactions.AsNoTracking()
+            .Where(t => t.OwnerUserId == ownerUserId)
+            .GroupBy(t => t.Category)
+            .Select(g => new { Category = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => new CategoryUsage(r.Category, r.Count)).ToList();
     }
 }

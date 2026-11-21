@@ -3,6 +3,7 @@ import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { transactionsApi } from '../api/transactions';
 import type { Account, CreditCard, PaymentMethod, Transaction } from '../api/types';
+import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -26,6 +27,7 @@ export function TransactionsView() {
   const [amount, setAmount] = useState('');
   const [occurredOn, setOccurredOn] = useState(today());
   const [submitting, setSubmitting] = useState(false);
+  const { categories, remember } = useCategorySuggestions();
 
   const requiresCard = useMemo(
     () => paymentMethods.find((m) => m.code === paymentMethod)?.requiresCard ?? false,
@@ -88,6 +90,7 @@ export function TransactionsView() {
         occurredOn,
       });
       setDescription('');
+      remember(category);
       setCategory('');
       setAmount('');
       await loadTransactions();
@@ -152,7 +155,16 @@ export function TransactionsView() {
             </select>
           )}
           <input data-cy="tx-description" placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} required />
-          <input data-cy="tx-category" placeholder="Categoria" value={category} onChange={(e) => setCategory(e.target.value)} required />
+          <input
+            data-cy="tx-category"
+            placeholder="Categoria"
+            list="tx-category-suggestions"
+            autoComplete="off"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            required
+          />
+          <CategoryDatalist id="tx-category-suggestions" categories={categories} />
           <input data-cy="tx-amount" placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           <input data-cy="tx-date" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
           <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>

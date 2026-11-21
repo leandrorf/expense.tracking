@@ -66,6 +66,17 @@ public static class BudgetsEndpoints
             return Results.Ok(await handler.HandleAsync(ownerUserId, parsed, ct));
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
+        // BDG-7: categorias ja usadas (lancamentos + orcamentos), sem repetir variacoes de digitacao.
+        group.MapGet("/categories", async (ClaimsPrincipal user, GetCategorySuggestionsHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            return Results.Ok(await handler.HandleAsync(ownerUserId, ct));
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
         group.MapPost("/", async (CreateBudgetRequest request, ClaimsPrincipal user, CreateBudgetHandler handler, CancellationToken ct) =>
         {
             if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))

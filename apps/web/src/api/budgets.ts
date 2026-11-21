@@ -62,6 +62,9 @@ export interface BudgetMonth {
 export const budgetsApi = {
   list: () => apiFetch<Budget[]>('/api/budgets'),
 
+  /** Categorias já usadas (lançamentos + orçamentos), sem variações de maiúscula/acento. */
+  categories: () => apiFetch<string[]>('/api/budgets/categories'),
+
   status: (month: string) => apiFetch<BudgetMonth>(`/api/budgets/status?month=${encodeURIComponent(month)}`),
 
   create: (input: CreateBudgetInput) =>

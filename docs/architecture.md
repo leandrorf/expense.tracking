@@ -242,6 +242,11 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   `budget.currency_invalid`, `budget.month_before_start`; 409: `budget.duplicate`,
   `budget.closed`, `budget.already_closed`; 404: `budget.not_found`, inclusive para orçamento
   de outro usuário).
+- **Sugestão de categorias (BDG-7)**: `GET /budgets/categories` (`expenses.read` ou
+  `expenses.write`) → `["Alimentação", ...]`: categorias dos lançamentos do dono na projeção e dos
+  seus orçamentos, uma por chave normalizada (`CategoryKey`), pela grafia mais usada, em ordem da
+  chave. A SPA usa como `<datalist>` nos campos de categoria (orçamento e lançamento), sem
+  impedir categoria nova.
 - **Acompanhamento do mês (BDG-4)**: `GET /budgets/status?month=yyyy-MM` (`expenses.read` ou
   `expenses.write`; `month` obrigatório) → `{month, budgets: [{budgetId, category, scope, currency,
   limit, spent, remaining, percent, status}], unbudgeted: [{scope, currency, total, categories:
