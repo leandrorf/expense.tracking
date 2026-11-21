@@ -6,11 +6,14 @@ import {
   MAX_IMPORT_FILE_BYTES,
   importsApi,
   isCsv,
+  type CsvColumnMapping,
+  type CsvMappingProposal,
   type ImportBatch,
   type ImportLine,
   type ImportLineStatus,
 } from '../api/imports';
 import type { Account, CreditCard, PaymentMethod } from '../api/types';
+import { CsvMappingStep } from './CsvMappingStep';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
 
 const STATUS_LABELS: Record<ImportLineStatus, string> = {
@@ -33,8 +36,7 @@ const canInclude = (line: ImportLine) => line.status === 'New' || line.status ==
 /**
  * IMP-7: importar extrato (OFX/CSV) ou fatura de cartão. Envia o arquivo, mostra a prévia com
  * duplicadas e inválidas fora da seleção, deixa ajustar categoria e meio por linha (ou aplicar uma
- * categoria às incluídas) e confirma. O CSV usa o mapeamento proposto pelo servidor; a escolha
- * manual das colunas chega na IMP-8.
+ * categoria às incluídas) e confirma. O CSV passa antes pelo mapeamento de colunas (IMP-8).
  */
 export function ImportView({ onShowTransactions }: { onShowTransactions: () => void }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -55,6 +57,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   const [bulkCategory, setBulkCategory] = useState('');
   const [flaggedLines, setFlaggedLines] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<ImportBatch | null>(null);
+  const [csvProposal, setCsvProposal] = useState<CsvMappingProposal | null>(null);
   const { categories, remember } = useCategorySuggestions();
 
   // Extrato de conta não aceita cartão de crédito como meio (ADR-0004, decisão 5).
@@ -86,6 +89,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     setBatch(null);
     setDrafts({});
     setResult(null);
+    setCsvProposal(null);
     setFile(null);
     setFileInputKey((k) => k + 1);
     setBulkCategory('');
@@ -111,20 +115,27 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
+    if (!isCsv(file)) {
+      await sendPreview(file);
+      return;
+    }
+
+    // IMP-8: CSV passa antes pelo mapeamento de colunas, que o usuário confere ou escolhe.
     setBusy(true);
     setError(null);
     try {
-      let mapping;
-      if (isCsv(file)) {
-        const proposal = await importsApi.proposeCsvMapping(file);
-        if (!proposal.mapping) {
-          setError('Não reconhecemos as colunas deste CSV (data, descrição e valor). Confira o arquivo exportado pelo banco.');
-          return;
-        }
-        // Fatura em CSV costuma trazer a compra positiva: o gasto precisa sair negativo.
-        mapping = { ...proposal.mapping, invertSign: !!creditCardId };
-      }
+      setCsvProposal(await importsApi.proposeCsvMapping(file));
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
+  async function sendPreview(file: File, mapping?: CsvColumnMapping) {
+    setBusy(true);
+    setError(null);
+    try {
       const preview = await importsApi.preview({
         file,
         accountId,
@@ -133,6 +144,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
         mapping,
       });
       setBatch(preview);
+      setCsvProposal(null);
       setDrafts(
         Object.fromEntries(
           preview.lines.map((l) => [l.id, { included: l.included, category: l.category ?? '', paymentMethod: l.paymentMethod }]),
@@ -237,6 +249,26 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
             </button>
           </div>
         </div>
+      </section>
+    );
+  }
+
+  if (csvProposal && file) {
+    return (
+      <section>
+        <h2>Importar — colunas do CSV</h2>
+        <CsvMappingStep
+          proposal={csvProposal}
+          isCard={!!creditCardId}
+          busy={busy}
+          onSubmit={(mapping) => void sendPreview(file, mapping)}
+          onCancel={startOver}
+        />
+        {error && (
+          <p className="error" data-cy="import-error" role="alert">
+            {error}
+          </p>
+        )}
       </section>
     );
   }

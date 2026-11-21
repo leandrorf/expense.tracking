@@ -75,4 +75,58 @@ describe('Importar extrato (OFX)', () => {
     cy.get('[data-cy=import-row-include]').each(($box) => cy.wrap($box).should('be.disabled').and('not.be.checked'));
     cy.get('[data-cy=import-confirm]').should('be.disabled');
   });
+
+  // IMP-8: CSV com colunas que o servidor não reconhece; o usuário as escolhe vendo as primeiras linhas.
+  it('importa um CSV escolhendo as colunas, com débito e crédito separados', () => {
+    const stamp = Date.now();
+    const accountName = `E2E CSV ${stamp}`;
+    const csv = [
+      'Quando;O que;Saiu;Entrou',
+      `03/11/2026;FARMACIA E2E ${stamp};45,90;`,
+      `04/11/2026;REEMBOLSO E2E ${stamp};;80,00`,
+    ].join('\n');
+
+    cy.get('[data-cy=tab-accounts]').click();
+    cy.get('[data-cy=account-name]').type(accountName);
+    cy.get('[data-cy=account-submit]').click();
+    cy.get('[data-cy=accounts-table]').contains('td', accountName).should('be.visible');
+
+    cy.get('[data-cy=tab-import]').click();
+    cy.get('[data-cy=import-account]').find('option').contains(accountName).then(($opt) => {
+      cy.get('[data-cy=import-account]').select($opt.val() as string);
+    });
+    cy.get('[data-cy=import-file]').selectFile({ contents: Cypress.Buffer.from(csv), fileName: 'extrato.csv', mimeType: 'text/csv' });
+    cy.get('[data-cy=import-submit]').click();
+
+    // Passo de colunas: a amostra mostra as linhas do arquivo e o cabeçalho vira o nome da coluna.
+    cy.get('[data-cy=csv-mapping]').should('contain', 'Não reconhecemos');
+    cy.get('[data-cy=csv-sample]').should('contain', `FARMACIA E2E ${stamp}`).and('contain', '45,90');
+    cy.get('[data-cy=csv-map-header]').should('be.checked');
+
+    cy.get('[data-cy=csv-map-date]').select('1. Quando');
+    cy.get('[data-cy=csv-map-description]').select('2. O que');
+    cy.get('[data-cy=csv-map-mode-split]').check();
+    cy.get('[data-cy=csv-map-debit]').select('3. Saiu');
+    cy.get('[data-cy=csv-map-credit]').select('4. Entrou');
+    cy.get('[data-cy=csv-map-decimal]').select(',');
+    cy.get('[data-cy=csv-role]').should('have.length', 4);
+
+    // Duas colunas no mesmo campo bloqueiam a prévia.
+    cy.get('[data-cy=csv-map-credit]').select('3. Saiu');
+    cy.get('[data-cy=csv-map-problem]').should('be.visible');
+    cy.get('[data-cy=csv-map-submit]').should('be.disabled');
+    cy.get('[data-cy=csv-map-credit]').select('4. Entrou');
+
+    cy.get('[data-cy=csv-map-submit]').should('be.enabled').click();
+
+    // Prévia: débito virou gasto e crédito virou receita.
+    cy.get('[data-cy=import-row]').should('have.length', 2);
+    cy.get('[data-cy=import-row]').eq(0).should('contain', `FARMACIA E2E ${stamp}`).and('contain', '−').and('contain', '45,90');
+    cy.get('[data-cy=import-row]').eq(1).should('contain', `REEMBOLSO E2E ${stamp}`).and('contain', '+').and('contain', '80,00');
+
+    cy.get('[data-cy=import-bulk-category]').type(`Saude ${stamp}`);
+    cy.get('[data-cy=import-bulk-apply-all]').click();
+    cy.get('[data-cy=import-confirm]').click();
+    cy.get('[data-cy=import-result-imported]').should('have.text', '2');
+  });
 });
