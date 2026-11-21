@@ -337,6 +337,33 @@ public sealed class BudgetsApiTests(ReportingApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task Status_ListsUnbudgetedSpendingByScope()
+    {
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        await CreateAsync(client, Budget(category: "Fornecedores", scope: "Business", amount: 5000m, startMonth: "2026-12"));
+        await CreateAsync(client, Budget(category: "Viagens", scope: "Personal", amount: 1000m, startMonth: "2026-12"));
+        var feed = _factory.EventFeed;
+        feed.Registered(Guid.NewGuid(), owner, "Business", 3000m, "Fornecedores", occurredOn: "2026-12-05", paymentMethod: "Boleto");
+        // PJ em "Viagens": o orcamento de Viagens e PF, entao fica sem orcamento.
+        feed.Registered(Guid.NewGuid(), owner, "Business", 800m, "Viagens", occurredOn: "2026-12-08", paymentMethod: "CreditCard");
+        feed.Registered(Guid.NewGuid(), owner, "Business", 200m, "Hospedagem", occurredOn: "2026-12-09");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 400m, "Viagens", occurredOn: "2026-12-10");
+        await _factory.DrainFeedAsync();
+
+        var body = await client.GetFromJsonAsync<JsonElement>("/budgets/status?month=2026-12");
+
+        var unbudgeted = Assert.Single(body.GetProperty("unbudgeted").EnumerateArray());
+        Assert.Equal("Business", unbudgeted.GetProperty("scope").GetString());
+        Assert.Equal("BRL", unbudgeted.GetProperty("currency").GetString());
+        Assert.Equal(1000m, unbudgeted.GetProperty("total").GetDecimal());
+        Assert.Equal(
+            [("Viagens", 800m), ("Hospedagem", 200m)],
+            unbudgeted.GetProperty("categories").EnumerateArray()
+                .Select(c => (c.GetProperty("category").GetString(), c.GetProperty("total").GetDecimal())).ToArray());
+    }
+
+    [Fact]
     public async Task Status_IsExceeded_AndGoesBackWhenTheExpenseIsDeleted()
     {
         var owner = Guid.NewGuid();

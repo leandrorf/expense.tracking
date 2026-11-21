@@ -45,9 +45,18 @@ export interface BudgetStatus {
   status: BudgetHealth;
 }
 
+/** Gastos do mês que não caem em nenhum orçamento vigente, num escopo e moeda. */
+export interface UnbudgetedSpending {
+  scope: BudgetScope;
+  currency: string;
+  total: number;
+  categories: { category: string; total: number }[];
+}
+
 export interface BudgetMonth {
   month: string;
   budgets: BudgetStatus[];
+  unbudgeted: UnbudgetedSpending[];
 }
 
 export const budgetsApi = {

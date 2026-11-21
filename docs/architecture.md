@@ -244,7 +244,10 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   de outro usuário).
 - **Acompanhamento do mês (BDG-4)**: `GET /budgets/status?month=yyyy-MM` (`expenses.read` ou
   `expenses.write`; `month` obrigatório) → `{month, budgets: [{budgetId, category, scope, currency,
-  limit, spent, remaining, percent, status}]}` para cada orçamento que vale no mês. O consumido
+  limit, spent, remaining, percent, status}], unbudgeted: [{scope, currency, total, categories:
+  [{category, total}]}]}` para cada orçamento que vale no mês. `unbudgeted` (BDG-8) traz, por
+  escopo e moeda, os gastos que não caem em nenhum orçamento vigente pela mesma regra do consumido,
+  com as categorias (variantes de digitação juntas, exibidas pela grafia mais usada). O consumido
   sai da **projeção** (mesma fonte e defasagem do Resumo; responde com o `transactions` fora): soma
   dos gastos do dono no mês, com o mesmo escopo, moeda e categoria normalizada, em qualquer conta e
   meio de pagamento, pela data do lançamento (compra no cartão conta no mês da compra). Receitas e

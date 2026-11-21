@@ -154,8 +154,13 @@ public sealed record BudgetStatusDto(
     decimal Percent,
     string Status);
 
+public sealed record CategoryTotalDto(string Category, decimal Total);
+
+public sealed record UnbudgetedDto(string Scope, string Currency, decimal Total, IReadOnlyList<CategoryTotalDto> Categories);
+
 /// <param name="Month">Mes consultado (<c>yyyy-MM</c>).</param>
-public sealed record BudgetMonthDto(string Month, IReadOnlyList<BudgetStatusDto> Budgets);
+/// <param name="Unbudgeted">BDG-8: gastos sem orcamento no mes, por escopo e moeda.</param>
+public sealed record BudgetMonthDto(string Month, IReadOnlyList<BudgetStatusDto> Budgets, IReadOnlyList<UnbudgetedDto> Unbudgeted);
 
 /// <summary>
 /// BDG-4: acompanhamento do mes. O consumido sai da projecao (mesma fonte e mesma defasagem do
@@ -175,6 +180,11 @@ public sealed class GetBudgetStatusHandler(IBudgetRepository budgets, IProjectio
             .Select(s => new BudgetStatusDto(
                 s.BudgetId, s.Category, s.Scope.ToString(), s.Currency, s.Limit, s.Spent, s.Remaining, s.Percent, s.Health.ToString()))
             .ToList();
-        return new BudgetMonthDto(first.ToString("yyyy-MM"), statuses);
+        var unbudgeted = BudgetStatusCalculator.CalculateUnbudgeted(first, list, transactions)
+            .Select(u => new UnbudgetedDto(
+                u.Scope.ToString(), u.Currency, u.Total,
+                u.Categories.Select(c => new CategoryTotalDto(c.Category, c.Total)).ToList()))
+            .ToList();
+        return new BudgetMonthDto(first.ToString("yyyy-MM"), statuses, unbudgeted);
     }
 }
