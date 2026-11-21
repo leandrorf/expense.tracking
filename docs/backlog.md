@@ -281,7 +281,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     orçamento PJ sobe e o do PF da mesma categoria não muda.
   - Espera a projeção como o `cy.waitForSummary` (sem `cy.wait` fixo); roda no job `Cypress E2E`.
   - Estimativa: 5 · **Must** · Dependências: BDG-6
-- 🔵 **BDG-10** Limiar de "Atenção" configurável por orçamento.
+- ✅ **BDG-10** Limiar de "Atenção" configurável por orçamento.
+  (`warningThreshold` 1–100, padrão 80, no cadastro e em `PUT /budgets/{id}/warning-threshold`; sem vigência)
   - *Dado* um orçamento com limiar de 90%, *quando* o consumido chega a 85%, *então* o status é
     **Dentro**; a 90%, **Atenção**.
   - Estimativa: 2 · **Could** · Dependências: BDG-4

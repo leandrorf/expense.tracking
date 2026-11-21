@@ -8,8 +8,9 @@ public sealed class BudgetStatusCalculatorTests
     private static readonly DateOnly December = new(2026, 12, 1);
     private static readonly DateTimeOffset Now = new(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
 
-    private static Budget NewBudget(string category, BudgetScope scope, decimal amount, string currency = "BRL", DateOnly? start = null) =>
-        Budget.Create(Guid.NewGuid(), category, scope, amount, currency, start ?? December, Now).Value;
+    private static Budget NewBudget(
+        string category, BudgetScope scope, decimal amount, string currency = "BRL", DateOnly? start = null, int? warningThreshold = null) =>
+        Budget.Create(Guid.NewGuid(), category, scope, amount, currency, start ?? December, Now, warningThreshold).Value;
 
     private static TransactionRecord Expense(
         string category, decimal amount, string? scope = "Personal", string method = "Pix", string currency = "BRL",
@@ -229,5 +230,32 @@ public sealed class BudgetStatusCalculatorTests
         ]));
 
         Assert.Equal(new CategorySpending("Alimentação", 60m), Assert.Single(unbudgeted.Categories));
+    }
+
+    [Theory]
+    [InlineData(850, BudgetHealth.OnTrack)]
+    [InlineData(899.99, BudgetHealth.OnTrack)]
+    [InlineData(900, BudgetHealth.Warning)]
+    [InlineData(1000, BudgetHealth.Warning)]
+    [InlineData(1000.01, BudgetHealth.Exceeded)]
+    public void CustomWarningThreshold_90Percent(double spent, BudgetHealth expected)
+    {
+        var budget = NewBudget("Alimentação", BudgetScope.Personal, 1000m, warningThreshold: 90);
+
+        var status = Assert.Single(BudgetStatusCalculator.Calculate(December, [budget], [Expense("Alimentação", (decimal)spent)]));
+
+        Assert.Equal(expected, status.Health);
+        Assert.Equal(90, status.WarningThreshold);
+    }
+
+    [Fact]
+    public void WarningThreshold_100Percent_WarnsOnlyAtExactlyTheLimit()
+    {
+        var budget = NewBudget("Alimentação", BudgetScope.Personal, 1000m, warningThreshold: 100);
+
+        Assert.Equal(BudgetHealth.OnTrack,
+            Assert.Single(BudgetStatusCalculator.Calculate(December, [budget], [Expense("Alimentação", 999.99m)])).Health);
+        Assert.Equal(BudgetHealth.Warning,
+            Assert.Single(BudgetStatusCalculator.Calculate(December, [budget], [Expense("Alimentação", 1000m)])).Health);
     }
 }

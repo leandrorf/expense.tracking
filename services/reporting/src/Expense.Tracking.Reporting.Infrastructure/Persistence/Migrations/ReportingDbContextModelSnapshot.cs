@@ -70,6 +70,12 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime(6)")
                         .HasColumnName("start_month");
 
+                    b.Property<int>("WarningThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(80)
+                        .HasColumnName("warning_threshold");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerUserId", "Scope", "CategoryKey")

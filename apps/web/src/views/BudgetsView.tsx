@@ -3,6 +3,9 @@ import { budgetsApi, type Budget, type BudgetHealth, type BudgetMonth, type Budg
 import { ApiError } from '../api/client';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
 
+/** ADR-0002: limiar de atenção padrão, o mesmo do reporting. */
+const DEFAULT_WARNING_THRESHOLD = 80;
+
 const SCOPES: { scope: BudgetScope; label: string }[] = [
   { scope: 'Personal', label: 'Pessoal (PF)' },
   { scope: 'Business', label: 'Empresa (PJ)' },
@@ -47,6 +50,7 @@ export function BudgetsView() {
   const [scope, setScope] = useState<BudgetScope>('Personal');
   const [amount, setAmount] = useState('');
   const [startMonth, setStartMonth] = useState(currentMonth());
+  const [warningThreshold, setWarningThreshold] = useState(String(DEFAULT_WARNING_THRESHOLD));
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -71,12 +75,19 @@ export function BudgetsView() {
     setSubmitting(true);
     setFormError(null);
     try {
-      const created = await budgetsApi.create({ category, scope, amount: Number(amount), startMonth });
+      const created = await budgetsApi.create({
+        category,
+        scope,
+        amount: Number(amount),
+        startMonth,
+        warningThreshold: Number(warningThreshold),
+      });
       setBudgets((current) => [...current, created]);
       remember(created.category);
       setRevision((r) => r + 1);
       setCategory('');
       setAmount('');
+      setWarningThreshold(String(DEFAULT_WARNING_THRESHOLD));
     } catch (err) {
       setFormError(messageOf(err));
     } finally {
@@ -145,6 +156,21 @@ export function BudgetsView() {
           onChange={(e) => setStartMonth(e.target.value)}
           required
         />
+        <label className="inline-label">
+          Atenção a partir de
+          <input
+            data-cy="budget-warning-threshold"
+            className="percent-input"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            value={warningThreshold}
+            onChange={(e) => setWarningThreshold(e.target.value)}
+            required
+          />
+          %
+        </label>
         <button data-cy="budget-submit" className="primary" type="submit" disabled={submitting}>
           {submitting ? 'Salvando…' : 'Adicionar'}
         </button>
@@ -175,6 +201,7 @@ export function BudgetsView() {
                       <th>Categoria</th>
                       <th className="right">Valor atual</th>
                       <th>Vigências</th>
+                      <th className="right">Atenção</th>
                       <th>Situação</th>
                       <th />
                     </tr>
@@ -194,12 +221,19 @@ export function BudgetsView() {
   );
 }
 
-type Editing = 'none' | 'amount' | 'close';
+type Editing = 'none' | 'amount' | 'threshold' | 'close';
+
+const FORM_CY: Record<Exclude<Editing, 'none'>, string> = {
+  amount: 'budget-change-form',
+  threshold: 'budget-threshold-form',
+  close: 'budget-close-form',
+};
 
 function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budget) => void }) {
   const [editing, setEditing] = useState<Editing>('none');
   const [amount, setAmount] = useState(String(budget.amount));
   const [month, setMonth] = useState(currentMonth());
+  const [threshold, setThreshold] = useState(String(budget.warningThreshold));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -207,6 +241,7 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
     setEditing(mode);
     setAmount(String(budget.amount));
     setMonth(currentMonth());
+    setThreshold(String(budget.warningThreshold));
     setError(null);
   }
 
@@ -218,7 +253,9 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
       const updated =
         editing === 'amount'
           ? await budgetsApi.changeAmount(budget.id, Number(amount), month)
-          : await budgetsApi.close(budget.id, month);
+          : editing === 'threshold'
+            ? await budgetsApi.changeWarningThreshold(budget.id, Number(threshold))
+            : await budgetsApi.close(budget.id, month);
       onChanged(updated);
       setEditing('none');
     } catch (err) {
@@ -240,12 +277,23 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
         <td className="muted">
           {budget.limits.map((l) => `${monthLabel(l.fromMonth)}: ${money(l.amount, budget.currency)}`).join(' → ')}
         </td>
+        <td className="right" data-cy="budget-row-threshold">
+          {budget.warningThreshold}%
+        </td>
         <td data-cy="budget-row-state">
           {closed ? `Encerrado a partir de ${monthLabel(budget.closedFromMonth!)}` : `Desde ${monthLabel(budget.startMonth)}`}
         </td>
         <td className="right">
           <button className="ghost small" data-cy="budget-change" onClick={() => open('amount')} disabled={editing !== 'none'}>
             alterar valor
+          </button>
+          <button
+            className="ghost small"
+            data-cy="budget-change-threshold"
+            onClick={() => open('threshold')}
+            disabled={editing !== 'none'}
+          >
+            alterar limiar
           </button>
           {!closed && (
             <button className="link-danger" data-cy="budget-close" onClick={() => open('close')} disabled={editing !== 'none'}>
@@ -256,12 +304,18 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
       </tr>
       {editing !== 'none' && (
         <tr className="budget-edit">
-          <td colSpan={5}>
+          <td colSpan={6}>
             <form
               className="row-form"
               onSubmit={handleSubmit}
-              data-cy={editing === 'amount' ? 'budget-change-form' : 'budget-close-form'}
-              aria-label={editing === 'amount' ? `Alterar valor de ${budget.category}` : `Encerrar ${budget.category}`}
+              data-cy={FORM_CY[editing]}
+              aria-label={
+                editing === 'amount'
+                  ? `Alterar valor de ${budget.category}`
+                  : editing === 'threshold'
+                    ? `Alterar limiar de atenção de ${budget.category}`
+                    : `Encerrar ${budget.category}`
+              }
             >
               {editing === 'amount' && (
                 <input
@@ -276,19 +330,38 @@ function BudgetRow({ budget, onChanged }: { budget: Budget; onChanged: (b: Budge
                   autoFocus
                 />
               )}
-              <label className="inline-label">
-                {editing === 'amount' ? 'a partir de' : 'deixa de valer a partir de'}
-                <input
-                  data-cy="budget-edit-month"
-                  type="month"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  required
-                  autoFocus={editing === 'close'}
-                />
-              </label>
+              {editing === 'threshold' ? (
+                <label className="inline-label">
+                  Atenção a partir de
+                  <input
+                    data-cy="budget-threshold-value"
+                    className="percent-input"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    value={threshold}
+                    onChange={(e) => setThreshold(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  % (vale para todos os meses)
+                </label>
+              ) : (
+                <label className="inline-label">
+                  {editing === 'amount' ? 'a partir de' : 'deixa de valer a partir de'}
+                  <input
+                    data-cy="budget-edit-month"
+                    type="month"
+                    value={month}
+                    onChange={(e) => setMonth(e.target.value)}
+                    required
+                    autoFocus={editing === 'close'}
+                  />
+                </label>
+              )}
               <button data-cy="budget-edit-submit" className="primary" type="submit" disabled={saving}>
-                {saving ? 'Salvando…' : editing === 'amount' ? 'Salvar' : 'Encerrar'}
+                {saving ? 'Salvando…' : editing === 'close' ? 'Encerrar' : 'Salvar'}
               </button>
               <button type="button" className="ghost" onClick={() => setEditing('none')} disabled={saving}>
                 Cancelar
@@ -428,6 +501,11 @@ function MonthTracking({ revision }: { revision: number }) {
                           aria-valuetext={percentLabel(s.percent)}
                         >
                           <div className="progress-fill" style={{ width: `${Math.min(100, s.percent)}%` }} />
+                          <div
+                            className="progress-threshold"
+                            style={{ left: `${s.warningThreshold}%` }}
+                            title={`Atenção a partir de ${s.warningThreshold}%`}
+                          />
                         </div>
                         <dl className="budget-status-figures">
                           <div>
@@ -443,7 +521,7 @@ function MonthTracking({ revision }: { revision: number }) {
                             <dd data-cy="budget-status-remaining">{money(Math.abs(s.remaining), s.currency)}</dd>
                           </div>
                           <div>
-                            <dt>Uso</dt>
+                            <dt>Uso (atenção em {s.warningThreshold}%)</dt>
                             <dd data-cy="budget-status-percent">{percentLabel(s.percent)}</dd>
                           </div>
                         </dl>

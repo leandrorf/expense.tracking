@@ -10,6 +10,7 @@ public sealed record BudgetLimitDto(string FromMonth, decimal Amount);
 /// Valor no mes consultado (<c>?month=</c>) ou, sem mes, o da vigencia mais recente.
 /// </param>
 /// <param name="ClosedFromMonth">Mes a partir do qual o orcamento nao vale mais; nulo se aberto.</param>
+/// <param name="WarningThreshold">Percentual a partir do qual o status e Atencao (BDG-10).</param>
 public sealed record BudgetDto(
     Guid Id,
     string Category,
@@ -18,7 +19,8 @@ public sealed record BudgetDto(
     string Currency,
     string StartMonth,
     string? ClosedFromMonth,
-    IReadOnlyList<BudgetLimitDto> Limits)
+    IReadOnlyList<BudgetLimitDto> Limits,
+    int WarningThreshold)
 {
     public static BudgetDto From(Budget budget, decimal? amount = null) => new(
         budget.Id,
@@ -28,7 +30,8 @@ public sealed record BudgetDto(
         budget.Currency,
         ToMonth(budget.StartMonth),
         budget.ClosedFromMonth is { } closed ? ToMonth(closed) : null,
-        budget.Limits.Select(l => new BudgetLimitDto(ToMonth(l.EffectiveFrom), l.Amount)).ToList());
+        budget.Limits.Select(l => new BudgetLimitDto(ToMonth(l.EffectiveFrom), l.Amount)).ToList(),
+        budget.WarningThreshold);
 
     private static string ToMonth(DateOnly month) => month.ToString("yyyy-MM");
 }
@@ -59,7 +62,8 @@ public sealed record CreateBudgetCommand(
     BudgetScope Scope,
     decimal Amount,
     string? Currency,
-    DateOnly StartMonth);
+    DateOnly StartMonth,
+    int? WarningThreshold = null);
 
 public sealed class CreateBudgetHandler(IBudgetRepository budgets, TimeProvider clock)
 {
@@ -70,7 +74,7 @@ public sealed class CreateBudgetHandler(IBudgetRepository budgets, TimeProvider 
     {
         var created = Budget.Create(
             command.OwnerUserId, command.Category, command.Scope, command.Amount, command.Currency,
-            command.StartMonth, clock.GetUtcNow());
+            command.StartMonth, clock.GetUtcNow(), command.WarningThreshold);
         if (created.IsFailure)
         {
             return Result.Failure<BudgetDto>(created.Error);
@@ -112,7 +116,12 @@ public sealed record ChangeBudgetAmountCommand(Guid Id, Guid OwnerUserId, decima
 
 public sealed record CloseBudgetCommand(Guid Id, Guid OwnerUserId, DateOnly FromMonth);
 
-/// <summary>BDG-3: alterar o valor a partir de um mes e encerrar. Orcamento alheio = 404.</summary>
+public sealed record ChangeWarningThresholdCommand(Guid Id, Guid OwnerUserId, int WarningThreshold);
+
+/// <summary>
+/// BDG-3/BDG-10: alterar o valor a partir de um mes, encerrar e mudar o limiar de atencao.
+/// Orcamento alheio = 404.
+/// </summary>
 public sealed class ChangeBudgetHandler(IBudgetRepository budgets)
 {
     private static readonly Error NotFound = Error.NotFound("budget.not_found", "Orcamento nao encontrado.");
@@ -122,6 +131,9 @@ public sealed class ChangeBudgetHandler(IBudgetRepository budgets)
 
     public Task<Result<BudgetDto>> HandleAsync(CloseBudgetCommand command, CancellationToken cancellationToken) =>
         ApplyAsync(command.Id, command.OwnerUserId, b => b.Close(command.FromMonth), cancellationToken);
+
+    public Task<Result<BudgetDto>> HandleAsync(ChangeWarningThresholdCommand command, CancellationToken cancellationToken) =>
+        ApplyAsync(command.Id, command.OwnerUserId, b => b.ChangeWarningThreshold(command.WarningThreshold), cancellationToken);
 
     private async Task<Result<BudgetDto>> ApplyAsync(
         Guid id, Guid ownerUserId, Func<Budget, Result> change, CancellationToken cancellationToken)
@@ -152,7 +164,8 @@ public sealed record BudgetStatusDto(
     decimal Spent,
     decimal Remaining,
     decimal Percent,
-    string Status);
+    string Status,
+    int WarningThreshold);
 
 public sealed record CategoryTotalDto(string Category, decimal Total);
 
@@ -178,7 +191,8 @@ public sealed class GetBudgetStatusHandler(IBudgetRepository budgets, IProjectio
 
         var statuses = BudgetStatusCalculator.Calculate(first, list, transactions)
             .Select(s => new BudgetStatusDto(
-                s.BudgetId, s.Category, s.Scope.ToString(), s.Currency, s.Limit, s.Spent, s.Remaining, s.Percent, s.Health.ToString()))
+                s.BudgetId, s.Category, s.Scope.ToString(), s.Currency, s.Limit, s.Spent, s.Remaining, s.Percent, s.Health.ToString(),
+                s.WarningThreshold))
             .ToList();
         var unbudgeted = BudgetStatusCalculator.CalculateUnbudgeted(first, list, transactions)
             .Select(u => new UnbudgetedDto(

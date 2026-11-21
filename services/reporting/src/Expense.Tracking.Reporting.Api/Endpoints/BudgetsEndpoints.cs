@@ -9,13 +9,17 @@ namespace Expense.Tracking.Reporting.Api.Endpoints;
 
 /// <param name="StartMonth">Mes de vigencia no formato <c>yyyy-MM</c>.</param>
 /// <param name="Currency">Codigo ISO 4217; BRL se omitido.</param>
-public sealed record CreateBudgetRequest(string? Category, string? Scope, decimal Amount, string? StartMonth, string? Currency);
+/// <param name="WarningThreshold">Percentual (1 a 100) a partir do qual o status e Atencao; padrao 80.</param>
+public sealed record CreateBudgetRequest(
+    string? Category, string? Scope, decimal Amount, string? StartMonth, string? Currency, int? WarningThreshold = null);
 
 /// <param name="FromMonth">Mes (<c>yyyy-MM</c>) a partir do qual o novo valor vale.</param>
 public sealed record ChangeBudgetAmountRequest(decimal Amount, string? FromMonth);
 
 /// <param name="FromMonth">Mes (<c>yyyy-MM</c>) a partir do qual o orcamento deixa de valer.</param>
 public sealed record CloseBudgetRequest(string? FromMonth);
+
+public sealed record ChangeWarningThresholdRequest(int WarningThreshold);
 
 public static class BudgetsEndpoints
 {
@@ -97,7 +101,8 @@ public static class BudgetsEndpoints
             }
 
             var result = await handler.HandleAsync(
-                new CreateBudgetCommand(ownerUserId, request.Category, scope, request.Amount, request.Currency, startMonth), ct);
+                new CreateBudgetCommand(
+                    ownerUserId, request.Category, scope, request.Amount, request.Currency, startMonth, request.WarningThreshold), ct);
 
             return result.IsSuccess
                 ? Results.Created($"/budgets/{result.Value.Id}", result.Value)
@@ -135,6 +140,19 @@ public static class BudgetsEndpoints
             }
 
             var result = await handler.HandleAsync(new CloseBudgetCommand(id, ownerUserId, fromMonth), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // BDG-10: limiar de atencao do orcamento (vale para todos os meses dele).
+        group.MapPut("/{id:guid}/warning-threshold", async (
+            Guid id, ChangeWarningThresholdRequest request, ClaimsPrincipal user, ChangeBudgetHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new ChangeWarningThresholdCommand(id, ownerUserId, request.WarningThreshold), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 

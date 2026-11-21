@@ -185,4 +185,36 @@ public sealed class BudgetTests
 
         Assert.Equal(overlaps, budget.OverlapsFrom(Month(year, month)));
     }
+
+    [Fact]
+    public void Create_WithoutWarningThreshold_DefaultsTo80()
+    {
+        var budget = Budget.Create(Guid.NewGuid(), "Lazer", BudgetScope.Personal, 100m, null, new DateOnly(2026, 12, 1), Now).Value;
+
+        Assert.Equal(80, budget.WarningThreshold);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    [InlineData(-5)]
+    public void WarningThreshold_OutsideOneToHundred_IsRejected(int threshold)
+    {
+        var created = Budget.Create(Guid.NewGuid(), "Lazer", BudgetScope.Personal, 100m, null, new DateOnly(2026, 12, 1), Now, threshold);
+        var budget = Budget.Create(Guid.NewGuid(), "Lazer", BudgetScope.Personal, 100m, null, new DateOnly(2026, 12, 1), Now, 90).Value;
+        var changed = budget.ChangeWarningThreshold(threshold);
+
+        Assert.Equal("budget.warning_threshold_invalid", created.Error.Code);
+        Assert.Equal("budget.warning_threshold_invalid", changed.Error.Code);
+        Assert.Equal(90, budget.WarningThreshold);
+    }
+
+    [Fact]
+    public void ChangeWarningThreshold_UpdatesIt()
+    {
+        var budget = Budget.Create(Guid.NewGuid(), "Lazer", BudgetScope.Personal, 100m, null, new DateOnly(2026, 12, 1), Now).Value;
+
+        Assert.True(budget.ChangeWarningThreshold(100).IsSuccess);
+        Assert.Equal(100, budget.WarningThreshold);
+    }
 }
