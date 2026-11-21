@@ -879,7 +879,7 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* um evento v1 ainda no feed, *quando* o `reporting` o lê, *então* ele é aplicado como antes
     (à vista, sem cartão até o backfill).
   - Estimativa: 5 · **Must** · Dependências: INV-1
-- 🔵 **INV-3** Regra do ciclo: fatura de cada compra e de cada parcela (domínio, sem I/O).
+- ✅ **INV-3** Regra do ciclo: fatura de cada compra e de cada parcela (domínio, sem I/O). → `reporting/.../Domain/Invoices/` (`CardCycle`, `Installments`, `InvoiceCalculator`).
   - *Dado* um cartão que fecha no dia 10 e vence no dia 17, *quando* a compra é no dia 10, *então*
     cai na fatura que vence dia 17 do mesmo mês; no dia 11, na do mês seguinte.
   - *Dado* um cartão que fecha no dia 25 e vence no dia 5, *quando* a compra é no dia 20 de
@@ -888,6 +888,14 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     33,33 e 33,33 em três faturas seguidas, a partir da fatura da compra.
   - *Dado* uma receita no cartão (estorno), *quando* cai num ciclo, *então* abate do total daquela
     fatura.
+  - Feito assim: `CardCycle` dá o mês de vencimento de cada data e as datas de cada fatura (início
+    do ciclo, fechamento, vencimento); vencimento no mesmo dia do fechamento conta como mês seguinte.
+    `Installments.Split` arredonda para baixo em centavos e põe a diferença na primeira parcela.
+    `InvoiceCalculator` monta uma fatura por mês de vencimento com item ou pagamento, com total, pago,
+    a pagar (nunca negativo) e situação, nesta ordem: aberta até o fechamento (mesmo com pagamento
+    antecipado), paga se os pagamentos cobrem o total, vencida depois do vencimento, parcialmente
+    paga, fechada. Fatura fechada só com estorno fica paga (nada a pagar). O item ainda não tem a
+    descrição da compra, porque o evento não a leva (ponto para a INV-2).
   - Estimativa: 3 · **Must** · Dependências: INV-1
 - 🔵 **INV-4** API das faturas de um cartão.
   - *Dado* um cartão do usuário, *quando* consulto `GET /reports/cards/{id}/invoices`, *então*
