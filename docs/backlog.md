@@ -673,7 +673,7 @@ produto (2026-11-21).
     ao que eram depois da projeção.
   - *Dado* um lote de outro usuário, *quando* tento desfazer, *então* recebo 404.
   - Estimativa: 3 · **Should** · Dependências: IMP-5
-- 🔵 **IMP-10** E2E Cypress: importações PF e PJ.
+- ✅ **IMP-10** E2E Cypress: importações PF e PJ. → `cypress/e2e/import.cy.ts`.
   - *Dado* uma conta PF e um OFX sintético de extrato, *quando* importo com categorias e confirmo,
     *então* os lançamentos aparecem na aba Lançamentos e o Resumo reflete o total (esperando a
     projeção, como o `cy.waitForSummary`).
@@ -681,6 +681,13 @@ produto (2026-11-21).
     pagamento da fatura fica fora e o orçamento PJ da categoria sobe (`cy.waitForBudget`).
   - *Dado* o mesmo arquivo importado de novo, *quando* vejo a prévia, *então* todas as linhas vêm
     como duplicadas.
+  - Feito assim: o teste OFX da IMP-7 passou a esperar o Resumo (os blocos do Resumo somam só
+    gastos, então a receita do extrato não entra em "Por categoria"), e um teste novo importa uma
+    fatura CSV num cartão PJ com orçamentos PJ e PF da mesma categoria: o pagamento da fatura vem
+    "fora por padrão" e não vira lançamento, o orçamento PJ sobe e o PF fica zerado. As datas da
+    fatura são do mês corrente, porque o acompanhamento abre no mês do navegador. No reenvio, as
+    linhas já lançadas vêm duplicadas; o pagamento da fatura, que nunca foi lançado, continua fora
+    por padrão (não há o que deduplicar). Suíte E2E 7/7, já no job do CI.
   - Estimativa: 5 · **Must** · Dependências: IMP-7, IMP-8
 - 🔵 **IMP-11** Guardar o mapeamento de CSV por banco.
   - *Dado* um mapeamento confirmado para um CSV, *quando* salvo com um nome ("Banco X — fatura"),
