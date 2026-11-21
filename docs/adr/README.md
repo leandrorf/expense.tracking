@@ -8,3 +8,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 |---|---|---|---|
 | [0001](0001-transporte-de-eventos-transactions-reporting.md) | Transporte de eventos entre transactions e reporting (épico EVT) | Aceito | 2026-11-19 |
 | [0002](0002-orcamentos-no-reporting.md) | Orçamentos por categoria ficam no reporting (épico BDG) | Aceito | 2026-11-20 |
+| [0003](0003-identity-em-repositorio-proprio.md) | Identity em repositório próprio, consumido como imagem versionada (épico IDX) | Proposto | 2026-11-21 |

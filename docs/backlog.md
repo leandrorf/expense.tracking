@@ -352,7 +352,7 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
 - **Histórico pequeno.** Só 8 commits tocam `services/identity`, o que torna barato levar o
   histórico junto.
 
-**Decisões em aberto (registrar na próxima ADR livre, IDX-1; a recomendação vem primeiro):**
+**Decisões em aberto (registradas na ADR-0003, IDX-1; a recomendação vem primeiro):**
 1. **Como o monorepo consome o `identity`.** Opções: (a) imagem Docker publicada no GitHub
    Container Registry (`ghcr.io/leandrorf/expense-identity`) com versão fixada no compose;
    (b) submódulo git; (c) o CI clona o outro repositório e faz o build. *Recomendação: (a)*. É o
@@ -380,11 +380,11 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
    client credentials, claims), para não quebrar consumidores sem perceber. O E2E do monorepo
    continua sendo a prova ponta a ponta.
 
-- 🔵 **IDX-1** ADR: identity em repositório próprio.
+- 🟡 **IDX-1** ADR: identity em repositório próprio.
+  ([ADR-0003](adr/0003-identity-em-repositorio-proprio.md), Proposta em 2026-11-21)
   - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (índice atualizado) e o PO ajusta as
     histórias seguintes ao que foi decidido.
-  - Numeração: a próxima livre (0003 se vier antes da IMP-1 do épico IMP).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **IDX-2** Clientes, escopos, CORS e usuário demo por configuração (ainda no monorepo).
   - *Dado* o `identity` sem nenhum cliente no código, *quando* sobe com os clientes declarados na
@@ -540,7 +540,7 @@ produto (2026-11-21).
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
-  - Numeração: a próxima livre (depende de vir antes ou depois da IDX-1).
+  - Numeração: a próxima livre (0004, já que a IDX-1 ficou com a 0003).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O).
   - *Dado* um OFX 1.x (SGML, Windows-1252) de extrato de conta corrente de banco brasileiro,
