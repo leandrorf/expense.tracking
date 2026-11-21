@@ -51,6 +51,17 @@ public interface IImportBatchRepository
     Task<int> DeleteExpiredAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken);
 }
 
+/// <summary>IMP-11: mapeamentos de CSV salvos pelo usuario.</summary>
+public interface ICsvMappingRepository
+{
+    /// <summary>Todos os do dono (no maximo <see cref="SavedCsvMapping.MaxPerUser"/>), por nome.</summary>
+    Task<IReadOnlyList<SavedCsvMapping>> ListAsync(Guid ownerUserId, CancellationToken cancellationToken);
+
+    Task AddAsync(SavedCsvMapping mapping, CancellationToken cancellationToken);
+
+    void Remove(SavedCsvMapping mapping);
+}
+
 public interface IUnitOfWork
 {
     /// <exception cref="PersistenceConflictException">Outro processo gravou antes (chave unica ou concorrencia otimista).</exception>

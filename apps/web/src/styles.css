@@ -675,6 +675,16 @@ button.danger:hover {
 }
 
 /* ---- Mapeamento de colunas do CSV (IMP-8) ---- */
+.csv-saved {
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.csv-save-name {
+  margin-top: 1rem;
+  max-width: 24rem;
+}
+
 .csv-mapping-fields {
   align-items: flex-end;
 }

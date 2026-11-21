@@ -20,6 +20,9 @@ public sealed record ConfirmImportRequest(IReadOnlyList<ConfirmImportLineRequest
 
 public sealed record ConfirmImportLineRequest(Guid Id, bool? Included, string? Category, string? PaymentMethod);
 
+/// <summary>IMP-11: mapeamento a salvar com um nome; <c>headers</c> e o cabecalho do arquivo (opcional).</summary>
+public sealed record SaveCsvMappingRequest(string? Name, CsvColumnMapping? Mapping, IReadOnlyList<string>? Headers);
+
 public static class ImportsEndpoints
 {
     /// <summary>Arquivo de ate 5 MB mais folga para os outros campos e as fronteiras do multipart.</summary>
@@ -139,6 +142,46 @@ public static class ImportsEndpoints
 
             var result = await handler.HandleAsync(new ConfirmImportCommand(owner.Value, id, decisions), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // IMP-11: mapeamentos de CSV salvos pelo usuario.
+        group.MapGet("/csv/mappings", async (HttpContext http, ListCsvMappingsHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            return owner is null ? Results.Unauthorized() : Results.Ok(await handler.HandleAsync(owner.Value, ct));
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        group.MapPost("/csv/mappings", async (
+            SaveCsvMappingRequest? request, HttpContext http, SaveCsvMappingHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(
+                new SaveCsvMappingCommand(owner.Value, request?.Name, request?.Mapping, request?.Headers), ct);
+            if (result.IsFailure)
+            {
+                return HttpResults.Problem(result.Error);
+            }
+
+            return result.Value.Created
+                ? Results.Created($"/imports/csv/mappings/{result.Value.Mapping.Id}", result.Value.Mapping)
+                : Results.Ok(result.Value.Mapping);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapDelete("/csv/mappings/{id:guid}", async (Guid id, HttpContext http, DeleteCsvMappingHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, ct);
+            return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
         group.MapPost("/{id:guid}/undo", async (Guid id, HttpContext http, UndoImportHandler handler, CancellationToken ct) =>

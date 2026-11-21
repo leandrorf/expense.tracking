@@ -776,6 +776,100 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         await db.SaveChangesAsync();
     }
 
+    // ---------- IMP-11: mapeamentos de CSV salvos ----------
+
+    private static object SaveBody(string name, int amountColumn = 2, string[]? headers = null) => new
+    {
+        name,
+        mapping = new { dateColumn = 0, descriptionColumn = 1, amountColumn, hasHeader = true, decimalSeparator = ",", invertSign = true },
+        headers = headers ?? ["Data", "Descricao", "Valor"],
+    };
+
+    [Fact]
+    public async Task CsvMappings_SaveAndList_WithMappingAndHeaders()
+    {
+        var client = ClientFor(Guid.NewGuid());
+
+        var created = await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody("Banco X - fatura"));
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var saved = await Json(created);
+        Assert.Equal($"/imports/csv/mappings/{saved.GetProperty("id").GetGuid()}", created.Headers.Location!.OriginalString);
+
+        var list = (await client.GetFromJsonAsync<JsonElement>("/imports/csv/mappings"))!.EnumerateArray().ToList();
+        var item = Assert.Single(list);
+        Assert.Equal("Banco X - fatura", item.GetProperty("name").GetString());
+        Assert.True(item.GetProperty("mapping").GetProperty("invertSign").GetBoolean());
+        Assert.Equal(",", item.GetProperty("mapping").GetProperty("decimalSeparator").GetString());
+        Assert.Equal(["Data", "Descricao", "Valor"], item.GetProperty("headers").EnumerateArray().Select(h => h.GetString()));
+    }
+
+    [Fact]
+    public async Task CsvMappings_SameNameIgnoringCase_ReplacesInsteadOfDuplicating()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var first = await Json(await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody("Banco X")));
+
+        var again = await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody("  banco   x ", amountColumn: 3, headers: ["D", "H", "X", "V"]));
+
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        var list = (await client.GetFromJsonAsync<JsonElement>("/imports/csv/mappings"))!.EnumerateArray().ToList();
+        var item = Assert.Single(list);
+        Assert.Equal(first.GetProperty("id").GetGuid(), item.GetProperty("id").GetGuid());
+        Assert.Equal("Banco X", item.GetProperty("name").GetString()); // o nome original fica
+        Assert.Equal(3, item.GetProperty("mapping").GetProperty("amountColumn").GetInt32());
+    }
+
+    [Fact]
+    public async Task CsvMappings_InvalidMappingOrName_AreRejected()
+    {
+        var client = ClientFor(Guid.NewGuid());
+
+        var noName = await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody(" "));
+        var badMapping = await client.PostAsJsonAsync("/imports/csv/mappings", new
+        {
+            name = "X",
+            mapping = new { dateColumn = 0, descriptionColumn = 0, amountColumn = 2, hasHeader = true },
+        });
+        var noMapping = await client.PostAsJsonAsync("/imports/csv/mappings", new { name = "X" });
+
+        await AssertProblem(noName, HttpStatusCode.BadRequest, "import.mapping_name_required");
+        await AssertProblem(badMapping, HttpStatusCode.BadRequest, "import.mapping_invalid");
+        await AssertProblem(noMapping, HttpStatusCode.BadRequest, "import.mapping_invalid");
+    }
+
+    [Fact]
+    public async Task CsvMappings_AreScopedToTheOwner_AndDeleteOnlyOwn()
+    {
+        var mine = ClientFor(Guid.NewGuid());
+        var other = ClientFor(Guid.NewGuid());
+        var saved = await Json(await mine.PostAsJsonAsync("/imports/csv/mappings", SaveBody("Meu banco")));
+        var url = $"/imports/csv/mappings/{saved.GetProperty("id").GetGuid()}";
+
+        Assert.Empty((await other.GetFromJsonAsync<JsonElement>("/imports/csv/mappings"))!.EnumerateArray());
+        await AssertProblem(await other.DeleteAsync(url), HttpStatusCode.NotFound, "import.mapping_not_found");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await ClientFor(Guid.NewGuid(), scope: "expenses.read").PostAsJsonAsync("/imports/csv/mappings", SaveBody("X"))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await mine.DeleteAsync(url)).StatusCode);
+        Assert.Empty((await mine.GetFromJsonAsync<JsonElement>("/imports/csv/mappings"))!.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task CsvMappings_LimitPerUser_IsEnforced()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        for (var i = 0; i < 50; i++)
+        {
+            Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody($"Banco {i}"))).StatusCode);
+        }
+
+        await AssertProblem(await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody("Banco 50")),
+            HttpStatusCode.Conflict, "import.mappings_limit");
+        // Substituir um existente continua valendo no limite.
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/imports/csv/mappings", SaveBody("Banco 7"))).StatusCode);
+    }
+
     private async Task<int> CountBatchesAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();

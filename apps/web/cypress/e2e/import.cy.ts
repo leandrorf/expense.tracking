@@ -107,11 +107,14 @@ describe('Importar extrato e fatura', () => {
   });
 
   // IMP-8: CSV com colunas que o servidor não reconhece; o usuário as escolhe vendo as primeiras linhas.
-  it('importa um CSV escolhendo as colunas, com débito e crédito separados', () => {
+  // IMP-11: o mapeamento vai salvo com um nome e, no próximo arquivo com as mesmas colunas, já vem escolhido.
+  it('importa um CSV escolhendo as colunas, com débito e crédito separados, e reaproveita o mapeamento salvo', () => {
     const stamp = Date.now();
     const accountName = `E2E CSV ${stamp}`;
+    // O carimbo no cabeçalho deixa o layout único: a conta de demo guarda mapeamentos de outras execuções.
+    const header = `Quando;O que;Saiu;Entrou ${stamp}`;
     const csv = [
-      'Quando;O que;Saiu;Entrou',
+      header,
       `03/11/2026;FARMACIA E2E ${stamp};45,90;`,
       `04/11/2026;REEMBOLSO E2E ${stamp};;80,00`,
     ].join('\n');
@@ -137,7 +140,7 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=csv-map-description]').select('2. O que');
     cy.get('[data-cy=csv-map-mode-split]').check();
     cy.get('[data-cy=csv-map-debit]').select('3. Saiu');
-    cy.get('[data-cy=csv-map-credit]').select('4. Entrou');
+    cy.get('[data-cy=csv-map-credit]').select(`4. Entrou ${stamp}`);
     cy.get('[data-cy=csv-map-decimal]').select(',');
     cy.get('[data-cy=csv-role]').should('have.length', 4);
 
@@ -145,8 +148,9 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=csv-map-credit]').select('3. Saiu');
     cy.get('[data-cy=csv-map-problem]').should('be.visible');
     cy.get('[data-cy=csv-map-submit]').should('be.disabled');
-    cy.get('[data-cy=csv-map-credit]').select('4. Entrou');
+    cy.get('[data-cy=csv-map-credit]').select(`4. Entrou ${stamp}`);
 
+    cy.get('[data-cy=csv-save-name]').type(`Banco E2E ${stamp}`);
     cy.get('[data-cy=csv-map-submit]').should('be.enabled').click();
 
     // Prévia: débito virou gasto e crédito virou receita.
@@ -158,6 +162,37 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=import-bulk-apply-all]').click();
     cy.get('[data-cy=import-confirm]').click();
     cy.get('[data-cy=import-result-imported]').should('have.text', '2');
+
+    // Outro arquivo do mesmo banco: o mapeamento salvo já vem escolhido, sem remapear.
+    const upload = (lines: string[]) => {
+      cy.get('[data-cy=import-new]').click();
+      cy.get('[data-cy=import-account]').find('option').contains(accountName).then(($opt) => {
+        cy.get('[data-cy=import-account]').select($opt.val() as string);
+      });
+      cy.get('[data-cy=import-file]').selectFile({
+        contents: Cypress.Buffer.from([header, ...lines].join('\n')), fileName: 'extrato2.csv', mimeType: 'text/csv',
+      });
+      cy.get('[data-cy=import-submit]').click();
+    };
+    upload([`10/11/2026;DROGARIA E2E ${stamp};12,30;`]);
+    cy.get('[data-cy=csv-mapping]').should('contain', `mapeamento salvo "Banco E2E ${stamp}"`);
+    cy.get('[data-cy=csv-saved]').find('option:selected').should('have.text', `Banco E2E ${stamp}`);
+    cy.get('[data-cy=csv-map-mode-split]').should('be.checked');
+    cy.get('[data-cy=csv-role]').should('have.length', 4);
+    cy.get('[data-cy=csv-map-submit]').click();
+    cy.get('[data-cy=import-row]').should('have.length', 1).and('contain', `DROGARIA E2E ${stamp}`).and('contain', '−');
+
+    // Limpeza: exclui o mapeamento salvo (a conta de demo tem limite de 50).
+    cy.get('[data-cy=import-cancel]').click();
+    cy.get('[data-cy=import-account]').find('option').contains(accountName).then(($opt) => {
+      cy.get('[data-cy=import-account]').select($opt.val() as string);
+    });
+    cy.get('[data-cy=import-file]').selectFile({
+      contents: Cypress.Buffer.from([header, `11/11/2026;X ${stamp};1,00;`].join('\n')), fileName: 'extrato3.csv', mimeType: 'text/csv',
+    });
+    cy.get('[data-cy=import-submit]').click();
+    cy.get('[data-cy=csv-saved-remove]').click();
+    cy.get('[data-cy=csv-mapping]').find('option').should('not.contain', `Banco E2E ${stamp}`);
   });
 
   // IMP-9: desfazer a importação exclui os lançamentos do lote; o orçamento volta ao que era e o

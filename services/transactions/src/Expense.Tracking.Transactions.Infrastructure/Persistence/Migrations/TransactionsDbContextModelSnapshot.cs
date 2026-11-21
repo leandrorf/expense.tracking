@@ -19,6 +19,49 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Imports.Csv.SavedCsvMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Headers")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("headers");
+
+                    b.Property<string>("Mapping")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("mapping");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("csv_mappings", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Imports.ImportBatch", b =>
                 {
                     b.Property<Guid>("Id")

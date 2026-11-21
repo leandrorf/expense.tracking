@@ -1,7 +1,20 @@
 import { useState } from 'react';
-import type { CsvColumnMapping, CsvMappingProposal } from '../api/imports';
+import type { CsvColumnMapping, CsvMappingProposal, CsvMappingToSave, SavedCsvMapping } from '../api/imports';
 
 type AmountMode = 'single' | 'split';
+
+/** Limites do servidor para o cabeçalho guardado com o mapeamento (IMP-11). */
+const MAX_SAVED_HEADER_LENGTH = 100;
+
+const modeOf = (mapping: CsvColumnMapping): AmountMode => (mapping.amountColumn === null ? 'split' : 'single');
+
+const sameHeaders = (a: string[], b: string[] | null) =>
+  !!b && a.length > 0 && a.length === b.length && a.every((h, i) => h.trim().toLowerCase() === b[i].trim().toLowerCase());
+
+/** IMP-11: o mapeamento salvo de um arquivo com o mesmo cabeçalho já vem escolhido. */
+export function matchingSaved(saved: SavedCsvMapping[], proposal: CsvMappingProposal): SavedCsvMapping | undefined {
+  return saved.find((s) => sameHeaders(s.headers, proposal.headers));
+}
 
 /** Ponto de partida quando o servidor não reconheceu as colunas: as três primeiras, na ordem comum. */
 function fallbackMapping(proposal: CsvMappingProposal, isCard: boolean): CsvColumnMapping {
@@ -18,13 +31,14 @@ function fallbackMapping(proposal: CsvMappingProposal, isCard: boolean): CsvColu
 }
 
 /** O que falta ou conflita no mapeamento; vazio quando dá para ver a prévia. */
-export function mappingProblems(mapping: CsvColumnMapping, mode: AmountMode): string[] {
+export function mappingProblems(mapping: CsvColumnMapping, mode: AmountMode, columnCount: number): string[] {
   const used =
     mode === 'single'
       ? [mapping.dateColumn, mapping.descriptionColumn, mapping.amountColumn]
       : [mapping.dateColumn, mapping.descriptionColumn, mapping.debitColumn, mapping.creditColumn];
   const problems: string[] = [];
   if (used.some((c) => c === null || c < 0)) problems.push('Escolha uma coluna para cada campo.');
+  else if (used.some((c) => c !== null && c >= columnCount)) problems.push('O mapeamento usa colunas que este arquivo não tem.');
   else if (new Set(used).size !== used.length) problems.push('Cada campo precisa de uma coluna diferente.');
   return problems;
 }
@@ -34,27 +48,50 @@ export function mappingProblems(mapping: CsvColumnMapping, mode: AmountMode): st
  * confirmar (ou escolher) qual coluna é data, descrição e valor (ou débito e crédito), se a
  * primeira linha é cabeçalho, o separador decimal e se o sinal do valor deve ser invertido.
  * Parte da proposta do servidor (IMP-3); sem proposta, parte das três primeiras colunas.
+ * IMP-11: dá para partir de um mapeamento salvo (já escolhido quando o cabeçalho é o mesmo) e
+ * salvar o mapeamento com um nome para as próximas importações.
  */
 export function CsvMappingStep({
   proposal,
   isCard,
   busy,
+  saved,
   onSubmit,
+  onRemoveSaved,
   onCancel,
 }: {
   proposal: CsvMappingProposal;
   isCard: boolean;
   busy: boolean;
-  onSubmit: (mapping: CsvColumnMapping) => void;
+  saved: SavedCsvMapping[];
+  onSubmit: (mapping: CsvColumnMapping, save?: CsvMappingToSave) => void;
+  onRemoveSaved: (id: string) => void;
   onCancel: () => void;
 }) {
+  const [initialSaved] = useState(() => matchingSaved(saved, proposal));
+  const [selectedId, setSelectedId] = useState(initialSaved?.id ?? '');
+  const [saveName, setSaveName] = useState('');
   const [mapping, setMapping] = useState<CsvColumnMapping>(() =>
-    proposal.mapping
-      ? // Fatura em CSV costuma trazer a compra positiva: começa com o sinal invertido.
-        { ...proposal.mapping, invertSign: isCard }
-      : fallbackMapping(proposal, isCard),
+    initialSaved
+      ? initialSaved.mapping
+      : proposal.mapping
+        ? // Fatura em CSV costuma trazer a compra positiva: começa com o sinal invertido.
+          { ...proposal.mapping, invertSign: isCard }
+        : fallbackMapping(proposal, isCard),
   );
-  const [mode, setMode] = useState<AmountMode>(proposal.mapping && proposal.mapping.amountColumn === null ? 'split' : 'single');
+  const [mode, setMode] = useState<AmountMode>(() =>
+    initialSaved ? modeOf(initialSaved.mapping) : proposal.mapping && proposal.mapping.amountColumn === null ? 'split' : 'single',
+  );
+  const selected = saved.find((s) => s.id === selectedId);
+
+  function chooseSaved(id: string) {
+    setSelectedId(id);
+    const chosen = saved.find((s) => s.id === id);
+    if (chosen) {
+      setMapping(chosen.mapping);
+      setMode(modeOf(chosen.mapping));
+    }
+  }
 
   const columns = Array.from({ length: proposal.columnCount }, (_, i) => i);
   const columnName = (i: number) => {
@@ -76,7 +113,7 @@ export function CsvMappingStep({
 
   // Sem cabeçalho, a linha que o servidor tomou por cabeçalho também é lançamento: entra na amostra.
   const sampleRows = !mapping.hasHeader && proposal.headers ? [{ lineNumber: 1, cells: proposal.headers }, ...proposal.preview] : proposal.preview;
-  const problems = mappingProblems(mapping, mode);
+  const problems = mappingProblems(mapping, mode, proposal.columnCount);
   const set = (change: Partial<CsvColumnMapping>) => setMapping((current) => ({ ...current, ...change }));
 
   function changeMode(next: AmountMode) {
@@ -108,10 +145,41 @@ export function CsvMappingStep({
   return (
     <div data-cy="csv-mapping">
       <p className="muted">
-        {proposal.mapping
-          ? 'Confira as colunas que reconhecemos no arquivo antes de ver a prévia.'
-          : 'Não reconhecemos as colunas deste arquivo: indique qual é cada uma.'}
+        {selected && selected.id === initialSaved?.id
+          ? `Usamos o mapeamento salvo "${selected.name}", do arquivo com as mesmas colunas. Confira antes de ver a prévia.`
+          : proposal.mapping
+            ? 'Confira as colunas que reconhecemos no arquivo antes de ver a prévia.'
+            : 'Não reconhecemos as colunas deste arquivo: indique qual é cada uma.'}
       </p>
+
+      {saved.length > 0 && (
+        <div className="row-form wrap csv-saved">
+          <label className="inline-label">
+            Mapeamento salvo
+            <select data-cy="csv-saved" value={selectedId} onChange={(e) => chooseSaved(e.target.value)}>
+              <option value="">Nenhum</option>
+              {saved.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selected && (
+            <button
+              data-cy="csv-saved-remove"
+              type="button"
+              className="link-danger"
+              onClick={() => {
+                setSelectedId('');
+                onRemoveSaved(selected.id);
+              }}
+            >
+              excluir "{selected.name}"
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="row-form wrap csv-mapping-fields">
         {columnSelect('Data', 'csv-map-date', mapping.dateColumn, (c) => set({ dateColumn: c }))}
@@ -189,6 +257,16 @@ export function CsvMappingStep({
           {problems.join(' ')}
         </p>
       )}
+      <label className="inline-label csv-save-name">
+        Salvar como (opcional)
+        <input
+          data-cy="csv-save-name"
+          maxLength={60}
+          placeholder="ex.: Banco X — fatura"
+          value={saveName}
+          onChange={(e) => setSaveName(e.target.value)}
+        />
+      </label>
       <div className="actions">
         <button
           data-cy="csv-map-submit"
@@ -199,6 +277,13 @@ export function CsvMappingStep({
               mode === 'single'
                 ? { ...mapping, debitColumn: null, creditColumn: null }
                 : { ...mapping, amountColumn: null, invertSign: false },
+              saveName.trim()
+                ? {
+                    name: saveName.trim(),
+                    // Só o cabeçalho, para reconhecer o mesmo layout depois; nunca as linhas do arquivo.
+                    headers: mapping.hasHeader ? (proposal.headers ?? []).map((h) => h.trim().slice(0, MAX_SAVED_HEADER_LENGTH)) : [],
+                  }
+                : undefined,
             )
           }
         >

@@ -8,9 +8,11 @@ import {
   isCsv,
   type CsvColumnMapping,
   type CsvMappingProposal,
+  type CsvMappingToSave,
   type ImportBatch,
   type ImportLine,
   type ImportLineStatus,
+  type SavedCsvMapping,
 } from '../api/imports';
 import type { Account, CreditCard, PaymentMethod } from '../api/types';
 import { CsvMappingStep } from './CsvMappingStep';
@@ -58,6 +60,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   const [flaggedLines, setFlaggedLines] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<ImportBatch | null>(null);
   const [csvProposal, setCsvProposal] = useState<CsvMappingProposal | null>(null);
+  const [savedMappings, setSavedMappings] = useState<SavedCsvMapping[]>([]);
   const [confirmingUndo, setConfirmingUndo] = useState(false);
   const { categories, remember } = useCategorySuggestions();
 
@@ -126,7 +129,10 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     setBusy(true);
     setError(null);
     try {
-      setCsvProposal(await importsApi.proposeCsvMapping(file));
+      // IMP-11: os mapeamentos salvos vêm junto, para escolher um sem remapear.
+      const [proposal, saved] = await Promise.all([importsApi.proposeCsvMapping(file), importsApi.csvMappings()]);
+      setSavedMappings(saved);
+      setCsvProposal(proposal);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -134,10 +140,13 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     }
   }
 
-  async function sendPreview(file: File, mapping?: CsvColumnMapping) {
+  async function sendPreview(file: File, mapping?: CsvColumnMapping, save?: CsvMappingToSave) {
     setBusy(true);
     setError(null);
     try {
+      if (mapping && save) {
+        await importsApi.saveCsvMapping(save.name, mapping, save.headers);
+      }
       const preview = await importsApi.preview({
         file,
         accountId,
@@ -157,6 +166,16 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
       setError(messageOf(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function removeSavedMapping(id: string) {
+    setError(null);
+    try {
+      await importsApi.removeCsvMapping(id);
+      setSavedMappings((current) => current.filter((m) => m.id !== id));
+    } catch (err) {
+      setError(messageOf(err));
     }
   }
 
@@ -309,7 +328,9 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
           proposal={csvProposal}
           isCard={!!creditCardId}
           busy={busy}
-          onSubmit={(mapping) => void sendPreview(file, mapping)}
+          saved={savedMappings}
+          onSubmit={(mapping, save) => void sendPreview(file, mapping, save)}
+          onRemoveSaved={(id) => void removeSavedMapping(id)}
           onCancel={startOver}
         />
         {error && (
@@ -542,6 +563,7 @@ function messageOf(err: unknown): string {
       'import.card_required': 'Este arquivo é uma fatura de cartão: escolha o cartão em "Tipo".',
       'import.card_not_allowed': 'Este arquivo é um extrato de conta: escolha "Extrato da conta" em "Tipo".',
       'import.categories_required': 'Toda linha incluída precisa de categoria. As linhas pendentes estão destacadas.',
+      'import.mappings_limit': 'Você já tem 50 mapeamentos salvos. Exclua algum para salvar outro.',
     };
     return friendly[err.code] ?? err.message;
   }

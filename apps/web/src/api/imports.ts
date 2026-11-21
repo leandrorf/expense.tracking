@@ -63,6 +63,21 @@ export interface CsvMappingProposal {
   preview: { lineNumber: number; cells: string[] }[];
 }
 
+/** IMP-11: mapeamento confirmado e guardado com um nome, com o cabecalho do arquivo em que foi salvo. */
+export interface SavedCsvMapping {
+  id: string;
+  name: string;
+  mapping: CsvColumnMapping;
+  headers: string[];
+  updatedAtUtc: string;
+}
+
+/** Nome para salvar o mapeamento e o cabeçalho do arquivo (para reconhecer o mesmo layout depois). */
+export interface CsvMappingToSave {
+  name: string;
+  headers: string[];
+}
+
 export interface ImportUpload {
   file: File;
   accountId: string;
@@ -106,6 +121,17 @@ export const importsApi = {
 
   confirm: (id: string, lines: ImportLineDecision[]) =>
     apiFetch<ImportBatch>(`/api/imports/${id}/confirm`, { method: 'POST', body: JSON.stringify({ lines }) }),
+
+  csvMappings: () => apiFetch<SavedCsvMapping[]>('/api/imports/csv/mappings'),
+
+  /** IMP-11: o mesmo nome (sem diferença de maiúsculas) substitui o salvo. */
+  saveCsvMapping: (name: string, mapping: CsvColumnMapping, headers: string[]) =>
+    apiFetch<SavedCsvMapping>('/api/imports/csv/mappings', {
+      method: 'POST',
+      body: JSON.stringify({ name, mapping, headers }),
+    }),
+
+  removeCsvMapping: (id: string) => apiFetch<void>(`/api/imports/csv/mappings/${id}`, { method: 'DELETE' }),
 
   /** IMP-9: exclui os lançamentos criados pelo lote (os que ainda existem). Idempotente. */
   undo: (id: string) => apiFetch<ImportBatch>(`/api/imports/${id}/undo`, { method: 'POST' }),

@@ -16,6 +16,21 @@ public static class ImportErrors
         "import.mapping_invalid",
         "Mapeamento de colunas invalido: informe data, descricao e valor (ou debito e credito), cada um numa coluna diferente.");
 
+    public static readonly Error MappingNameRequired = Error.Validation(
+        "import.mapping_name_required", "Informe um nome para o mapeamento (ex.: Banco X - fatura).");
+
+    public static readonly Error MappingNameTooLong = Error.Validation(
+        "import.mapping_name_too_long", "O nome do mapeamento deve ter no maximo 60 caracteres.");
+
+    public static readonly Error MappingHeadersInvalid = Error.Validation(
+        "import.mapping_headers_invalid", "Cabecalho invalido: ate 50 colunas, cada uma com ate 100 caracteres.");
+
+    public static readonly Error MappingsLimit = Error.Conflict(
+        "import.mappings_limit", "Limite de 50 mapeamentos salvos atingido. Exclua algum para salvar outro.");
+
+    public static readonly Error MappingNotFound = Error.NotFound(
+        "import.mapping_not_found", "Mapeamento nao encontrado.");
+
     public static readonly Error FileTooLarge = Error.Validation(
         "import.file_too_large", "O arquivo passa do limite de 5 MB.");
 
