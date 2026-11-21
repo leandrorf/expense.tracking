@@ -44,7 +44,7 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 ### Serviços
 | Serviço | Papel | Banco |
 |---|---|---|
-| `identity` | Servidor OAuth2/OIDC próprio | `expense_identity` |
+| `identity` | Servidor OAuth2/OIDC próprio, em repositório próprio ([expense-identity](https://github.com/leandrorf/expense-identity)), consumido como imagem versionada | `expense_identity` |
 | `accounts` | Contas PF/PJ, cartões, catálogo de meios de pagamento | `expense_accounts` |
 | `transactions` | Lançamentos de gastos (valida conta/cartão no accounts) | `expense_transactions` |
 | `reporting` | Consolidação de gastos (projeção alimentada pelos eventos do `transactions`) | `expense_reporting` |
@@ -68,8 +68,9 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 
 ### Próximos passos conhecidos
 Épicos em refinamento em `docs/backlog.md`, cada um com decisões em aberto para uma ADR:
-**IDX — identity em repositório próprio** (o monorepo passa a consumir o `identity` como imagem
-versionada; recomendado primeiro) e **IMP — importação de extrato e fatura (CSV/OFX)**. Candidatos a novos épicos (ainda não refinados pelo PO):
+**IMP — importação de extrato e fatura (CSV/OFX)**. O épico **IDX** (identity em repositório
+próprio, ADR-0003) foi concluído: o monorepo consome `ghcr.io/leandrorf/expense-identity` com versão
+fixada. Candidatos a novos épicos (ainda não refinados pelo PO):
 fechamento de fatura de cartão e previsão de caixa, exportação contábil PJ.
 
 ---
@@ -96,3 +97,4 @@ documento** como fonte de requisito e delegam execução técnica aos agents esp
 | 2026-11-20 | Documento e agents de processo (`.claude/agents/`) passam a ser versionados no repositório. | pedido do usuário |
 | 2026-11-21 | Épico BDG (orçamentos por categoria e escopo, ADR-0002) concluído; `reporting` passa a ter dado escrito pelo usuário. Épico IMP (importação CSV/OFX) refinado no backlog. | épicos BDG/IMP |
 | 2026-11-21 | Iniciativa de levar o `identity` para um repositório próprio (épico IDX): o projeto segue microserviços também no versionamento, começando pela autenticação. | pedido do usuário |
+| 2026-11-21 | `identity` sai do monorepo: vive em `leandrorf/expense-identity` e entra pela imagem `ghcr.io/leandrorf/expense-identity` com versão fixada; o monorepo declara os clientes OAuth em `infra/identity/` (ADR-0003, épico IDX). | épico IDX |

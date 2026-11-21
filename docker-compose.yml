@@ -24,9 +24,10 @@ services:
       - expense-net
 
   identity:
-    build:
-      context: .
-      dockerfile: services/identity/Dockerfile
+    # IDX-5 (ADR-0003): o identity vive em github.com/leandrorf/expense-identity e entra aqui pela
+    # imagem publicada, com versao fixada (troca de versao por PR, que roda o E2E). Para testar uma
+    # mudanca local do identity junto: docker-compose.identity-local.yml.
+    image: ghcr.io/leandrorf/expense-identity:1.0.0
     container_name: expense-identity
     depends_on:
       identity-db:

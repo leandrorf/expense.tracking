@@ -6,7 +6,9 @@ boletos — em arquitetura de microserviços, com autenticação OAuth2 própria
 - **Frontend:** React 18 + TypeScript (Vite) · *planejado*
 - **Backend:** .NET 10 / C# · ASP.NET Core · EF Core 10 · arquitetura hexagonal
 - **Banco:** MySQL 8 (um por serviço)
-- **Auth:** servidor OAuth2/OIDC próprio (sem bibliotecas de terceiros)
+- **Auth:** servidor OAuth2/OIDC próprio (sem bibliotecas de terceiros), em repositório próprio:
+  [leandrorf/expense-identity](https://github.com/leandrorf/expense-identity), consumido aqui pela
+  imagem `ghcr.io/leandrorf/expense-identity` com versão fixada ([ADR-0003](docs/adr/0003-identity-em-repositorio-proprio.md))
 - **Infra:** Docker + Docker Compose
 - **Testes:** xUnit (unitário) + WebApplicationFactory (integração) + Cypress (EndToEnd)
 
@@ -19,12 +21,11 @@ cada serviço.
 expense.tracking/
 ├── Directory.Build.props / Directory.Packages.props   # padrões + versões centralizadas
 ├── NuGet.config                                        # feed nuget.org
-├── docker-compose.yml / .env.example                   # MySQL + identity
+├── docker-compose.yml / .env.example                   # stack completo (identity pela imagem)
+├── docker-compose.identity-local.yml                   # opcional: identity a partir de um clone local
+├── infra/identity/appsettings.Production.json          # clientes OAuth, usuário demo e CORS deste repo
 ├── docs/architecture.md
 ├── services/
-│   ├── identity/          # Servidor OAuth2 (hexagonal) — IMPLEMENTADO
-│   │   ├── src/ Domain | Application | Infrastructure | Api
-│   │   └── tests/ UnitTests | IntegrationTests
 │   ├── accounts/          # Contas PF/PJ + cartões + meios de pagamento — IMPLEMENTADO
 │   │   ├── src/ Domain | Application | Infrastructure | Api
 │   │   └── tests/ UnitTests | IntegrationTests
@@ -45,7 +46,7 @@ expense.tracking/
 - Docker + Docker Compose
 - Node 20+ (para o frontend, quando existir)
 
-## Rodando com Docker (MySQL + Identity)
+## Rodando com Docker
 
 ```bash
 cp .env.example .env          # ajuste as senhas
@@ -120,28 +121,25 @@ Portas/credenciais default (web 5173, identity 5080, usuário demo) são lidas d
 `cypress.config.ts` e podem ser sobrescritas por env (`E2E_BASE_URL`, `E2E_IDENTITY_URL`,
 `E2E_DEMO_EMAIL`, `E2E_DEMO_PASSWORD`).
 
-## Desenvolvimento local do Identity (sem Docker)
+## Identity (repositório próprio)
+
+O código, os testes e as migrations do identity ficam em
+[leandrorf/expense-identity](https://github.com/leandrorf/expense-identity). Aqui ele entra pela
+imagem `ghcr.io/leandrorf/expense-identity:<versão>` fixada no `docker-compose.yml`; subir a versão é
+um PR que troca a tag (o E2E do PR prova a compatibilidade).
+
+Para testar uma mudança do identity junto com este repositório, sem publicar imagem, clone o
+`expense-identity` ao lado deste e suba com o arquivo opcional:
 
 ```bash
-cd services/identity
-dotnet build
-dotnet test                   # 37 testes (unitários + integração)
-# Para rodar a API é necessário um MySQL acessível (ver ConnectionStrings:IdentityDb)
-dotnet run --project src/Expense.Tracking.Identity.Api
+git clone https://github.com/leandrorf/expense-identity ../expense-identity
+docker compose -f docker-compose.yml -f docker-compose.identity-local.yml up --build -d
+# outro caminho: IDENTITY_SOURCE_DIR=/caminho/do/clone docker compose -f ... up --build -d
 ```
 
-### Migrations (EF Core)
-
-```bash
-cd services/identity
-dotnet ef migrations add <Nome> \
-  --project src/Expense.Tracking.Identity.Infrastructure \
-  --startup-project src/Expense.Tracking.Identity.Api \
-  --context IdentityDbContext \
-  --output-dir Persistence/Migrations
-```
-
-As migrations são aplicadas automaticamente no startup da API (com retry).
+Os clientes OAuth, o usuário demo e o CORS que este repositório usa ficam em
+`infra/identity/appsettings.Production.json`: cliente ou escopo novo entra lá, sem release do
+identity.
 
 ## Desenvolvimento local da SPA (sem Docker)
 

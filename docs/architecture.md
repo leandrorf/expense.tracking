@@ -23,7 +23,7 @@ Cada serviço é autônomo, com seu próprio banco MySQL e **arquitetura hexagon
 
 | Serviço        | Responsabilidade                                                        | Status        |
 |----------------|-------------------------------------------------------------------------|---------------|
-| `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS                   | ✅ implementado |
+| `identity`     | Servidor OAuth2/OIDC: usuários, clientes, tokens, JWKS (repositório próprio) | ✅ imagem `1.0.0` |
 | `accounts`     | Contas (PF/PJ), cartões de crédito, catálogo de meios de pagamento        | ✅ implementado |
 | `transactions` | Lançamentos de gastos (crédito, Pix, dinheiro, boleto), categorização    | ✅ implementado |
 | `reporting`    | Consolidação de gastos (projeção alimentada pelos eventos do transactions) | ✅ implementado |
@@ -47,6 +47,13 @@ Regra de dependência: tudo aponta para dentro (Api → Application → Domain;
 Infrastructure → Application → Domain). O Domain não conhece EF, HTTP nem JWT.
 
 ## Identity Server (OAuth2) — implementado do zero
+
+> **Repositório próprio (ADR-0003, épico IDX):** o código vive em
+> [leandrorf/expense-identity](https://github.com/leandrorf/expense-identity), com CI, versão SemVer e
+> imagem `ghcr.io/leandrorf/expense-identity:X.Y.Z` próprios. Este repositório usa a imagem com a
+> versão fixada no `docker-compose.yml` e é dono da configuração dos clientes OAuth
+> (`infra/identity/appsettings.Production.json`). O contrato do qual os outros serviços dependem é o
+> OIDC: discovery, JWKS, `/oauth/authorize`, `/oauth/token` e as claims `sub` e `scope`.
 
 Grants suportados (escolha do projeto):
 
