@@ -24,6 +24,13 @@ public interface ITransactionRepository
 
     void Remove(Transaction transaction);
 
+    /// <summary>
+    /// IMP-6: para cada chave de descricao (<see cref="Transaction.DescriptionKeyOf"/>) com historico,
+    /// a categoria do lancamento mais recente do dono, em qualquer conta. Chave sem historico fica de fora.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> FindLatestCategoriesAsync(
+        Guid ownerUserId, IReadOnlyCollection<string> descriptionKeys, CancellationToken cancellationToken);
+
     /// <summary>IMP-9: lancamentos do dono que ainda existem com este lote de origem.</summary>
     Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken);
 

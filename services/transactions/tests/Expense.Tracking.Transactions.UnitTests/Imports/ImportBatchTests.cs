@@ -51,6 +51,69 @@ public sealed class ImportBatchTests
         Assert.Equal(TransactionType.Income, batch.Lines[1].Type);
     }
 
+    // ---------- IMP-6: sugestoes ----------
+
+    [Fact]
+    public void CategoryHistory_SuggestsTheCategoryByNormalizedDescription_OnlyForLinesThatCanEnter()
+    {
+        var history = new Dictionary<string, string> { ["UBER *TRIP"] = "Transporte", ["MERCADO"] = "Mercado" };
+
+        var batch = ImportBatch.Create(Owner, Account, null, PaymentMethod.Pix, ImportFormat.Ofx,
+            Statement(StatementKind.BankAccount,
+                StatementLine.Valid(1, Day, -30m, "  Uber   *Trip ", "A"),
+                StatementLine.Valid(2, Day, -10m, "mercado", "JA-EXISTE"),
+                StatementLine.Valid(3, Day, -5m, "PADARIA", "C")),
+            new HashSet<string> { "JA-EXISTE" }, Now, history).Value;
+
+        Assert.Equal("Transporte", batch.Lines[0].Category);
+        Assert.Null(batch.Lines[1].Category); // duplicada: nao entra, nao precisa de sugestao
+        Assert.Null(batch.Lines[2].Category); // sem historico
+    }
+
+    [Fact]
+    public void CategoryHistory_AlsoSuggestsForACardRefundOutByDefault()
+    {
+        var batch = ImportBatch.Create(Owner, Account, Guid.NewGuid(), null, ImportFormat.Ofx,
+            Statement(StatementKind.CreditCard, StatementLine.Valid(1, Day, 40m, "ESTORNO LOJA", "A")),
+            new HashSet<string>(), Now, new Dictionary<string, string> { ["ESTORNO LOJA"] = "Compras" }).Value;
+
+        Assert.Equal(ImportLineStatus.ExcludedByDefault, batch.Lines[0].Status);
+        Assert.Equal("Compras", batch.Lines[0].Category);
+    }
+
+    [Fact]
+    public void BankStatement_MemoHintSuggestsTheMethod_OtherwiseTheBatchDefault()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+                StatementLine.Valid(1, Day, -120m, "PIX ENVIADO MERCADO", "A"),
+                StatementLine.Valid(2, Day, -245.90m, "PAG BOLETO ENERGIA", "B"),
+                StatementLine.Valid(3, Day, -18.50m, "PADARIA", "C")),
+            method: PaymentMethod.DebitCard);
+
+        Assert.Equal(
+            [PaymentMethod.Pix, PaymentMethod.Boleto, PaymentMethod.DebitCard],
+            batch.Lines.Select(l => l.PaymentMethod!.Value));
+    }
+
+    [Fact]
+    public void CardStatement_IgnoresMemoHints()
+    {
+        var batch = Create(Statement(StatementKind.CreditCard, StatementLine.Valid(1, Day, -10m, "PIX LOJA", "A")),
+            card: Guid.NewGuid(), method: null);
+
+        Assert.Equal(PaymentMethod.CreditCard, batch.Lines[0].PaymentMethod);
+    }
+
+    [Fact]
+    public void TransactionDescriptionKey_IsTheNormalizedDescription()
+    {
+        var transaction = Transaction.Create(Owner, Account, TransactionType.Expense, PaymentMethod.Pix, null,
+            " Uber   *Trip ", "Transporte", 30m, "BRL", Day, null, Now).Value;
+
+        Assert.Equal("UBER *TRIP", transaction.DescriptionKey);
+        Assert.Equal(transaction.DescriptionKey, Transaction.DescriptionKeyOf("uber *trip"));
+    }
+
     [Fact]
     public void LineAlreadyLaunched_IsDuplicateAndNotIncluded()
     {

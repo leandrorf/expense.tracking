@@ -82,6 +82,28 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=import-row][data-status=Duplicate]').should('have.length', 3);
     cy.get('[data-cy=import-row-include]').each(($box) => cy.wrap($box).should('be.disabled').and('not.be.checked'));
     cy.get('[data-cy=import-confirm]').should('be.disabled');
+
+    // 8) IMP-6: extrato novo com a mesma padaria (escrita de outro jeito) e um Pix. A categoria vem do
+    //    histórico e o meio vem da pista no memo; sem pista, vale o meio padrão do lote.
+    const next = [
+      'OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', 'CHARSET:1252', '',
+      '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL<BANKTRANLIST>',
+      `<STMTTRN><DTPOSTED>20261110<TRNAMT>-9.90<FITID>E2E-${stamp}-4<MEMO>Padaria  e2e ${stamp}</STMTTRN>`,
+      `<STMTTRN><DTPOSTED>20261111<TRNAMT>-42.00<FITID>E2E-${stamp}-5<MEMO>PIX ENVIADO E2E ${stamp}</STMTTRN>`,
+      '</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
+    ].join('\r\n');
+    cy.get('[data-cy=import-cancel]').click();
+    cy.get('[data-cy=import-account]').find('option').contains(accountName).then(($opt) => {
+      cy.get('[data-cy=import-account]').select($opt.val() as string);
+    });
+    cy.get('[data-cy=import-payment-method]').select('Cash');
+    cy.get('[data-cy=import-file]').selectFile({ ...file, contents: Cypress.Buffer.from(next, 'latin1'), fileName: 'extrato2.ofx' });
+    cy.get('[data-cy=import-submit]').click();
+    cy.get('[data-cy=import-row]').eq(0).find('[data-cy=import-row-category]').should('have.value', category);
+    cy.get('[data-cy=import-row]').eq(0).find('[data-cy=import-row-method]').should('have.value', 'Cash');
+    cy.get('[data-cy=import-row]').eq(1).find('[data-cy=import-row-category]').should('have.value', '');
+    cy.get('[data-cy=import-row]').eq(1).find('[data-cy=import-row-method]').should('have.value', 'Pix');
+    cy.get('[data-cy=import-pending-count]').should('contain', '1 sem categoria');
   });
 
   // IMP-8: CSV com colunas que o servidor não reconhece; o usuário as escolhe vendo as primeiras linhas.

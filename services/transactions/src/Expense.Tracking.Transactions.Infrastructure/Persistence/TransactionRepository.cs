@@ -41,6 +41,31 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
 
     public void Remove(Transaction transaction) => dbContext.Transactions.Remove(transaction);
 
+    public async Task<IReadOnlyDictionary<string, string>> FindLatestCategoriesAsync(
+        Guid ownerUserId, IReadOnlyCollection<string> descriptionKeys, CancellationToken cancellationToken)
+    {
+        var latest = new Dictionary<string, (string Category, DateTimeOffset CreatedAtUtc)>(StringComparer.Ordinal);
+
+        // Em blocos, como as chaves externas; so as colunas necessarias, nunca o lancamento inteiro.
+        foreach (var chunk in descriptionKeys.Distinct().Chunk(500))
+        {
+            var rows = await dbContext.Transactions
+                .Where(t => t.OwnerUserId == ownerUserId && chunk.Contains(t.DescriptionKey))
+                .Select(t => new { t.DescriptionKey, t.Category, t.CreatedAtUtc })
+                .ToListAsync(cancellationToken);
+
+            foreach (var row in rows)
+            {
+                if (!latest.TryGetValue(row.DescriptionKey, out var current) || row.CreatedAtUtc > current.CreatedAtUtc)
+                {
+                    latest[row.DescriptionKey] = (row.Category, row.CreatedAtUtc);
+                }
+            }
+        }
+
+        return latest.ToDictionary(kv => kv.Key, kv => kv.Value.Category, StringComparer.Ordinal);
+    }
+
     public async Task<IReadOnlyList<Transaction>> ListByImportBatchAsync(
         Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
         await dbContext.Transactions
