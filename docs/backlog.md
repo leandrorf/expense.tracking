@@ -272,7 +272,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
     acompanhamento do mês, *então* vejo o total "Sem orçamento" por escopo, com as categorias que o
     compõem.
   - Estimativa: 2 · **Should** · Dependências: BDG-4 (UI junto da BDG-6)
-- 🔵 **BDG-9** E2E Cypress: jornadas de orçamento PF e PJ.
+- ✅ **BDG-9** E2E Cypress: jornadas de orçamento PF e PJ.
+  (`cypress/e2e/budgets.cy.ts` + `cy.waitForBudget`; botão "atualizar" no acompanhamento do mês)
   - *Dado* um orçamento "Alimentação" PF, *quando* lanço um gasto PF no **Pix** que ultrapassa o
     limite, *então* a aba Orçamentos mostra o consumido e o status **Estourado**.
   - *Dado* um orçamento PJ, *quando* lanço um gasto PJ no **cartão de crédito**, *então* o consumido do
