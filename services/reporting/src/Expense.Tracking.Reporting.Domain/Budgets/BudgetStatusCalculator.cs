@@ -120,11 +120,7 @@ public static class BudgetStatusCalculator
 
     /// <summary>Variantes da mesma categoria ("alimentação ", "Alimentação") viram uma so: a mais usada.</summary>
     private static string DisplayName(IEnumerable<TransactionRecord> sameCategory) =>
-        sameCategory
-            .GroupBy(t => t.Category.Trim())
-            .OrderByDescending(v => v.Count())
-            .ThenBy(v => v.Key, StringComparer.Ordinal)
-            .First().Key;
+        CategorySuggestions.PreferredSpelling(sameCategory.Select(t => new CategoryUsage(t.Category, 1)));
 
     private static BudgetHealth HealthFor(decimal percent) => percent switch
     {

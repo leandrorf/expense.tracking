@@ -259,7 +259,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
   - *Dado* a aba aberta, *quando* navego para o mês anterior ou o seguinte, *então* os valores e os
     limites são os daquele mês.
   - Estimativa: 3 · **Must** · Dependências: BDG-4, BDG-5
-- 🔵 **BDG-7** Sugerir as categorias já usadas (orçamento e lançamento).
+- ✅ **BDG-7** Sugerir as categorias já usadas (orçamento e lançamento).
+  (`GET /budgets/categories` com `CategorySuggestions`; `<datalist>` via `useCategorySuggestions`; inclui as categorias dos orçamentos)
   - *Dado* lançamentos PF e PJ com categorias "Alimentação" e "Combustível", *quando* digito a
     categoria no formulário de orçamento ou de lançamento, *então* as categorias já usadas pelo
     usuário aparecem como sugestão, sem repetir variações de maiúscula/acento.

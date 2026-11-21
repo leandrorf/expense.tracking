@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { budgetsApi, type Budget, type BudgetHealth, type BudgetMonth, type BudgetScope } from '../api/budgets';
 import { ApiError } from '../api/client';
+import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
 
 const SCOPES: { scope: BudgetScope; label: string }[] = [
   { scope: 'Personal', label: 'Pessoal (PF)' },
@@ -38,6 +39,7 @@ export function BudgetsView() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   // Muda a cada alteração nos orçamentos, para o acompanhamento do mês buscar de novo.
   const [revision, setRevision] = useState(0);
+  const { categories, remember } = useCategorySuggestions();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -71,6 +73,7 @@ export function BudgetsView() {
     try {
       const created = await budgetsApi.create({ category, scope, amount: Number(amount), startMonth });
       setBudgets((current) => [...current, created]);
+      remember(created.category);
       setRevision((r) => r + 1);
       setCategory('');
       setAmount('');
@@ -102,11 +105,14 @@ export function BudgetsView() {
           data-cy="budget-category"
           aria-label="Categoria"
           placeholder="Categoria"
+          list="budget-category-suggestions"
+          autoComplete="off"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           maxLength={60}
           required
         />
+        <CategoryDatalist id="budget-category-suggestions" categories={categories} />
         <select
           data-cy="budget-scope"
           aria-label="Escopo"

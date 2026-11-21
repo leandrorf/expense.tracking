@@ -188,3 +188,18 @@ public sealed class GetBudgetStatusHandler(IBudgetRepository budgets, IProjectio
         return new BudgetMonthDto(first.ToString("yyyy-MM"), statuses, unbudgeted);
     }
 }
+
+/// <summary>
+/// BDG-7: categorias ja usadas pelo dono, para sugerir nos formularios de orcamento e de
+/// lancamento. Vem dos lancamentos da projecao e dos orcamentos (um orcamento ainda sem gasto
+/// tambem e sugerido no lancamento, o que evita digitar a categoria de outro jeito).
+/// </summary>
+public sealed class GetCategorySuggestionsHandler(IBudgetRepository budgets, IProjectionQueries projection)
+{
+    public async Task<IReadOnlyList<string>> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken)
+    {
+        var used = await projection.GetCategoryUsageAsync(ownerUserId, cancellationToken);
+        var budgeted = await budgets.ListAsync(ownerUserId, cancellationToken);
+        return CategorySuggestions.Build(used.Concat(budgeted.Select(b => new CategoryUsage(b.Category, 1))));
+    }
+}
