@@ -414,7 +414,8 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
   - *Dado* um push sem tag, *quando* o CI roda, *então* a imagem é construída (para pegar erro de
     Dockerfile) mas não é publicada.
   - Estimativa: 3 · **Must** · Dependências: IDX-3
-- 🔵 **IDX-5** Monorepo consome a imagem e remove o código do `identity`.
+- ✅ **IDX-5** Monorepo consome a imagem e remove o código do `identity`.
+  (compose com `ghcr.io/leandrorf/expense-identity:1.0.0`; `docker-compose.identity-local.yml`; matriz e ruleset sem `identity`)
   - *Dado* o `docker-compose.yml` com `image: ghcr.io/leandrorf/expense-identity:<versão fixada>`,
     *quando* subo o stack, *então* tudo funciona sem `services/identity` no repositório (smoke 17/17).
   - *Dado* um PR no monorepo, *quando* o CI roda, *então* a matriz não tem mais `identity`, o

@@ -1,0 +1,12 @@
+# IDX-5 (ADR-0003): opcional. Troca a imagem publicada do identity por um build a partir de um
+# clone local de github.com/leandrorf/expense-identity, para testar mudancas nos dois repositorios
+# juntas sem publicar imagem.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.identity-local.yml up --build -d
+#
+# O clone e procurado em ../expense-identity; outro caminho via IDENTITY_SOURCE_DIR.
+services:
+  identity:
+    image: expense-identity:local
+    build:
+      context: ${IDENTITY_SOURCE_DIR:-../expense-identity}

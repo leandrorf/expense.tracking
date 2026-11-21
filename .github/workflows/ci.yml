@@ -25,8 +25,6 @@ jobs:
             solution: services/accounts/Expense.Tracking.Accounts.slnx
           - name: gateway
             solution: services/gateway/Expense.Tracking.Gateway.slnx
-          - name: identity
-            solution: services/identity/Expense.Tracking.Identity.slnx
           - name: reporting
             solution: services/reporting/Expense.Tracking.Reporting.slnx
           - name: transactions
