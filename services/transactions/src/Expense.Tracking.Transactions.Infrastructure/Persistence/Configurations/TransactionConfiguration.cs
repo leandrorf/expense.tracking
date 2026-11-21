@@ -35,6 +35,7 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         builder.Property(t => t.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
         builder.Property(t => t.ExternalId).HasColumnName("external_id").HasMaxLength(ImportLine.ExternalIdMaxLength);
         builder.Property(t => t.ImportBatchId).HasColumnName("import_batch_id");
+        builder.Property(t => t.Installments).HasColumnName("installments").IsRequired().HasDefaultValue(1);
 
         builder.HasIndex(t => t.OwnerUserId);
         builder.HasIndex(t => new { t.OwnerUserId, t.AccountId });

@@ -78,6 +78,12 @@ public sealed class Transaction
     /// <summary>Lote de importacao que criou o lancamento, para desfazer a importacao (IMP-9).</summary>
     public Guid? ImportBatchId { get; private set; }
 
+    /// <summary>
+    /// INV-2 (ADR-0005, decisao 5): numero de parcelas da compra; 1 quando a vista. A fatura
+    /// distribui as parcelas; Resumo e orcamentos contam a compra inteira na data dela.
+    /// </summary>
+    public int Installments { get; private set; } = 1;
+
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,

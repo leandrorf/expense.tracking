@@ -83,6 +83,13 @@ static async Task InitializeDatabaseAsync(WebApplication app)
     {
         app.Logger.LogInformation("Carga inicial do outbox: {Count} lancamentos ganharam TransactionRegistered.", backfilled);
     }
+
+    // INV-2: compras no cartao com TransactionRegistered v1 ganham descricao, cartao e parcelas.
+    var cardDetails = await CardDetailsBackfill.RunAsync(db, scope.ServiceProvider.GetRequiredService<TimeProvider>());
+    if (cardDetails > 0)
+    {
+        app.Logger.LogInformation("Backfill de cartao: {Count} compras ganharam TransactionCardDetailsResolved.", cardDetails);
+    }
 }
 
 static async Task ApplyMigrationsWithRetryAsync(TransactionsDbContext db, ILogger logger)

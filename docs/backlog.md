@@ -870,7 +870,7 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     pagamento de fatura não conta de novo; conta de origem do pagamento = qualquer conta ativa do
     usuário; `expenses.read` para ler pagamentos.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **INV-2** Cartão e parcelas no evento, com backfill dos lançamentos anteriores.
+- ✅ **INV-2** Cartão e parcelas no evento, com backfill dos lançamentos anteriores. → `TransactionRegistered` v2, `CardDetailsBackfill`, projeção com `description`/`credit_card_id`/`installments`.
   - *Dado* uma compra no cartão, *quando* é registrada, *então* o `TransactionRegistered` sai na
     versão 2 com `creditCardId` e `installments`, e a projeção do `reporting` guarda os dois.
   - *Dado* lançamentos de cartão gravados antes da v2, *quando* o `transactions` sobe, *então* cada um
@@ -878,6 +878,20 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     completada.
   - *Dado* um evento v1 ainda no feed, *quando* o `reporting` o lê, *então* ele é aplicado como antes
     (à vista, sem cartão até o backfill).
+  - **Acréscimo à ADR-0005 (decisão 2), pedido pelo dono do produto na INV-2:** a v2 e o
+    `TransactionCardDetailsResolved` também levam a **descrição** do lançamento, para a fatura listar
+    "Notebook Loja X — parcela 1/3" em vez de só categoria e valor.
+  - Feito assim: o lançamento ganhou `installments` (sempre 1 até a INV-5; migração
+    `TransactionInstallments`). O backfill roda na subida, logo depois da carga inicial do outbox,
+    sem depender do accounts (os dados estão no próprio lançamento). Ele grava o evento de detalhes
+    para toda compra no cartão sem `TransactionRegistered` v2 nem detalhes já resolvidos, e por isso
+    é idempotente pelo próprio outbox. O `reporting` lê v1 como à vista, sem cartão nem descrição, e
+    aceita até a v2 do `TransactionRegistered` (v3 aborta o lote, como antes). O evento de detalhes
+    só vale em linha que já existe. A projeção ganhou `description`, `credit_card_id` e `installments`
+    (migração `ProjectionCardDetails`, índice dono + cartão). Lançamentos fora do cartão registrados
+    em v1 ficam sem descrição na projeção, porque só a fatura usa a descrição. Validado ao vivo: 26
+    compras de cartão legadas completadas, as 26 com cartão e descrição na projeção, reinício sem
+    regravar, evento novo na v2, smoke 25/25 e E2E 8/8.
   - Estimativa: 5 · **Must** · Dependências: INV-1
 - ✅ **INV-3** Regra do ciclo: fatura de cada compra e de cada parcela (domínio, sem I/O). → `reporting/.../Domain/Invoices/` (`CardCycle`, `Installments`, `InvoiceCalculator`).
   - *Dado* um cartão que fecha no dia 10 e vence no dia 17, *quando* a compra é no dia 10, *então*

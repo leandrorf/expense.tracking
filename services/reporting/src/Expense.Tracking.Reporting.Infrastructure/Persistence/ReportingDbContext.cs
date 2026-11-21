@@ -40,8 +40,13 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(t => t.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
             b.Property(t => t.OccurredOn).HasColumnName("occurred_on").IsRequired();
             b.Property(t => t.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
+            b.Property(t => t.Description).HasColumnName("description").HasMaxLength(200);
+            b.Property(t => t.CreditCardId).HasColumnName("credit_card_id");
+            b.Property(t => t.Installments).HasColumnName("installments").IsRequired().HasDefaultValue(1);
             // Consulta do resumo (EVT-3): por dono, opcionalmente por conta e periodo.
             b.HasIndex(t => new { t.OwnerUserId, t.OccurredOn }).HasDatabaseName("ix_projected_transactions_owner_date");
+            // Fatura (INV-4): compras de um cartao do dono.
+            b.HasIndex(t => new { t.OwnerUserId, t.CreditCardId }).HasDatabaseName("ix_projected_transactions_owner_card");
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

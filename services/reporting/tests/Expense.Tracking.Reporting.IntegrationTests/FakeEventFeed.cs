@@ -55,12 +55,13 @@ public sealed class FakeEventFeed : IEventFeedClient
         }
     }
 
-    private FeedEvent Append(string type, Guid aggregateId, Guid ownerUserId, object payload)
+    /// <summary>Os payloads deste fake tem o formato v1 de cada evento.</summary>
+    private FeedEvent Append(string type, Guid aggregateId, Guid ownerUserId, object payload, int version = 1)
     {
         lock (_events)
         {
             var feedEvent = new FeedEvent(
-                _events.Count + 1, Guid.NewGuid(), type, FeedEventTypes.SupportedVersion, aggregateId, ownerUserId,
+                _events.Count + 1, Guid.NewGuid(), type, version, aggregateId, ownerUserId,
                 DateTimeOffset.UtcNow, null, JsonSerializer.SerializeToElement(payload, Json));
             _events.Add(feedEvent);
             return feedEvent;

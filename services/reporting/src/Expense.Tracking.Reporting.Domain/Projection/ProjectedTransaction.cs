@@ -31,6 +31,18 @@ public sealed class ProjectedTransaction
 
     public DateOnly OccurredOn { get; set; }
 
+    /// <summary>
+    /// INV-2: descricao do lancamento. Nula nos lancamentos fora do cartao registrados por evento v1
+    /// (o backfill so completa as compras no cartao, que a fatura lista).
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>INV-2: cartao da compra; nulo fora do cartao.</summary>
+    public Guid? CreditCardId { get; set; }
+
+    /// <summary>INV-2: parcelas da compra no cartao (1 a vista).</summary>
+    public int Installments { get; set; } = 1;
+
     /// <summary>Sequencia do ultimo evento do feed aplicado a esta linha.</summary>
     public long LastEventSequence { get; set; }
 }

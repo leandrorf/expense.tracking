@@ -114,11 +114,26 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(60)")
                         .HasColumnName("category");
 
+                    b.Property<Guid?>("CreditCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("credit_card_id");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
                         .HasColumnType("varchar(3)")
                         .HasColumnName("currency");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("description");
+
+                    b.Property<int>("Installments")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1)
+                        .HasColumnName("installments");
 
                     b.Property<long>("LastEventSequence")
                         .HasColumnType("bigint")
@@ -145,6 +160,9 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnName("transaction_type");
 
                     b.HasKey("TransactionId");
+
+                    b.HasIndex("OwnerUserId", "CreditCardId")
+                        .HasDatabaseName("ix_projected_transactions_owner_card");
 
                     b.HasIndex("OwnerUserId", "OccurredOn")
                         .HasDatabaseName("ix_projected_transactions_owner_date");

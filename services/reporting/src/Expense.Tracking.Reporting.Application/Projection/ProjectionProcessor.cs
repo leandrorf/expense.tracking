@@ -86,7 +86,7 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         {
             case FeedEventTypes.TransactionRegistered:
                 EnsureSupported(feedEvent);
-                await ApplyRegisteredAsync(feedEvent, Read<TransactionRegisteredV1>(feedEvent), cancellationToken);
+                await ApplyRegisteredAsync(feedEvent, ReadRegistered(feedEvent), cancellationToken);
                 return true;
 
             case FeedEventTypes.TransactionDeleted:
@@ -99,13 +99,32 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
                 await ApplyScopeResolvedAsync(feedEvent, Read<TransactionAccountScopeResolvedV1>(feedEvent), cancellationToken);
                 return true;
 
+            case FeedEventTypes.TransactionCardDetailsResolved:
+                EnsureSupported(feedEvent);
+                await ApplyCardDetailsResolvedAsync(feedEvent, Read<TransactionCardDetailsResolvedV1>(feedEvent), cancellationToken);
+                return true;
+
             default:
                 // Tipo novo que o reporting ainda nao usa: nao afeta a projecao.
                 return false;
         }
     }
 
-    private async Task ApplyRegisteredAsync(FeedEvent feedEvent, TransactionRegisteredV1 e, CancellationToken cancellationToken)
+    /// <summary>v1 e lida como v2 a vista, sem cartao nem descricao (o backfill completa as compras no cartao).</summary>
+    private static TransactionRegisteredV2 ReadRegistered(FeedEvent feedEvent)
+    {
+        if (feedEvent.Version >= 2)
+        {
+            return Read<TransactionRegisteredV2>(feedEvent);
+        }
+
+        var v1 = Read<TransactionRegisteredV1>(feedEvent);
+        return new TransactionRegisteredV2(
+            v1.TransactionId, v1.OwnerUserId, v1.AccountId, v1.AccountScope, v1.TransactionType, v1.PaymentMethod,
+            v1.Category, v1.Amount, v1.Currency, v1.OccurredOn, Description: null, CreditCardId: null, Installments: 1);
+    }
+
+    private async Task ApplyRegisteredAsync(FeedEvent feedEvent, TransactionRegisteredV2 e, CancellationToken cancellationToken)
     {
         var row = await store.FindAsync(e.TransactionId, cancellationToken);
         if (row is null)
@@ -123,7 +142,23 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         row.Amount = e.Amount;
         row.Currency = e.Currency;
         row.OccurredOn = e.OccurredOn;
+        row.Description = e.Description;
+        row.CreditCardId = e.CreditCardId;
+        row.Installments = e.Installments;
         row.LastEventSequence = feedEvent.Sequence;
+    }
+
+    private async Task ApplyCardDetailsResolvedAsync(
+        FeedEvent feedEvent, TransactionCardDetailsResolvedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindAsync(e.TransactionId, cancellationToken);
+        if (row is not null)
+        {
+            row.Description = e.Description;
+            row.CreditCardId = e.CreditCardId;
+            row.Installments = e.Installments;
+            row.LastEventSequence = feedEvent.Sequence;
+        }
     }
 
     private async Task ApplyDeletedAsync(TransactionDeletedV1 e, CancellationToken cancellationToken)
@@ -148,7 +183,7 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
 
     private static void EnsureSupported(FeedEvent feedEvent)
     {
-        if (feedEvent.Version != FeedEventTypes.SupportedVersion)
+        if (feedEvent.Version < 1 || feedEvent.Version > FeedEventTypes.SupportedVersionOf(feedEvent.EventType))
         {
             throw new UnsupportedEventVersionException(feedEvent);
         }

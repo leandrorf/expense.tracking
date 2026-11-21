@@ -268,6 +268,12 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("import_batch_id");
 
+                    b.Property<int>("Installments")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1)
+                        .HasColumnName("installments");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)")

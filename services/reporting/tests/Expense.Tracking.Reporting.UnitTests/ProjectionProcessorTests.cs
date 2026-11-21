@@ -126,7 +126,7 @@ public sealed class ProjectionProcessorTests
         var feed = new Feed();
         var store = new Store();
         feed.Registered(Guid.NewGuid());
-        feed.Raw(FeedEventTypes.TransactionRegistered, version: 2, new { transactionId = Guid.NewGuid() });
+        feed.Raw(FeedEventTypes.TransactionRegistered, version: 3, new { transactionId = Guid.NewGuid() });
 
         await Assert.ThrowsAsync<UnsupportedEventVersionException>(
             () => Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None));
@@ -134,6 +134,82 @@ public sealed class ProjectionProcessorTests
         Assert.Equal(0, store.Saves);
         Assert.Equal(0, store.Checkpoint);
     }
+
+    // ---------- INV-2: TransactionRegistered v2 e TransactionCardDetailsResolved ----------
+
+    [Fact]
+    public async Task RegisteredV2_StoresDescriptionCardAndInstallments()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var tx = Guid.NewGuid();
+        var card = Guid.NewGuid();
+        feed.RegisteredV2(tx, card, installments: 3, description: "Notebook");
+
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        var row = Assert.Single(store.Rows.Values);
+        Assert.Equal(("Notebook", card, 3, "CreditCard"), (row.Description, row.CreditCardId, row.Installments, row.PaymentMethod));
+    }
+
+    [Fact]
+    public async Task RegisteredV1_IsReadAsCashWithoutCard_AndV1AndV2LiveSideBySide()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (old, current) = (Guid.NewGuid(), Guid.NewGuid());
+        feed.Registered(old);
+        feed.RegisteredV2(current, Guid.NewGuid(), installments: 2, description: "Atual");
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(2, result.Applied);
+        Assert.Equal((null, null, 1), (store.Rows[old].Description, store.Rows[old].CreditCardId, store.Rows[old].Installments));
+        Assert.Equal(2, store.Rows[current].Installments);
+    }
+
+    [Fact]
+    public async Task CardDetailsResolved_CompletesAV1Row_AndIsIgnoredForAMissingOne()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (tx, deleted, card) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        feed.Registered(tx);
+        CardDetails(feed, tx, card, "Compra antiga");
+        CardDetails(feed, deleted, card, "Ja excluida");
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(3, result.Applied);
+        var row = Assert.Single(store.Rows.Values);
+        Assert.Equal(("Compra antiga", card, 1, 2L), (row.Description, row.CreditCardId, row.Installments, row.LastEventSequence));
+    }
+
+    [Fact]
+    public async Task RebuildFromZero_WithV1RegisteredThenCardDetails_ReachesTheSameState()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (tx, card) = (Guid.NewGuid(), Guid.NewGuid());
+        feed.Registered(tx);
+        CardDetails(feed, tx, card, "Compra antiga");
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        store.Checkpoint = 0;
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(card, Assert.Single(store.Rows.Values).CreditCardId);
+    }
+
+    private static FeedEvent CardDetails(Feed feed, Guid tx, Guid card, string description) =>
+        feed.Raw(FeedEventTypes.TransactionCardDetailsResolved, 1, new
+        {
+            transactionId = tx,
+            ownerUserId = Guid.Empty,
+            description,
+            creditCardId = card,
+            installments = 1,
+        });
 
     [Fact]
     public async Task EmptyFeed_DoesNotTouchTheStore()
@@ -236,6 +312,24 @@ public sealed class ProjectionProcessorTests
                 currency = "BRL",
                 occurredOn = "2026-11-19",
             }, traceParent);
+
+        public FeedEvent RegisteredV2(Guid tx, Guid? card, int installments, string description) =>
+            Add(FeedEventTypes.TransactionRegistered, 2, tx, new
+            {
+                transactionId = tx,
+                ownerUserId = Guid.Empty,
+                accountId = Guid.Empty,
+                accountScope = "Personal",
+                transactionType = "Expense",
+                paymentMethod = card is null ? "Pix" : "CreditCard",
+                category = "Eletronicos",
+                amount = 300m,
+                currency = "BRL",
+                occurredOn = "2026-11-19",
+                description,
+                creditCardId = card,
+                installments,
+            });
 
         public FeedEvent Deleted(Guid tx) =>
             Add(FeedEventTypes.TransactionDeleted, 1, tx, new { transactionId = tx, ownerUserId = Guid.Empty });
