@@ -613,7 +613,7 @@ produto (2026-11-21).
     linhas curtas (memória) e com milhares de colunas (CPU). Limites: 32 níveis e 100 mil
     elementos no OFX; 5.001 linhas e 50 colunas no CSV, conferidos durante a leitura.
   - Estimativa: 5 · **Must** · Dependências: IMP-2, IMP-3
-- 🔵 **IMP-5** Confirmar a importação (API).
+- ✅ **IMP-5** Confirmar a importação (API). → `POST /imports/{id}/confirm`.
   - *Dado* um lote pendente, *quando* confirmo com as linhas incluídas, cada uma com categoria e meio
     de pagamento, *então* os lançamentos são criados numa transação só, cada um com seu `external_id`,
     e um `TransactionRegistered` por lançamento entra no outbox.
@@ -625,6 +625,14 @@ produto (2026-11-21).
     *então* o índice único impede a duplicata e a linha volta como duplicada.
   - *Dado* a confirmação, *quando* a projeção processa os eventos, *então* o Resumo e o status dos
     orçamentos do mês incluem os importados no escopo PF/PJ da conta.
+  - Feito assim: o corpo traz as decisões por linha (`id`, `included`, `category`,
+    `paymentMethod`); linha omitida mantém a prévia. Sem categoria em linha incluída → 400
+    `import.categories_required` com os números em `lines`. Duas guardas contra corrida: o lote
+    grava com `WHERE status = 'Pending'` (concorrência otimista) e o índice único de `external_id`;
+    quem perde recarrega e decide de novo (até 3 tentativas). Validado no MySQL: 8 confirmações
+    paralelas do mesmo lote → 20 lançamentos, respostas idênticas; dois lotes do mesmo arquivo em
+    paralelo → 20 importadas + 20 duplicadas. Contador `transactions.imports.lines`
+    (`result`=imported|duplicate, `format`) no Prometheus.
   - Estimativa: 5 · **Must** · Dependências: IMP-4
 - 🔵 **IMP-6** Sugerir categoria e meio de pagamento pelo histórico.
   - *Dado* lançamentos anteriores com a descrição "UBER *TRIP" na categoria "Transporte", *quando*

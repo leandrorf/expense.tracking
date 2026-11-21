@@ -29,8 +29,17 @@ public enum ImportLineStatus
     Invalid = 2,
 
     /// <summary>Credito na fatura do cartao (pagamento da fatura, estorno): fora por padrao.</summary>
-    ExcludedByDefault = 3
+    ExcludedByDefault = 3,
+
+    /// <summary>Virou lancamento na confirmacao (IMP-5).</summary>
+    Imported = 4
 }
+
+/// <summary>
+/// IMP-5: o que o usuario decidiu para uma linha na previa. Campo nulo mantem o que a previa ja
+/// tinha (incluida por padrao, meio do lote, categoria sugerida).
+/// </summary>
+public sealed record ImportLineDecision(Guid LineId, bool? Included, string? Category, PaymentMethod? PaymentMethod);
 
 /// <summary>
 /// Lote de importacao (IMP-4, ADR-0004 decisao 2): o que foi lido de um arquivo, guardado como
@@ -82,6 +91,8 @@ public sealed class ImportBatch
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public DateTimeOffset ExpiresAtUtc { get; private set; }
+
+    public DateTimeOffset? ConfirmedAtUtc { get; private set; }
 
     public IReadOnlyList<ImportLine> Lines => _lines;
 
@@ -150,6 +161,72 @@ public sealed class ImportBatch
         };
     }
 
+    /// <summary>
+    /// IMP-5: aplica as decisoes do usuario e transforma as linhas incluidas em lancamentos, com a
+    /// chave externa e o lote de origem. Toda linha incluida precisa de categoria; se faltar em
+    /// alguma, o erro traz os numeros das linhas em <c>Metadata["lines"]</c> e nada e confirmado.
+    /// <paramref name="alreadyLaunched"/> sao as chaves lancadas na conta depois da previa (outra
+    /// importacao): essas linhas viram duplicadas em vez de lancamento.
+    /// </summary>
+    public Result<IReadOnlyList<Transaction>> Confirm(
+        IReadOnlyCollection<ImportLineDecision> decisions, IReadOnlySet<string> alreadyLaunched, DateTimeOffset nowUtc)
+    {
+        if (Status != ImportBatchStatus.Pending)
+        {
+            return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.NotPending);
+        }
+
+        var lines = _lines.ToDictionary(l => l.Id);
+        foreach (var decision in decisions)
+        {
+            if (!lines.TryGetValue(decision.LineId, out var line))
+            {
+                return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.LineNotFound);
+            }
+
+            var applied = line.Apply(decision, Kind);
+            if (applied.IsFailure)
+            {
+                return Result.Failure<IReadOnlyList<Transaction>>(applied.Error);
+            }
+        }
+
+        foreach (var line in _lines.Where(l => l.Included && alreadyLaunched.Contains(l.ExternalId!)))
+        {
+            line.MarkDuplicate();
+        }
+
+        var withoutCategory = _lines.Where(l => l.Included && l.Category is null).Select(l => l.Number).Order().ToList();
+        if (withoutCategory.Count > 0)
+        {
+            return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.CategoriesRequired(withoutCategory));
+        }
+
+        var created = new List<Transaction>();
+        foreach (var line in _lines.Where(l => l.Included).OrderBy(l => l.Number))
+        {
+            var transaction = Transaction.CreateImported(
+                OwnerUserId, AccountId, line.Type!.Value, line.PaymentMethod!.Value,
+                line.PaymentMethod == PaymentMethod.CreditCard ? CreditCardId : null,
+                line.Description, line.Category!, line.Amount!.Value, Currency, line.OccurredOn!.Value,
+                line.ExternalId!, Id, nowUtc);
+            if (transaction.IsFailure)
+            {
+                return Result.Failure<IReadOnlyList<Transaction>>(transaction.Error with
+                {
+                    Metadata = new Dictionary<string, object?> { ["lines"] = new[] { line.Number } },
+                });
+            }
+
+            line.MarkImported(transaction.Value.Id);
+            created.Add(transaction.Value);
+        }
+
+        Status = ImportBatchStatus.Confirmed;
+        ConfirmedAtUtc = nowUtc;
+        return created;
+    }
+
     public bool IsExpired(DateTimeOffset nowUtc) => Status == ImportBatchStatus.Pending && nowUtc >= ExpiresAtUtc;
 }
 
@@ -195,6 +272,66 @@ public sealed class ImportLine
     public bool Included { get; private set; }
 
     public string? Problem { get; private set; }
+
+    /// <summary>Lancamento criado por esta linha na confirmacao (IMP-5).</summary>
+    public Guid? TransactionId { get; private set; }
+
+    /// <summary>So linha nova ou fora por padrao pode entrar; duplicada e invalida, nao.</summary>
+    public bool CanBeIncluded => Status is ImportLineStatus.New or ImportLineStatus.ExcludedByDefault;
+
+    internal Result Apply(ImportLineDecision decision, StatementKind kind)
+    {
+        if (decision.Included is { } included)
+        {
+            if (included && !CanBeIncluded)
+            {
+                return Result.Failure(ImportErrors.LineNotIncludable(Number));
+            }
+
+            Included = included;
+        }
+
+        if (decision.Category is not null)
+        {
+            var category = decision.Category.Trim();
+            if (category.Length > Transaction.CategoryMaxLength)
+            {
+                return Result.Failure(Error.Validation(
+                    "transaction.category_too_long",
+                    $"A categoria deve ter no maximo {Transaction.CategoryMaxLength} caracteres (linha {Number})."));
+            }
+
+            Category = category.Length == 0 ? null : category;
+        }
+
+        if (decision.PaymentMethod is { } method)
+        {
+            // Fatura e sempre cartao de credito; extrato nunca (ADR-0004, decisao 5).
+            var valid = kind == StatementKind.CreditCard
+                ? method == Transactions.PaymentMethod.CreditCard
+                : method != Transactions.PaymentMethod.CreditCard;
+            if (!valid)
+            {
+                return Result.Failure(ImportErrors.LinePaymentMethodInvalid(Number));
+            }
+
+            PaymentMethod = method;
+        }
+
+        return Result.Success();
+    }
+
+    internal void MarkDuplicate()
+    {
+        Status = ImportLineStatus.Duplicate;
+        Included = false;
+    }
+
+    internal void MarkImported(Guid transactionId)
+    {
+        Status = ImportLineStatus.Imported;
+        TransactionId = transactionId;
+    }
 
     internal static ImportLine From(
         Guid batchId, StatementLine source, StatementKind kind, PaymentMethod paymentMethod,

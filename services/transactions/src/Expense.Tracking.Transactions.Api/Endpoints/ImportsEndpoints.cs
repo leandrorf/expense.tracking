@@ -15,6 +15,11 @@ namespace Expense.Tracking.Transactions.Api.Endpoints;
 /// Campos: <c>file</c>, <c>accountId</c>, <c>creditCardId</c> (fatura), <c>paymentMethod</c>
 /// (meio padrao do extrato) e <c>mapping</c> (JSON do mapeamento, so CSV).
 /// </summary>
+/// <summary>IMP-5: decisoes da previa. Linha omitida mantem o que a previa tinha.</summary>
+public sealed record ConfirmImportRequest(IReadOnlyList<ConfirmImportLineRequest>? Lines);
+
+public sealed record ConfirmImportLineRequest(Guid Id, bool? Included, string? Category, string? PaymentMethod);
+
 public static class ImportsEndpoints
 {
     /// <summary>Arquivo de ate 5 MB mais folga para os outros campos e as fronteiras do multipart.</summary>
@@ -103,6 +108,36 @@ public static class ImportsEndpoints
             }
 
             var result = handler.Handle(form.Value.File);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapPost("/{id:guid}/confirm", async (
+            Guid id, ConfirmImportRequest? request, HttpContext http, ConfirmImportHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var decisions = new List<ImportLineDecision>();
+            foreach (var line in request?.Lines ?? [])
+            {
+                PaymentMethod? method = null;
+                if (line.PaymentMethod is { Length: > 0 } methodText)
+                {
+                    if (!Enum.TryParse<PaymentMethod>(methodText, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
+                    {
+                        return HttpResults.Problem(Error.Validation("transaction.payment_method_invalid", "Meio de pagamento invalido."));
+                    }
+
+                    method = parsed;
+                }
+
+                decisions.Add(new ImportLineDecision(line.Id, line.Included, line.Category, method));
+            }
+
+            var result = await handler.HandleAsync(new ConfirmImportCommand(owner.Value, id, decisions), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 

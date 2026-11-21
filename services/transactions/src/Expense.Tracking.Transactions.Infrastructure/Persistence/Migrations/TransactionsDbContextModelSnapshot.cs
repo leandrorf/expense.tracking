@@ -29,6 +29,10 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("account_id");
 
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("confirmed_at_utc");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("created_at_utc");
@@ -70,6 +74,7 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnName("owner_user_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("varchar(16)")
@@ -142,6 +147,10 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("varchar(24)")
                         .HasColumnName("status");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("transaction_id");
 
                     b.Property<string>("Type")
                         .HasMaxLength(16)

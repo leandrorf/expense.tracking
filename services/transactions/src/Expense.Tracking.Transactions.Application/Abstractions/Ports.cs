@@ -43,8 +43,20 @@ public interface IImportBatchRepository
 
 public interface IUnitOfWork
 {
+    /// <exception cref="PersistenceConflictException">Outro processo gravou antes (chave unica ou concorrencia otimista).</exception>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+
+    /// <summary>Descarta o que foi carregado e alterado nesta unidade de trabalho, para tentar de novo.</summary>
+    void Reset();
 }
+
+/// <summary>
+/// IMP-5: a gravacao perdeu uma corrida, por indice unico (a mesma chave externa importada por
+/// outro lote) ou por concorrencia otimista (o mesmo lote confirmado em paralelo). Quem chamou
+/// recarrega o estado e decide de novo.
+/// </summary>
+public sealed class PersistenceConflictException(string message, Exception innerException)
+    : Exception(message, innerException);
 
 /// <summary>
 /// EVT-4: escopo PF/PJ de contas no accounts, com token de servico (sem usuario). Usado so para

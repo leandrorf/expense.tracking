@@ -14,5 +14,6 @@ public static class HttpResults
     };
 
     public static IResult Problem(Error error) =>
-        Results.Problem(title: error.Code, detail: error.Description, statusCode: StatusCodeFor(error.Type));
+        Results.Problem(title: error.Code, detail: error.Description, statusCode: StatusCodeFor(error.Type),
+            extensions: error.Metadata);
 }

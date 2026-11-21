@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Expense.Tracking.Transactions.Application.Imports;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -75,7 +76,8 @@ public static class ObservabilitySetup
                 metrics
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddMeter(RuntimeMeterName);
+                    .AddMeter(RuntimeMeterName)
+                    .AddMeter(ImportMetrics.MeterName);
 
                 if (exportEnabled)
                 {

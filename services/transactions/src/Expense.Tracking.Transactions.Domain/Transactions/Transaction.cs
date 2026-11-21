@@ -123,6 +123,27 @@ public sealed class Transaction
             nowUtc, nowUtc);
     }
 
+    /// <summary>
+    /// IMP-5: lancamento criado pela confirmacao de uma importacao, com a chave externa (unica por
+    /// dono e conta) e o lote de origem. Mesmas regras de <see cref="Create"/>.
+    /// </summary>
+    public static Result<Transaction> CreateImported(
+        Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
+        Guid? creditCardId, string description, string category, decimal amount, string currency,
+        DateOnly occurredOn, string externalId, Guid importBatchId, DateTimeOffset nowUtc)
+    {
+        var result = Create(ownerUserId, accountId, type, paymentMethod, creditCardId, description, category,
+            amount, currency, occurredOn, notes: null, nowUtc);
+        if (result.IsFailure)
+        {
+            return result;
+        }
+
+        result.Value.ExternalId = externalId;
+        result.Value.ImportBatchId = importBatchId;
+        return result;
+    }
+
     public void Delete()
     {
         // Reservado para soft-delete futuro; hoje a remocao e fisica no repositorio.

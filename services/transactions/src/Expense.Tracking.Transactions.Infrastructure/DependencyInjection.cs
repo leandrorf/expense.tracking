@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<PreviewImportHandler>();
         services.AddScoped<ProposeCsvMappingHandler>();
         services.AddScoped<GetImportHandler>();
+        services.AddScoped<ConfirmImportHandler>();
+        services.AddSingleton<ImportMetrics>();
 
         // EVT-1: outbox transacional + feed de eventos (ADR-0001).
         services.AddScoped<IEventOutbox, EventOutbox>();
