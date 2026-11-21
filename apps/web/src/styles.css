@@ -558,3 +558,97 @@ tr.budget-edit .row-form {
 input.percent-input {
   width: 4.5rem;
 }
+
+/* ---- Importação (IMP-7) ---- */
+.import-bulk {
+  align-items: flex-end;
+}
+
+table.import-preview td input,
+table.import-preview td select {
+  background: #0f172a;
+  color: inherit;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+table.import-preview td input[aria-invalid='true'] {
+  border-color: #f59e0b;
+}
+
+table.import-preview tr.excluded td {
+  color: #64748b;
+}
+
+/* Linhas que o servidor apontou na confirmação: borda além da cor. */
+table.import-preview tr.flagged td {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+table.import-preview tr.flagged td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+table.import-preview td.expense {
+  color: #fca5a5;
+}
+
+table.import-preview td.income {
+  color: #86efac;
+}
+
+.import-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #1e3a8a;
+  color: #bfdbfe;
+  white-space: nowrap;
+}
+
+.import-status.duplicate,
+.import-status.excludedbydefault {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+.import-status.invalid {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+.import-status.imported {
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+.import-actions {
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.import-result {
+  max-width: 32rem;
+}
+
+.import-result-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.import-result-figures dt {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.import-result-figures dd {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

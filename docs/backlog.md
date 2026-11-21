@@ -641,7 +641,7 @@ produto (2026-11-21).
   - *Dado* um memo com "PIX" ou "BOLETO" num extrato de conta, *quando* a prévia é montada, *então*
     o meio sugerido é Pix ou Boleto; sem pista, vale o meio padrão do lote.
   - Estimativa: 3 · **Should** · Dependências: IMP-4
-- 🔵 **IMP-7** Aba Importar na SPA: envio, prévia e confirmação.
+- ✅ **IMP-7** Aba Importar na SPA: envio, prévia e confirmação. → `views/ImportView.tsx`, `api/imports.ts`.
   - *Dado* o usuário logado, *quando* abre **Importar**, escolhe a conta (e o cartão, se for fatura)
     e envia o arquivo, *então* vê a prévia em tabela, com as duplicadas e as inválidas destacadas e
     fora da seleção.
@@ -651,6 +651,12 @@ produto (2026-11-21).
     ignoradas) e um atalho para os Lançamentos.
   - Campo de categoria com as sugestões da BDG-7; `data-cy` nos elementos usados pelo E2E;
     acessível por teclado.
+  - Feito assim: "Tipo" escolhe entre extrato da conta (com meio padrão, sem cartão de crédito)
+    e fatura de um cartão da conta. "Selecionadas" = as linhas incluídas: a categoria em lote vale
+    para as incluídas sem categoria ou para todas as incluídas. Arquivo acima de 5 MB ou de formato
+    não aceito é barrado antes do envio. CSV usa o mapeamento proposto pelo servidor (fatura com
+    sinal invertido); a escolha manual das colunas fica na IMP-8. Linhas apontadas pelo servidor
+    em `import.categories_required` ficam destacadas. E2E básico em `cypress/e2e/import.cy.ts`.
   - Estimativa: 5 · **Must** · Dependências: IMP-5
 - 🔵 **IMP-8** Mapeamento de colunas do CSV na SPA.
   - *Dado* um CSV enviado, *quando* o servidor propõe o mapeamento, *então* vejo as primeiras linhas
