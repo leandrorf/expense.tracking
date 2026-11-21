@@ -112,6 +112,140 @@ public sealed class ImportBatchTests
         Assert.Equal("import.too_many_lines", result.Error.Code);
     }
 
+    private static ImportLineDecision Category(ImportLine line, string category, bool? included = null) =>
+        new(line.Id, included, category, null);
+
+    [Fact]
+    public void Confirm_CreatesATransactionPerIncludedLine_WithExternalIdAndBatch()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+            StatementLine.Valid(1, Day, -18.50m, "PADARIA", "A"),
+            StatementLine.Valid(2, Day, 5000m, "SALARIO", "B")));
+
+        var result = batch.Confirm(
+            [Category(batch.Lines[0], " Alimentacao "), new ImportLineDecision(batch.Lines[1].Id, null, "Salario", PaymentMethod.BankTransfer)],
+            new HashSet<string>(), Now);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Description : null);
+        Assert.Equal(ImportBatchStatus.Confirmed, batch.Status);
+        Assert.Equal(Now, batch.ConfirmedAtUtc);
+
+        var (expense, income) = (result.Value[0], result.Value[1]);
+        Assert.Equal((TransactionType.Expense, 18.50m, "Alimentacao", PaymentMethod.Pix), (expense.Type, expense.Amount, expense.Category, expense.PaymentMethod));
+        Assert.Equal((TransactionType.Income, PaymentMethod.BankTransfer), (income.Type, income.PaymentMethod));
+        Assert.Equal(("A", batch.Id, Account, Owner), (expense.ExternalId, expense.ImportBatchId, expense.AccountId, expense.OwnerUserId));
+        Assert.Equal(Day, expense.OccurredOn);
+        Assert.Null(expense.CreditCardId);
+        Assert.All(batch.Lines, l => Assert.Equal(ImportLineStatus.Imported, l.Status));
+        Assert.Equal(expense.Id, batch.Lines[0].TransactionId);
+    }
+
+    [Fact]
+    public void Confirm_CardStatement_LinksTheCardAndCanIncludeARefundAsIncome()
+    {
+        var card = Guid.NewGuid();
+        var batch = Create(Statement(StatementKind.CreditCard,
+                StatementLine.Valid(1, Day, -89.90m, "SOFTWARE", "A"),
+                StatementLine.Valid(2, Day, 30m, "ESTORNO", "B")),
+            card: card, method: null);
+
+        var created = batch.Confirm(
+            [Category(batch.Lines[0], "Software"), Category(batch.Lines[1], "Software", included: true)],
+            new HashSet<string>(), Now).Value;
+
+        Assert.Equal(2, created.Count);
+        Assert.All(created, t => Assert.Equal((PaymentMethod.CreditCard, card), (t.PaymentMethod, t.CreditCardId!.Value)));
+        Assert.Equal(TransactionType.Income, created[1].Type);
+    }
+
+    [Fact]
+    public void Confirm_IncludedLinesWithoutCategory_FailsListingTheLinesAndChangesNothing()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+            StatementLine.Valid(1, Day, -1m, "A", "A"),
+            StatementLine.Valid(2, Day, -1m, "B", "B"),
+            StatementLine.Valid(3, Day, -1m, "C", "C")));
+
+        var result = batch.Confirm([Category(batch.Lines[1], "Mercado")], new HashSet<string>(), Now);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("import.categories_required", result.Error.Code);
+        Assert.Equal(new[] { 1, 3 }, (IEnumerable<int>)result.Error.Metadata!["lines"]!);
+        Assert.Equal(ImportBatchStatus.Pending, batch.Status);
+        Assert.All(batch.Lines, l => Assert.Null(l.TransactionId));
+    }
+
+    [Fact]
+    public void Confirm_ExcludedLinesDoNotNeedCategory()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+            StatementLine.Valid(1, Day, -1m, "A", "A"),
+            StatementLine.Valid(2, Day, -1m, "B", "B")));
+
+        var created = batch.Confirm(
+            [Category(batch.Lines[0], "Mercado"), new ImportLineDecision(batch.Lines[1].Id, false, null, null)],
+            new HashSet<string>(), Now).Value;
+
+        Assert.Single(created);
+        Assert.Equal(ImportLineStatus.New, batch.Lines[1].Status);
+        Assert.False(batch.Lines[1].Included);
+    }
+
+    [Fact]
+    public void Confirm_KeyLaunchedAfterThePreview_BecomesDuplicateInsteadOfTransaction()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+            StatementLine.Valid(1, Day, -1m, "A", "A"),
+            StatementLine.Valid(2, Day, -1m, "B", "B")));
+
+        var created = batch.Confirm(
+            [Category(batch.Lines[0], "X"), Category(batch.Lines[1], "X")], new HashSet<string> { "B" }, Now).Value;
+
+        Assert.Single(created);
+        Assert.Equal(ImportLineStatus.Duplicate, batch.Lines[1].Status);
+        Assert.False(batch.Lines[1].Included);
+    }
+
+    [Fact]
+    public void Confirm_TryingToIncludeADuplicateOrInvalidLine_Fails()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount,
+                StatementLine.Valid(1, Day, -1m, "A", "JA-EXISTE"),
+                StatementLine.Invalid(2, "B", "Data invalida")),
+            existing: "JA-EXISTE");
+
+        Assert.Equal("import.line_not_includable",
+            batch.Confirm([Category(batch.Lines[0], "X", included: true)], new HashSet<string>(), Now).Error.Code);
+        Assert.Equal("import.line_not_includable",
+            batch.Confirm([Category(batch.Lines[1], "X", included: true)], new HashSet<string>(), Now).Error.Code);
+    }
+
+    [Theory]
+    [InlineData(StatementKind.BankAccount, PaymentMethod.CreditCard)]
+    [InlineData(StatementKind.CreditCard, PaymentMethod.Pix)]
+    public void Confirm_PaymentMethodAgainstTheStatementKind_Fails(StatementKind kind, PaymentMethod method)
+    {
+        var batch = Create(Statement(kind, StatementLine.Valid(1, Day, -1m, "A", "A")),
+            card: kind == StatementKind.CreditCard ? Guid.NewGuid() : null,
+            method: kind == StatementKind.CreditCard ? null : PaymentMethod.Pix);
+
+        var result = batch.Confirm([new ImportLineDecision(batch.Lines[0].Id, null, "X", method)], new HashSet<string>(), Now);
+
+        Assert.Equal("import.payment_method_invalid", result.Error.Code);
+    }
+
+    [Fact]
+    public void Confirm_UnknownLineOrAlreadyConfirmed_Fails()
+    {
+        var batch = Create(Statement(StatementKind.BankAccount, StatementLine.Valid(1, Day, -1m, "A", "A")));
+
+        Assert.Equal("import.line_not_found",
+            batch.Confirm([new ImportLineDecision(Guid.NewGuid(), true, "X", null)], new HashSet<string>(), Now).Error.Code);
+
+        Assert.True(batch.Confirm([Category(batch.Lines[0], "X")], new HashSet<string>(), Now).IsSuccess);
+        Assert.Equal("import.not_pending", batch.Confirm([], new HashSet<string>(), Now).Error.Code);
+    }
+
     [Fact]
     public void PendingBatch_ExpiresAfterSevenDays()
     {

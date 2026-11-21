@@ -46,6 +46,25 @@ public static class ImportErrors
     public static readonly Error BatchNotFound = Error.NotFound(
         "import.not_found", "Importacao nao encontrada.");
 
+    public static readonly Error NotPending = Error.Conflict(
+        "import.not_pending", "A importacao nao esta pendente.");
+
+    public static readonly Error LineNotFound = Error.Validation(
+        "import.line_not_found", "Linha nao pertence a esta importacao.");
+
+    public static Error LineNotIncludable(int number) => Error.Validation(
+        "import.line_not_includable", $"A linha {number} e duplicada ou invalida e nao pode ser incluida.");
+
+    public static Error LinePaymentMethodInvalid(int number) => Error.Validation(
+        "import.payment_method_invalid",
+        $"Meio de pagamento invalido na linha {number}: fatura usa cartao de credito; extrato nao aceita cartao.");
+
+    /// <summary>Linhas incluidas sem categoria; os numeros vao em <c>Metadata["lines"]</c> para a SPA destacar.</summary>
+    public static Error CategoriesRequired(IReadOnlyList<int> lines) => Error.Validation(
+        "import.categories_required",
+        $"Toda linha incluida precisa de categoria. Faltam {lines.Count}.")
+        with { Metadata = new Dictionary<string, object?> { ["lines"] = lines } };
+
     public static readonly Error MultipleStatements = Error.Validation(
         "import.multiple_statements",
         "O arquivo tem mais de uma conta ou cartao. Exporte um extrato ou fatura por vez.");

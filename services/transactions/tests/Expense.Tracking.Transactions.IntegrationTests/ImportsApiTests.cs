@@ -441,6 +441,174 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         }
     }
 
+    // ---------- IMP-5: confirmar ----------
+
+    /// <summary>Envia o extrato OFX sintetico (5 linhas: 4 gastos e 1 salario) e devolve o lote.</summary>
+    private async Task<(HttpClient Client, Guid AccountId, JsonElement Batch)> PreviewBankStatementAsync(Guid? owner = null)
+    {
+        var client = ClientFor(owner ?? Guid.NewGuid());
+        var accountId = Guid.NewGuid();
+        var response = await client.PostAsync("/imports",
+            Upload(Sample("extrato-conta-ofx1.ofx"), "extrato.ofx", accountId, paymentMethod: "Pix"));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (client, accountId, await Json(response));
+    }
+
+    private static object AllWithCategory(JsonElement batch, string category = "Importados") => new
+    {
+        lines = batch.GetProperty("lines").EnumerateArray()
+            .Select(l => new { id = l.GetProperty("id").GetGuid(), category })
+            .ToArray(),
+    };
+
+    private async Task<List<JsonElement>> TransactionsOfAsync(HttpClient client, Guid accountId) =>
+        (await client.GetFromJsonAsync<JsonElement>($"/transactions?accountId={accountId}"))!.EnumerateArray().ToList();
+
+    [Fact]
+    public async Task Confirm_CreatesTheTransactionsAndOneEventEach()
+    {
+        var (client, accountId, batch) = await PreviewBankStatementAsync();
+        var id = batch.GetProperty("id").GetGuid();
+
+        var response = await client.PostAsJsonAsync($"/imports/{id}/confirm", AllWithCategory(batch, "Mercado"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var confirmed = await Json(response);
+        Assert.Equal("Confirmed", confirmed.GetProperty("status").GetString());
+        Assert.NotEqual(JsonValueKind.Null, confirmed.GetProperty("confirmedAtUtc").ValueKind);
+        Assert.Equal(5, confirmed.GetProperty("summary").GetProperty("imported").GetInt32());
+
+        var created = await TransactionsOfAsync(client, accountId);
+        Assert.Equal(5, created.Count);
+        Assert.All(created, t => Assert.Equal("Mercado", t.GetProperty("category").GetString()));
+        Assert.Equal(1, created.Count(t => t.GetProperty("type").GetString() == "Income"));
+        Assert.Contains(created, t => t.GetProperty("description").GetString() == "PADARIA SÃO JOÃO"
+            && t.GetProperty("amount").GetDecimal() == 18.50m && t.GetProperty("occurredOn").GetString() == "2026-10-02");
+
+        var lineTransactionIds = confirmed.GetProperty("lines").EnumerateArray()
+            .Select(l => l.GetProperty("transactionId").GetGuid()).ToHashSet();
+        Assert.Equal(created.Select(t => t.GetProperty("id").GetGuid()).ToHashSet(), lineTransactionIds);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+        var events = db.OutboxEvents.Where(e => lineTransactionIds.Contains(e.AggregateId)).ToList();
+        Assert.Equal(5, events.Count);
+        Assert.All(events, e => Assert.Equal("TransactionRegistered", e.EventType));
+        Assert.All(db.Transactions.Where(t => lineTransactionIds.Contains(t.Id)), t => Assert.Equal(id, t.ImportBatchId));
+    }
+
+    [Fact]
+    public async Task Confirm_IncludedLineWithoutCategory_CreatesNothingAndPointsTheLines()
+    {
+        var (client, accountId, batch) = await PreviewBankStatementAsync();
+        var lines = batch.GetProperty("lines").EnumerateArray().ToList();
+        var body = new { lines = new[] { new { id = lines[0].GetProperty("id").GetGuid(), category = "Padaria" } } };
+
+        var response = await client.PostAsJsonAsync($"/imports/{batch.GetProperty("id").GetGuid()}/confirm", body);
+
+        await AssertProblem(response, HttpStatusCode.BadRequest, "import.categories_required");
+        var problem = await Json(response);
+        Assert.Equal([2, 3, 4, 5], problem.GetProperty("lines").EnumerateArray().Select(n => n.GetInt32()));
+        Assert.Empty(await TransactionsOfAsync(client, accountId));
+
+        var stillPending = await Json(await client.GetAsync($"/imports/{batch.GetProperty("id").GetGuid()}"));
+        Assert.Equal("Pending", stillPending.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Confirm_Twice_DoesNotDuplicate_AndAnswersTheSame()
+    {
+        var (client, accountId, batch) = await PreviewBankStatementAsync();
+        var url = $"/imports/{batch.GetProperty("id").GetGuid()}/confirm";
+
+        var first = await (await client.PostAsJsonAsync(url, AllWithCategory(batch))).Content.ReadAsStringAsync();
+        var second = await client.PostAsJsonAsync(url, AllWithCategory(batch, "Outra"));
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(first, await second.Content.ReadAsStringAsync());
+        Assert.Equal(5, (await TransactionsOfAsync(client, accountId)).Count);
+    }
+
+    // Confirmacoes em paralelo: o EF InMemory nao aplica token de concorrencia entre contextos, entao
+    // a corrida e provada no ConfirmImportHandlerTests (nova tentativa) e ao vivo no MySQL (PR da IMP-5).
+
+    [Fact]
+    public async Task Confirm_KeyImportedByAnotherBatchAfterThePreview_ComesBackAsDuplicate()
+    {
+        var owner = Guid.NewGuid();
+        var (client, accountId, batch) = await PreviewBankStatementAsync(owner);
+        // Outra importacao lancou o Pix (FITID 202610050001) depois desta previa.
+        await SeedImportedTransactionAsync(owner, accountId, externalId: "202610050001");
+
+        var confirmed = await Json(await client.PostAsJsonAsync(
+            $"/imports/{batch.GetProperty("id").GetGuid()}/confirm", AllWithCategory(batch)));
+
+        var lines = confirmed.GetProperty("lines").EnumerateArray().ToList();
+        Assert.Equal("Duplicate", lines[1].GetProperty("status").GetString());
+        Assert.Equal(4, confirmed.GetProperty("summary").GetProperty("imported").GetInt32());
+        Assert.Equal(1, confirmed.GetProperty("summary").GetProperty("duplicate").GetInt32());
+        Assert.Equal(5, (await TransactionsOfAsync(client, accountId)).Count); // 4 novos + o que ja existia
+    }
+
+    [Fact]
+    public async Task Confirm_CardStatement_PaymentStaysOutAndPurchasesUseTheCard()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var accountId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        var batch = await Json(await client.PostAsync("/imports",
+            Upload(Sample("fatura-cartao-ofx2.ofx"), "fatura.ofx", accountId, creditCardId: cardId)));
+
+        var response = await client.PostAsJsonAsync($"/imports/{batch.GetProperty("id").GetGuid()}/confirm", AllWithCategory(batch, "Trabalho"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var created = await TransactionsOfAsync(client, accountId);
+        Assert.Equal(3, created.Count);
+        Assert.All(created, t => Assert.Equal(("CreditCard", cardId, "Expense"),
+            (t.GetProperty("paymentMethod").GetString(), t.GetProperty("creditCardId").GetGuid(), t.GetProperty("type").GetString())));
+    }
+
+    [Fact]
+    public async Task Confirm_IncludingADuplicateLine_IsRejected()
+    {
+        var owner = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        await SeedImportedTransactionAsync(owner, accountId, externalId: "202610050001");
+        var client = ClientFor(owner);
+        var batch = await Json(await client.PostAsync("/imports",
+            Upload(Sample("extrato-conta-ofx1.ofx"), "extrato.ofx", accountId, paymentMethod: "Pix")));
+        var duplicate = batch.GetProperty("lines")[1].GetProperty("id").GetGuid();
+
+        var response = await client.PostAsJsonAsync($"/imports/{batch.GetProperty("id").GetGuid()}/confirm",
+            new { lines = new[] { new { id = duplicate, included = true, category = "X" } } });
+
+        await AssertProblem(response, HttpStatusCode.BadRequest, "import.line_not_includable");
+    }
+
+    [Fact]
+    public async Task Confirm_AnotherUsersBatch_IsNotFound_AndReadScopeIsForbidden()
+    {
+        var (_, _, batch) = await PreviewBankStatementAsync();
+        var url = $"/imports/{batch.GetProperty("id").GetGuid()}/confirm";
+
+        var other = await ClientFor(Guid.NewGuid()).PostAsJsonAsync(url, AllWithCategory(batch));
+        var readOnly = await ClientFor(Guid.NewGuid(), scope: "expenses.read").PostAsJsonAsync(url, AllWithCategory(batch));
+
+        await AssertProblem(other, HttpStatusCode.NotFound, "import.not_found");
+        Assert.Equal(HttpStatusCode.Forbidden, readOnly.StatusCode);
+    }
+
+    [Fact]
+    public async Task Confirm_AccountRemovedAfterThePreview_IsNotFound()
+    {
+        var (client, accountId, batch) = await PreviewBankStatementAsync();
+        _factory.AccountsClient.InvalidAccounts.Add(accountId);
+
+        var response = await client.PostAsJsonAsync($"/imports/{batch.GetProperty("id").GetGuid()}/confirm", AllWithCategory(batch));
+
+        await AssertProblem(response, HttpStatusCode.NotFound, "account.not_found");
+    }
+
     private async Task<int> CountBatchesAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();

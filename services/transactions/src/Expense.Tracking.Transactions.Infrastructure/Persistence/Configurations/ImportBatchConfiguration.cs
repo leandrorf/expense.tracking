@@ -22,9 +22,12 @@ internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<Import
         builder.Property(b => b.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         builder.Property(b => b.DefaultPaymentMethod)
             .HasColumnName("default_payment_method").HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(b => b.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();
+        // IMP-5: a confirmacao grava "WHERE status = 'Pending'"; duas confirmacoes em paralelo nao passam.
+        builder.Property(b => b.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16)
+            .IsRequired().IsConcurrencyToken();
         builder.Property(b => b.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(b => b.ExpiresAtUtc).HasColumnName("expires_at_utc").IsRequired();
+        builder.Property(b => b.ConfirmedAtUtc).HasColumnName("confirmed_at_utc");
 
         builder.HasMany(b => b.Lines).WithOne().HasForeignKey(l => l.BatchId).OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(b => b.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -54,6 +57,7 @@ internal sealed class ImportLineConfiguration : IEntityTypeConfiguration<ImportL
         builder.Property(l => l.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(24).IsRequired();
         builder.Property(l => l.Included).HasColumnName("included").IsRequired();
         builder.Property(l => l.Problem).HasColumnName("problem").HasMaxLength(200);
+        builder.Property(l => l.TransactionId).HasColumnName("transaction_id");
 
         builder.HasIndex(l => new { l.BatchId, l.Number }).IsUnique();
     }

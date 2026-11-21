@@ -4,6 +4,9 @@ public sealed record Error(string Code, string Description, ErrorType Type = Err
 {
     public static readonly Error None = new(string.Empty, string.Empty, ErrorType.Failure);
 
+    /// <summary>Dados extras para o cliente (ex.: as linhas da importacao sem categoria). Vira extensao do ProblemDetails.</summary>
+    public IReadOnlyDictionary<string, object?>? Metadata { get; init; }
+
     public static Error Validation(string code, string description) => new(code, description, ErrorType.Validation);
     public static Error NotFound(string code, string description) => new(code, description, ErrorType.NotFound);
     public static Error Conflict(string code, string description) => new(code, description, ErrorType.Conflict);

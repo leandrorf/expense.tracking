@@ -14,17 +14,23 @@ public sealed record ImportBatchDto(
     string DefaultPaymentMethod,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset ExpiresAtUtc,
+    DateTimeOffset? ConfirmedAtUtc,
     ImportSummaryDto Summary,
     IReadOnlyList<ImportLineDto> Lines)
 {
     public static ImportBatchDto From(ImportBatch batch) =>
         new(batch.Id, batch.Status.ToString(), batch.Format.ToString(), batch.Kind.ToString(), batch.AccountId,
             batch.CreditCardId, batch.Currency, batch.DefaultPaymentMethod.ToString(), batch.CreatedAtUtc,
-            batch.ExpiresAtUtc, ImportSummaryDto.From(batch.Lines),
+            batch.ExpiresAtUtc, batch.ConfirmedAtUtc, ImportSummaryDto.From(batch.Lines),
             batch.Lines.OrderBy(l => l.Number).Select(ImportLineDto.From).ToList());
 }
 
-public sealed record ImportSummaryDto(int Total, int New, int Duplicate, int Invalid, int ExcludedByDefault, int Included)
+/// <summary>
+/// Contagens por situacao. Depois da confirmacao: <see cref="Imported"/> viraram lancamento,
+/// <see cref="Duplicate"/> ja existiam e o resto (Total - Imported - Duplicate) foi ignorado.
+/// </summary>
+public sealed record ImportSummaryDto(
+    int Total, int New, int Duplicate, int Invalid, int ExcludedByDefault, int Included, int Imported)
 {
     public static ImportSummaryDto From(IReadOnlyCollection<ImportLine> lines) =>
         new(lines.Count,
@@ -32,7 +38,8 @@ public sealed record ImportSummaryDto(int Total, int New, int Duplicate, int Inv
             lines.Count(l => l.Status == ImportLineStatus.Duplicate),
             lines.Count(l => l.Status == ImportLineStatus.Invalid),
             lines.Count(l => l.Status == ImportLineStatus.ExcludedByDefault),
-            lines.Count(l => l.Included));
+            lines.Count(l => l.Included),
+            lines.Count(l => l.Status == ImportLineStatus.Imported));
 }
 
 public sealed record ImportLineDto(
@@ -46,9 +53,11 @@ public sealed record ImportLineDto(
     string Description,
     string? PaymentMethod,
     string? Category,
-    string? Problem)
+    string? Problem,
+    Guid? TransactionId)
 {
     public static ImportLineDto From(ImportLine line) =>
         new(line.Id, line.Number, line.Status.ToString(), line.Included, line.OccurredOn, line.Type?.ToString(),
-            line.Amount, line.Description, line.PaymentMethod?.ToString(), line.Category, line.Problem);
+            line.Amount, line.Description, line.PaymentMethod?.ToString(), line.Category, line.Problem,
+            line.TransactionId);
 }

@@ -166,6 +166,29 @@ async function main() {
   const batchRes = await fetch(`${GATEWAY}/api/imports/${batch.id}`, { headers: auth });
   ok(batchRes.status === 200 && (await batchRes.json()).lines?.length === 2,
     `GET /api/imports/{id} devolve a previa (status ${batchRes.status})`);
+
+  // 12) Confirmação (IMP-5): vira lançamento, chega ao Resumo pela projeção, e reimportar o mesmo
+  // arquivo só traz duplicadas.
+  const confirmRes = await fetch(`${GATEWAY}/api/imports/${batch.id}/confirm`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ lines: (batch.lines ?? []).map((l) => ({ id: l.id, category: 'Smoke importado' })) }),
+  });
+  const confirmed = confirmRes.status === 200 ? await confirmRes.json() : {};
+  ok(confirmed.status === 'Confirmed' && confirmed.summary?.imported === 2,
+    `POST /api/imports/{id}/confirm criou os lancamentos (status ${confirmRes.status}, importadas=${confirmed.summary?.imported})`);
+  let imported;
+  const importStarted = Date.now();
+  do {
+    if (imported) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/reports/summary?accountId=${account.id}`, { headers: auth });
+    imported = res.status === 200 ? await res.json() : {};
+  } while ((imported.totalExpense !== 354.5 || imported.totalIncome !== 100) && Date.now() - importStarted < 30_000);
+  ok(imported.totalExpense === 354.5 && imported.totalIncome === 100,
+    `resumo inclui os importados (gastos=${imported.totalExpense}, receitas=${imported.totalIncome}, em ${((Date.now() - importStarted) / 1000).toFixed(1)} s)`);
+  const againRes = await upload(ofx, 'smoke.ofx');
+  const again = againRes.status === 201 ? await againRes.json() : {};
+  ok(again.summary?.duplicate === 2 && again.summary?.included === 0,
+    `reimportar o mesmo arquivo so traz duplicadas (status ${againRes.status}, duplicadas=${again.summary?.duplicate})`);
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

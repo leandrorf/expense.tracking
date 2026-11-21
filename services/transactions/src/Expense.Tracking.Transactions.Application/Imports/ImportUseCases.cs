@@ -1,5 +1,6 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.Contracts;
+using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
@@ -138,6 +139,87 @@ public sealed class ProposeCsvMappingHandler(ICsvTableReader csvTableReader)
         return table.IsFailure
             ? Result.Failure<CsvMappingProposal>(table.Error)
             : CsvMappingDetector.Propose(table.Value);
+    }
+}
+
+public sealed record ConfirmImportCommand(Guid OwnerUserId, Guid BatchId, IReadOnlyList<ImportLineDecision> Lines);
+
+/// <summary>
+/// IMP-5: confirma o lote. Cria os lancamentos das linhas incluidas e um TransactionRegistered por
+/// lancamento no outbox, numa gravacao so. Idempotente: lote ja confirmado devolve o mesmo
+/// resultado sem criar nada. Se outra operacao ganhar a corrida (o mesmo lote confirmado em
+/// paralelo, ou a mesma chave externa importada por outro lote), recarrega e decide de novo: a
+/// linha ja lancada volta como duplicada.
+/// </summary>
+public sealed class ConfirmImportHandler(
+    IImportBatchRepository batches,
+    ITransactionRepository transactions,
+    IAccountsClient accountsClient,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork,
+    ImportMetrics metrics,
+    TimeProvider timeProvider)
+{
+    private const int MaxAttempts = 3;
+
+    public async Task<Result<ImportBatchDto>> HandleAsync(ConfirmImportCommand command, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var batch = await batches.GetAsync(command.BatchId, command.OwnerUserId, cancellationToken);
+            var now = timeProvider.GetUtcNow();
+            if (batch is null || batch.IsExpired(now))
+            {
+                return Result.Failure<ImportBatchDto>(ImportErrors.BatchNotFound);
+            }
+
+            if (batch.Status == ImportBatchStatus.Confirmed)
+            {
+                return ImportBatchDto.From(batch);
+            }
+
+            // A conta (ou o cartao) pode ter sumido entre a previa e a confirmacao (ADR-0004, decisao 8).
+            var accountScope = await accountsClient.FindAccountScopeAsync(batch.AccountId, cancellationToken);
+            if (accountScope is null)
+            {
+                return Result.Failure<ImportBatchDto>(Error.NotFound("account.not_found", "Conta nao encontrada para o usuario."));
+            }
+
+            if (batch.CreditCardId is { } cardId && !await accountsClient.CreditCardExistsAsync(cardId, cancellationToken))
+            {
+                return Result.Failure<ImportBatchDto>(Error.NotFound("card.not_found", "Cartao nao encontrado para o usuario."));
+            }
+
+            var keys = batch.Lines.Where(l => l.CanBeIncluded && l.ExternalId is not null).Select(l => l.ExternalId!).ToList();
+            var alreadyLaunched = await transactions.FindExistingExternalIdsAsync(
+                batch.OwnerUserId, batch.AccountId, keys, cancellationToken);
+
+            var created = batch.Confirm(command.Lines, alreadyLaunched, now);
+            if (created.IsFailure)
+            {
+                return Result.Failure<ImportBatchDto>(created.Error);
+            }
+
+            foreach (var transaction in created.Value)
+            {
+                await transactions.AddAsync(transaction, cancellationToken);
+                outbox.Add(TransactionRegistered.From(transaction, accountScope));
+            }
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (PersistenceConflictException) when (attempt < MaxAttempts)
+            {
+                unitOfWork.Reset();
+                continue;
+            }
+
+            var dto = ImportBatchDto.From(batch);
+            metrics.LinesConfirmed(batch.Format, dto.Summary.Imported, dto.Summary.Duplicate);
+            return dto;
+        }
     }
 }
 
