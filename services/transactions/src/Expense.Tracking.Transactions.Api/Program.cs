@@ -22,6 +22,11 @@ if (builder.Configuration.GetValue(DependencyInjection.LegacyScopeBackfillEnable
 {
     builder.Services.AddHostedService<AccountScopeBackfillWorker>();
 }
+// IMP-4: apaga lotes de importacao pendentes vencidos (ADR-0004, decisao 2).
+if (builder.Configuration.GetValue(ImportBatchCleanupWorker.EnabledKey, true))
+{
+    builder.Services.AddHostedService<ImportBatchCleanupWorker>();
+}
 builder.Services.AddTransactionsAuthentication(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -52,6 +57,7 @@ app.UseAuthorization();
 app.MapHealthEndpoints();
 app.MapTransactionsEndpoints();
 app.MapEventsEndpoints();
+app.MapImportsEndpoints();
 
 await InitializeDatabaseAsync(app);
 

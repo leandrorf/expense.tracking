@@ -18,6 +18,12 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- IMP-4: os mesmos arquivos sinteticos dos testes unitarios de leitura. -->
+  <ItemGroup>
+    <None Include="..\Expense.Tracking.Transactions.UnitTests\Imports\Samples\*.ofx;..\Expense.Tracking.Transactions.UnitTests\Imports\Samples\*.csv"
+          LinkBase="Imports\Samples" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Api\Expense.Tracking.Transactions.Api.csproj" />
     <ProjectReference Include="..\..\src\Expense.Tracking.Transactions.Infrastructure\Expense.Tracking.Transactions.Infrastructure.csproj" />

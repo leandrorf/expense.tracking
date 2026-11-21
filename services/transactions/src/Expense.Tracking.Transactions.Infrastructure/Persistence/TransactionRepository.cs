@@ -40,4 +40,23 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
         await dbContext.Transactions.AddAsync(transaction, cancellationToken);
 
     public void Remove(Transaction transaction) => dbContext.Transactions.Remove(transaction);
+
+    public async Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+        Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+
+        // Em blocos, para o IN nao crescer com arquivos de milhares de linhas.
+        foreach (var chunk in externalIds.Distinct().Chunk(500))
+        {
+            var existing = await dbContext.Transactions
+                .Where(t => t.OwnerUserId == ownerUserId && t.AccountId == accountId &&
+                            t.ExternalId != null && chunk.Contains(t.ExternalId))
+                .Select(t => t.ExternalId!)
+                .ToListAsync(cancellationToken);
+            found.UnionWith(existing);
+        }
+
+        return found;
+    }
 }

@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Transactions;
 using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,8 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
     public DbSet<OutboxEvent> OutboxEvents => Set<OutboxEvent>();
+
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

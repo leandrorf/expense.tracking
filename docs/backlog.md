@@ -589,7 +589,7 @@ produto (2026-11-21).
     IMP-8). Aspas sem fechamento recusam o arquivo (`import.format_invalid`) e mapeamento
     incoerente volta `import.mapping_invalid`.
   - Estimativa: 5 · **Must** · Dependências: IMP-1
-- 🔵 **IMP-4** Enviar o arquivo e ver a prévia (API).
+- ✅ **IMP-4** Enviar o arquivo e ver a prévia (API). → `POST /imports`, `POST /imports/csv/proposal`, `GET /imports/{id}`.
   - *Dado* um usuário com `expenses.write` e uma conta dele, *quando* envia um OFX em
     `POST /imports` (multipart, com a conta e, se for fatura, o cartão), *então* recebe o lote
     *Pendente* com as linhas: tipo (gasto/receita), data, valor, descrição, meio e categoria
@@ -602,6 +602,16 @@ produto (2026-11-21).
     envia, *então* recebe 400 com código estável (`import.file_too_large`, `import.too_many_lines`,
     `import.format_invalid`), e o conteúdo do arquivo não aparece em log, trace nem resposta.
   - `GET /imports/{id}` devolve o lote; lote de outro usuário = 404. Rota `/api/imports/**` no gateway.
+  - Feito assim: multipart com `file`, `accountId`, `creditCardId` (o CSV vira fatura quando tem
+    cartão), `paymentMethod` (meio padrão do extrato) e `mapping` (JSON, só CSV; sem ele,
+    `import.mapping_required`). `POST /imports/csv/proposal` devolve a proposta de mapeamento sem
+    guardar nada (base da IMP-8). O lançamento ganhou `external_id` (índice único com dono e conta)
+    e `import_batch_id`; lote pendente vence em 7 dias e um worker de hora em hora apaga os vencidos.
+    Limite de corpo no serviço e no gateway, que recusa pelo `Content-Length` sem repassar.
+  - Revisão de segurança do envio (antes do merge): achados e corrigidos três vetores de negação de
+    serviço que cabem em 5 MB — OFX com aninhamento profundo (estouro de pilha), CSV com milhões de
+    linhas curtas (memória) e com milhares de colunas (CPU). Limites: 32 níveis e 100 mil
+    elementos no OFX; 5.001 linhas e 50 colunas no CSV, conferidos durante a leitura.
   - Estimativa: 5 · **Must** · Dependências: IMP-2, IMP-3
 - 🔵 **IMP-5** Confirmar a importação (API).
   - *Dado* um lote pendente, *quando* confirmo com as linhas incluídas, cada uma com categoria e meio

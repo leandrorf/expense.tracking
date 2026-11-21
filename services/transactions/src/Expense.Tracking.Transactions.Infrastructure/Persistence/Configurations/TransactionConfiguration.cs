@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -31,9 +32,16 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         builder.Property(t => t.Notes).HasColumnName("notes").HasMaxLength(Transaction.NotesMaxLength);
         builder.Property(t => t.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(t => t.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        builder.Property(t => t.ExternalId).HasColumnName("external_id").HasMaxLength(ImportLine.ExternalIdMaxLength);
+        builder.Property(t => t.ImportBatchId).HasColumnName("import_batch_id");
 
         builder.HasIndex(t => t.OwnerUserId);
         builder.HasIndex(t => new { t.OwnerUserId, t.AccountId });
         builder.HasIndex(t => new { t.OwnerUserId, t.OccurredOn });
+
+        // IMP (ADR-0004, decisao 3): o mesmo lancamento do arquivo nao entra duas vezes na conta.
+        // Lancamentos digitados tem external_id nulo, e o MySQL aceita varios nulos no indice unico.
+        builder.HasIndex(t => new { t.OwnerUserId, t.AccountId, t.ExternalId }).IsUnique();
+        builder.HasIndex(t => t.ImportBatchId);
     }
 }

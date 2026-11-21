@@ -1,5 +1,6 @@
 using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Domain.Common;
+using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
@@ -22,6 +23,22 @@ public interface ITransactionRepository
     Task AddAsync(Transaction transaction, CancellationToken cancellationToken);
 
     void Remove(Transaction transaction);
+
+    /// <summary>IMP-4: quais das chaves externas ja estao lancadas na conta (deduplicacao da previa).</summary>
+    Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+        Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);
+}
+
+/// <summary>IMP-4: lotes de importacao (previa guardada no servidor; ADR-0004, decisao 2).</summary>
+public interface IImportBatchRepository
+{
+    Task AddAsync(ImportBatch batch, CancellationToken cancellationToken);
+
+    /// <summary>Lote do dono com as linhas; lote de outro usuario volta nulo (404).</summary>
+    Task<ImportBatch?> GetAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken);
+
+    /// <summary>Apaga lotes pendentes vencidos e devolve quantos foram apagados.</summary>
+    Task<int> DeleteExpiredAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken);
 }
 
 public interface IUnitOfWork
@@ -59,6 +76,12 @@ public interface IAccountsClient
 /// </summary>
 public interface ICsvTableReader
 {
+    /// <summary>Mais linhas nao vazias que isso (cabecalho incluido) = <c>import.too_many_lines</c>.</summary>
+    const int MaxRows = ImportBatch.MaxLines + 1;
+
+    /// <summary>Um extrato tem poucas colunas; muitas indicam arquivo errado ou hostil.</summary>
+    const int MaxColumns = 50;
+
     Result<CsvTable> Read(ReadOnlySpan<byte> content);
 }
 

@@ -61,6 +61,15 @@ public sealed class Transaction
 
     public DateTimeOffset UpdatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Chave do lancamento no arquivo importado (FITID ou impressao digital; ADR-0004, decisao 3).
+    /// Nula para lancamentos digitados. Unica por dono e conta.
+    /// </summary>
+    public string? ExternalId { get; private set; }
+
+    /// <summary>Lote de importacao que criou o lancamento, para desfazer a importacao (IMP-9).</summary>
+    public Guid? ImportBatchId { get; private set; }
+
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,

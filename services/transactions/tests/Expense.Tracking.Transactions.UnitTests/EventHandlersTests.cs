@@ -148,6 +148,10 @@ public sealed class EventHandlersTests
         }
 
         public void Remove(Transaction transaction) => _items.Remove(transaction);
+
+        public Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+            Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
     }
 
     private sealed class RecordingOutbox : IEventOutbox

@@ -38,10 +38,23 @@ public sealed class CsvHelperTableReader : ICsvTableReader
             using var reader = CsvReader.FromText(Decode(content), Options);
             while (reader.Read())
             {
+                // Antes de copiar o registro: um arquivo de 5 MB pode ter milhoes de linhas curtas
+                // ou de colunas, e nada disso deve ir para a memoria (IMP-4).
+                if (reader.Current.FieldCount > ICsvTableReader.MaxColumns)
+                {
+                    return Result.Failure<CsvTable>(ImportErrors.FormatInvalid(
+                        $"O CSV tem mais de {ICsvTableReader.MaxColumns} colunas; confira o separador."));
+                }
+
                 var cells = reader.Current.ToArray();
                 if (cells.All(string.IsNullOrWhiteSpace))
                 {
                     continue;
+                }
+
+                if (rows.Count == ICsvTableReader.MaxRows)
+                {
+                    return Result.Failure<CsvTable>(ImportErrors.TooManyLines);
                 }
 
                 rows.Add(new CsvRow((int)reader.LineNumber, cells));

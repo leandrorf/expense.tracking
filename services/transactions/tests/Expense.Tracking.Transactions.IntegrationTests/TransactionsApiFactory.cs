@@ -44,6 +44,8 @@ public class TransactionsApiFactory : WebApplicationFactory<Program>
             ["Events:FeedSafetyMarginSeconds"] = "0",
             // EVT-4: o worker do backfill chamaria o accounts/identity reais; os testes o chamam direto.
             ["Events:LegacyScopeBackfill:Enabled"] = "false",
+            // IMP-4: a limpeza de lotes vencidos e chamada direto pelos testes.
+            ["Imports:Cleanup:Enabled"] = "false",
         };
         ConfigureTestSettings(settings);
 
