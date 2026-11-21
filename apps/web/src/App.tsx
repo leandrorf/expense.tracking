@@ -10,11 +10,12 @@ import {
 import { AccountsView } from './views/AccountsView';
 import { BudgetsView } from './views/BudgetsView';
 import { CardsView } from './views/CardsView';
+import { ImportView } from './views/ImportView';
 import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'summary' | 'budgets' | 'accounts' | 'cards' | 'transactions';
+type Tab = 'summary' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'import';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
@@ -82,6 +83,9 @@ export function App() {
           <button data-cy="tab-transactions" className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
             Lançamentos
           </button>
+          <button data-cy="tab-import" className={tab === 'import' ? 'active' : ''} onClick={() => setTab('import')}>
+            Importar
+          </button>
           <button data-cy="tab-budgets" className={tab === 'budgets' ? 'active' : ''} onClick={() => setTab('budgets')}>
             Orçamentos
           </button>
@@ -103,6 +107,7 @@ export function App() {
       <main className="content">
         {tab === 'summary' && <SummaryView />}
         {tab === 'transactions' && <TransactionsView />}
+        {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
         {tab === 'cards' && <CardsView />}

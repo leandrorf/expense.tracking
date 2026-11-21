@@ -8,6 +8,8 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    /** Campos extras do ProblemDetails (ex.: `lines` na confirmação da importação). */
+    public readonly extensions: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -17,6 +19,7 @@ export class ApiError extends Error {
 interface ProblemDetails {
   title?: string;
   detail?: string;
+  [extension: string]: unknown;
 }
 
 /**
@@ -30,7 +33,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     if (tokens) {
       headers.set('Authorization', `Bearer ${tokens.accessToken}`);
     }
-    if (options.body && !headers.has('Content-Type')) {
+    // FormData (upload): o navegador define o multipart com a fronteira.
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
     return fetch(`${apiBase}${path}`, { ...options, headers });
@@ -49,8 +53,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const data = text ? JSON.parse(text) : undefined;
 
   if (!response.ok) {
-    const problem = (data ?? {}) as ProblemDetails;
-    throw new ApiError(response.status, problem.title ?? 'error', problem.detail ?? response.statusText);
+    const { title, detail, ...extensions } = (data ?? {}) as ProblemDetails;
+    throw new ApiError(response.status, title ?? 'error', detail ?? response.statusText, extensions);
   }
 
   return data as T;
