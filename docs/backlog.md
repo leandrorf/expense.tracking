@@ -463,7 +463,7 @@ de escrita para a conta `leandrorf` (`gh` ativo, ver memória do projeto).
 
 ---
 
-## 🔵 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *To Do*
+## 🟡 EPIC IMP — Importação de extrato e fatura (CSV/OFX)  · *In Progress*
 **Problema:** todo lançamento hoje é digitado à mão, um por um. Quem tem dezenas de gastos por mês
 em cartão e conta (PF e PJ) desiste de registrar, e aí o Resumo e os orçamentos ficam incompletos.
 **Objetivo (outcome):** o usuário importa o extrato da conta ou a fatura do cartão que o banco já
@@ -502,7 +502,7 @@ produto (2026-11-21).
 - **Sem bibliotecas pagas** (decisão do projeto). As bibliotecas OFX para .NET estão abandonadas;
   para CSV, o `CsvHelper` tem licença livre (MS-PL/Apache 2.0).
 
-**Decisões em aberto (registrar na próxima ADR livre, IMP-1; a recomendação vem primeiro):**
+**Decisões (aceitas na [ADR-0004](adr/0004-importacao-csv-ofx-no-transactions.md), IMP-1; ficou a recomendação de cada uma):**
 1. **Onde mora a importação.** Opções: (a) módulo no `transactions`; (b) serviço novo `imports`.
    *Recomendação: (a)*. Quem cria lançamentos e escreve no outbox é o `transactions`; um serviço
    novo teria de chamar a API dele linha a linha ou dividir o banco. A leitura do arquivo fica em
@@ -542,11 +542,15 @@ produto (2026-11-21).
 9. **Rota.** *Recomendação:* `/imports` no `transactions`, exposto como `/api/imports/**` no
    gateway, antes do catch-all `/api/**`.
 
-- 🔵 **IMP-1** ADR: onde mora a importação e regras do modelo.
+- ✅ **IMP-1** ADR: onde mora a importação e regras do modelo. → [ADR-0004](adr/0004-importacao-csv-ofx-no-transactions.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
   - Numeração: a próxima livre (0004, já que a IDX-1 ficou com a 0003).
+  - Refinamentos registrados na ADR além das recomendações: conta e cartão validados no envio e de
+    novo na confirmação; formato conferido pelo conteúdo, não só pela extensão; limite de corpo no
+    Kestrel e no gateway; id do lote guardado em cada lançamento criado (para a IMP-9);
+    `CreditCard` não aceito como meio em extrato de conta.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **IMP-2** Ler extrato e fatura em OFX (domínio, sem I/O).
   - *Dado* um OFX 1.x (SGML, Windows-1252) de extrato de conta corrente de banco brasileiro,
@@ -657,8 +661,8 @@ importação errada, já que não há edição. Could = IMP-11 (3 pts). Total: 4
 contrato da API descrito na história de backend antes da de frontend.
 
 **Definition of Done do épico:**
-- CI verde no PR: `build & test` dos serviços afetados e `Cypress E2E` (os 6 checks exigidos no
-  `main`).
+- CI verde no PR: `build & test` dos serviços afetados e `Cypress E2E` (os 5 checks exigidos no
+  `main` depois do épico IDX).
 - Testes unitários da leitura de OFX e CSV (formatos, codificações, linhas inválidas, XXE) e da
   deduplicação.
 - Testes de integração (WebApplicationFactory): isolamento por dono (404 em lote, conta ou cartão
