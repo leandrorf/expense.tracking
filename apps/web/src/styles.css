@@ -652,3 +652,56 @@ table.import-preview td.income {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Mapeamento de colunas do CSV (IMP-8) ---- */
+.csv-mapping-fields {
+  align-items: flex-end;
+}
+
+.csv-amount-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem 0.45rem;
+  font-size: 0.85rem;
+}
+
+.csv-amount-mode legend {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  padding: 0 0.25rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+table.csv-sample {
+  margin-top: 1rem;
+}
+
+table.csv-sample caption {
+  text-align: left;
+  font-size: 0.8rem;
+  padding-bottom: 0.35rem;
+}
+
+table.csv-sample th.mapped,
+table.csv-sample td.mapped {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* Papel da coluna escrito, não só a cor. */
+.csv-role {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

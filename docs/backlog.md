@@ -655,12 +655,17 @@ produto (2026-11-21).
     e fatura de um cartão da conta. "Selecionadas" = as linhas incluídas: a categoria em lote vale
     para as incluídas sem categoria ou para todas as incluídas. Arquivo acima de 5 MB ou de formato
     não aceito é barrado antes do envio. CSV usa o mapeamento proposto pelo servidor (fatura com
-    sinal invertido); a escolha manual das colunas fica na IMP-8. Linhas apontadas pelo servidor
+    sinal invertido); a escolha manual das colunas veio na IMP-8. Linhas apontadas pelo servidor
     em `import.categories_required` ficam destacadas. E2E básico em `cypress/e2e/import.cy.ts`.
   - Estimativa: 5 · **Must** · Dependências: IMP-5
-- 🔵 **IMP-8** Mapeamento de colunas do CSV na SPA.
+- ✅ **IMP-8** Mapeamento de colunas do CSV na SPA. → `views/CsvMappingStep.tsx`.
   - *Dado* um CSV enviado, *quando* o servidor propõe o mapeamento, *então* vejo as primeiras linhas
     do arquivo e escolho qual coluna é data, descrição e valor (ou débito e crédito) antes da prévia.
+  - Feito assim: todo CSV passa pelo passo de colunas, que parte da proposta do servidor (ou das
+    três primeiras colunas, quando não há proposta) e mostra a amostra com o papel de cada coluna
+    escrito no cabeçalho. Além das colunas: valor único ou débito/crédito, separador decimal,
+    "primeira linha é cabeçalho" e "inverter sinal" (marcado por padrão na fatura). Colunas
+    repetidas ou faltando bloqueiam a prévia.
   - Estimativa: 3 · **Must** · Dependências: IMP-3, IMP-7
 - 🔵 **IMP-9** Desfazer uma importação.
   - *Dado* um lote confirmado, *quando* desfaço, *então* os lançamentos criados por ele (e ainda não
