@@ -308,7 +308,10 @@ const HEALTH: Record<BudgetHealth, { label: string; icon: string }> = {
 
 const percentLabel = (value: number) => `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
 
-/** BDG-6: limite, consumido, restante e situação de cada orçamento num mês, com navegação entre meses. */
+/**
+ * BDG-6/8: limite, consumido, restante e situação de cada orçamento num mês, com navegação entre meses,
+ * e o que foi gasto sem orçamento em cada escopo.
+ */
 function MonthTracking({ revision }: { revision: number }) {
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<BudgetMonth | null>(null);
@@ -331,6 +334,7 @@ function MonthTracking({ revision }: { revision: number }) {
 
   // Descarta resposta de outro mês enquanto a nova não chega.
   const statuses = data?.month === month ? data.budgets : [];
+  const unbudgeted = data?.month === month ? data.unbudgeted : [];
 
   return (
     <div className="budget-month" data-cy="budget-month" aria-busy={loading}>
@@ -373,6 +377,7 @@ function MonthTracking({ revision }: { revision: number }) {
       ) : (
         SCOPES.map(({ scope, label }) => {
           const group = statuses.filter((s) => s.scope === scope);
+          const withoutBudget = unbudgeted.filter((u) => u.scope === scope);
           return (
             <div key={scope} className="budget-group" data-cy={`budget-status-${scope.toLowerCase()}`}>
               <h4>{label}</h4>
@@ -430,6 +435,22 @@ function MonthTracking({ revision }: { revision: number }) {
                   })}
                 </ul>
               )}
+              {withoutBudget.map((u) => (
+                <div key={u.currency} className="unbudgeted" data-cy="budget-unbudgeted" data-currency={u.currency}>
+                  <div className="unbudgeted-head">
+                    <strong>Sem orçamento</strong>
+                    <span data-cy="budget-unbudgeted-total">{money(u.total, u.currency)}</span>
+                  </div>
+                  <ul aria-label={`Gastos ${scope === 'Personal' ? 'PF' : 'PJ'} sem orçamento`}>
+                    {u.categories.map((c) => (
+                      <li key={c.category} data-cy="budget-unbudgeted-category" data-category={c.category}>
+                        <span>{c.category}</span>
+                        <span>{money(c.total, u.currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           );
         })

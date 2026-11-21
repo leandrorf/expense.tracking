@@ -163,4 +163,71 @@ public sealed class BudgetStatusCalculatorTests
 
         Assert.Equal(40m, status.Spent);
     }
+
+    [Fact]
+    public void Unbudgeted_PjTravelWithoutPjBudget_IsListedByScopeWithItsCategories()
+    {
+        var pjSuppliers = NewBudget("Fornecedores", BudgetScope.Business, 5000m);
+        var pfTravel = NewBudget("Viagens", BudgetScope.Personal, 1000m);
+
+        var unbudgeted = Assert.Single(BudgetStatusCalculator.CalculateUnbudgeted(December, [pjSuppliers, pfTravel],
+        [
+            Expense("Viagens", 800m, scope: "Business", method: "CreditCard"),
+            Expense("viagens ", 200m, scope: "Business", method: "Pix"),
+            Expense("Hospedagem", 1500m, scope: "Business"),
+            Expense("Fornecedores", 3000m, scope: "Business", method: "Boleto"),
+            Expense("Viagens", 400m, scope: "Personal"),
+        ]));
+
+        Assert.Equal(BudgetScope.Business, unbudgeted.Scope);
+        Assert.Equal("BRL", unbudgeted.Currency);
+        Assert.Equal(2500m, unbudgeted.Total);
+        Assert.Equal(
+            [new CategorySpending("Hospedagem", 1500m), new CategorySpending("Viagens", 1000m)],
+            unbudgeted.Categories);
+    }
+
+    [Fact]
+    public void Unbudgeted_IgnoresIncomeAndUnknownScope_AndSplitsByScopeAndCurrency()
+    {
+        var result = BudgetStatusCalculator.CalculateUnbudgeted(December, [],
+        [
+            Expense("Lazer", 100m),
+            Expense("Salário", 9000m, type: "Income"),
+            Expense("Lazer", 70m, scope: null),
+            Expense("Lazer", 50m, scope: "Unknown"),
+            Expense("Software", 30m, scope: "Business", currency: "USD"),
+            Expense("Software", 60m, scope: "Business"),
+        ]);
+
+        Assert.Equal(
+            [(BudgetScope.Personal, "BRL", 100m), (BudgetScope.Business, "BRL", 60m), (BudgetScope.Business, "USD", 30m)],
+            result.Select(u => (u.Scope, u.Currency, u.Total)).ToArray());
+    }
+
+    [Fact]
+    public void Unbudgeted_CountsBudgetsNotValidInTheMonth_AsUnbudgeted()
+    {
+        var closed = NewBudget("Viagens", BudgetScope.Personal, 300m, start: new DateOnly(2026, 10, 1));
+        closed.Close(December);
+        var future = NewBudget("Lazer", BudgetScope.Personal, 300m, start: new DateOnly(2027, 1, 1));
+
+        var unbudgeted = Assert.Single(BudgetStatusCalculator.CalculateUnbudgeted(December, [closed, future],
+            [Expense("Viagens", 100m), Expense("Lazer", 50m)]));
+
+        Assert.Equal(150m, unbudgeted.Total);
+    }
+
+    [Fact]
+    public void Unbudgeted_CategoryVariants_ShowTheMostUsedSpelling()
+    {
+        var unbudgeted = Assert.Single(BudgetStatusCalculator.CalculateUnbudgeted(December, [],
+        [
+            Expense("alimentacao", 10m),
+            Expense("Alimentação", 20m),
+            Expense(" Alimentação ", 30m),
+        ]));
+
+        Assert.Equal(new CategorySpending("Alimentação", 60m), Assert.Single(unbudgeted.Categories));
+    }
 }

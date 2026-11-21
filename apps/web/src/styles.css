@@ -506,3 +506,35 @@ tr.budget-edit .row-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- Gastos sem orçamento (BDG-8) ---- */
+.unbudgeted {
+  margin-top: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px dashed #475569;
+}
+
+.unbudgeted-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.unbudgeted ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.unbudgeted li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}

@@ -266,7 +266,8 @@ transferência e boleto). Ideia promovida de "Ideias de produto" a pedido do don
   - *Dado* outro usuário, *quando* consulta as sugestões, *então* não vê as categorias deste.
   - Continua permitindo categoria nova (texto livre); a lista sai da projeção.
   - Estimativa: 3 · **Should** · Dependências: BDG-1 (independe das demais)
-- 🔵 **BDG-8** Gastos sem orçamento no mês.
+- ✅ **BDG-8** Gastos sem orçamento no mês.
+  (`unbudgeted` em `GET /budgets/status`, `BudgetStatusCalculator.CalculateUnbudgeted`; bloco na aba)
   - *Dado* gastos PJ em "Viagens" sem orçamento PJ para essa categoria, *quando* consulto o
     acompanhamento do mês, *então* vejo o total "Sem orçamento" por escopo, com as categorias que o
     compõem.
