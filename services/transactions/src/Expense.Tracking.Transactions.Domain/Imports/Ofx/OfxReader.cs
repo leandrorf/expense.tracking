@@ -11,8 +11,6 @@ namespace Expense.Tracking.Transactions.Domain.Imports.Ofx;
 /// </summary>
 public static class OfxReader
 {
-    public const string DefaultCurrency = "BRL";
-
     public static Result<ParsedStatement> Read(ReadOnlySpan<byte> content)
     {
         var parsed = OfxDocument.Parse(content);
@@ -45,7 +43,7 @@ public static class OfxReader
         var currency = statement.ChildValue("CURDEF")?.Trim().ToUpperInvariant();
         if (string.IsNullOrEmpty(currency))
         {
-            currency = DefaultCurrency;
+            currency = ParsedStatement.DefaultCurrency;
         }
         else if (currency.Length != 3 || !currency.All(char.IsAsciiLetterUpper))
         {
@@ -61,9 +59,9 @@ public static class OfxReader
 
     private static StatementLine ReadLine(OfxNode trn, int number, Dictionary<string, int> fitIdOccurrences)
     {
-        var description = NormalizeSpaces(trn.ChildValue("MEMO")) is { Length: > 0 } memo
+        var description = ImportText.NormalizeSpaces(trn.ChildValue("MEMO")) is { Length: > 0 } memo
             ? memo
-            : NormalizeSpaces(trn.ChildValue("NAME"));
+            : ImportText.NormalizeSpaces(trn.ChildValue("NAME"));
 
         if (description.Length == 0)
         {
@@ -147,9 +145,4 @@ public static class OfxReader
         return decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture, out amount);
     }
-
-    private static string NormalizeSpaces(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }

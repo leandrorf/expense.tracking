@@ -3,6 +3,7 @@ using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Transactions;
 using Expense.Tracking.Transactions.Infrastructure.Auth;
 using Expense.Tracking.Transactions.Infrastructure.Clients;
+using Expense.Tracking.Transactions.Infrastructure.Imports;
 using Expense.Tracking.Transactions.Infrastructure.Persistence;
 using Expense.Tracking.Transactions.Infrastructure.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<ListTransactionsHandler>();
         services.AddScoped<GetTransactionHandler>();
         services.AddScoped<DeleteTransactionHandler>();
+
+        // IMP-3: leitura de CSV da importacao (ADR-0004).
+        services.AddSingleton<ICsvTableReader, CsvHelperTableReader>();
 
         // EVT-1: outbox transacional + feed de eventos (ADR-0001).
         services.AddScoped<IEventOutbox, EventOutbox>();

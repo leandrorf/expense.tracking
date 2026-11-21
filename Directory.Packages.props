@@ -27,6 +27,11 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.14" />
   </ItemGroup>
 
+  <ItemGroup Label="Importacao (IMP)">
+    <!-- IMP-3 (ADR-0004): leitura de CSV. Licenca MS-PL OR Apache-2.0. -->
+    <PackageVersion Include="CsvHelper" Version="34.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Gateway">
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>

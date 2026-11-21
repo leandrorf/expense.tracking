@@ -568,7 +568,7 @@ produto (2026-11-21).
     de uma conta recusado com `import.multiple_statements`. Linha sem `FITID` fica sem chave: a
     IMP-4 usa a impressão digital da IMP-3 como alternativa.
   - Estimativa: 5 · **Must** · Dependências: IMP-1
-- 🔵 **IMP-3** Ler CSV com mapeamento de colunas (domínio, sem I/O).
+- ✅ **IMP-3** Ler CSV com mapeamento de colunas (domínio, sem I/O). → `Domain/Imports/Csv` + adaptador `Infrastructure/Imports/CsvHelperTableReader`.
   - *Dado* um CSV com `;`, decimal com vírgula e data `dd/MM/yyyy`, *quando* é lido com o
     mapeamento (data → coluna 1, descrição → coluna 2, valor → coluna 3), *então* as linhas saem com
     data, valor com sinal e descrição.
@@ -580,6 +580,14 @@ produto (2026-11-21).
     **inválida** (com o motivo), sem derrubar o arquivo inteiro.
   - Impressão digital de cada linha para a deduplicação (decisão 3), com teste de dois gastos
     idênticos no mesmo dia.
+  - Feito assim: o domínio continua sem pacote externo. Mapeamento (`CsvColumnMapping`), proposta
+    (`CsvMappingDetector`), leitura das linhas (`CsvStatementParser`) e impressão digital
+    (`StatementFingerprint`, também para OFX sem `FITID`) ficam no domínio. Só a separação em
+    células usa o `CsvHelper` **34.0.0**, atrás da porta `ICsvTableReader`, na Infrastructure.
+    Extras: linha `sep=;` do Excel, valores com `R$`, milhar e parênteses, data com hora e opção
+    **inverter sinal** no mapeamento, para faturas que trazem a compra positiva (a SPA oferece na
+    IMP-8). Aspas sem fechamento recusam o arquivo (`import.format_invalid`) e mapeamento
+    incoerente volta `import.mapping_invalid`.
   - Estimativa: 5 · **Must** · Dependências: IMP-1
 - 🔵 **IMP-4** Enviar o arquivo e ver a prévia (API).
   - *Dado* um usuário com `expenses.write` e uma conta dele, *quando* envia um OFX em

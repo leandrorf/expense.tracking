@@ -11,7 +11,11 @@ public enum StatementKind
 /// Extrato ou fatura lido de um arquivo, antes de virar lote de importacao. So contem o que foi
 /// lido; nada aqui e o arquivo original (ADR-0004, decisao 8).
 /// </summary>
-public sealed record ParsedStatement(StatementKind Kind, string Currency, IReadOnlyList<StatementLine> Lines);
+public sealed record ParsedStatement(StatementKind Kind, string Currency, IReadOnlyList<StatementLine> Lines)
+{
+    /// <summary>Moeda quando o arquivo nao declara uma (ADR-0004: sem conversao de moeda).</summary>
+    public const string DefaultCurrency = "BRL";
+}
 
 /// <summary>
 /// Uma linha do arquivo. <see cref="Amount"/> tem sinal: negativo e debito (gasto), positivo e
@@ -28,4 +32,13 @@ public sealed record StatementLine(
 
     public static StatementLine Invalid(int number, string description, string problem) =>
         new(number, null, null, description, null, problem);
+}
+
+internal static class ImportText
+{
+    /// <summary>Espacos simples e sem espaco nas pontas; nulo ou em branco vira vazio.</summary>
+    public static string NormalizeSpaces(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
