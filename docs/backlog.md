@@ -314,7 +314,7 @@ QA; contrato da API (rota, payload, erros) descrito na história de backend ante
 
 ---
 
-## 🔵 EPIC IDX — Identity em repositório próprio  · *To Do*
+## 🟢 EPIC IDX — Identity em repositório próprio  · *Done*
 **Problema:** o projeto é de microserviços em tempo de execução (cada serviço com processo, banco e
 deploy próprios), mas o `identity` ainda nasce, compila, testa e é versionado junto com os
 consumidores dele. Uma mudança no servidor de autenticação passa pelo CI de todo o monorepo, e uma
@@ -425,13 +425,15 @@ Iniciativa pedida pelo dono do produto (2026-11-21).
   - `docker-compose.identity-local.yml` opcional para build a partir de um clone local; README com
     os dois jeitos.
   - Estimativa: 5 · **Must** · Dependências: IDX-4
-- 🔵 **IDX-6** Teste de contrato OIDC no repositório do `identity`.
+- ✅ **IDX-6** Teste de contrato OIDC no repositório do `identity`.
+  ([expense-identity#2](https://github.com/leandrorf/expense-identity/pull/2): `ContractTests` de caixa-preta, job `oidc contract` obrigatório no `main` de lá)
   - *Dado* o container do `identity` com um cliente de teste configurado, *quando* o CI roda o teste
     de contrato, *então* ele valida discovery, JWKS, Authorization Code + PKCE, refresh com rotação,
     client credentials e as claims `sub`/`scope` que os serviços usam.
   - *Dado* uma mudança que remove ou renomeia uma claim, *quando* o PR roda, *então* o teste falha.
   - Estimativa: 3 · **Should** · Dependências: IDX-3
-- 🔵 **IDX-7** Atualização de versão da imagem no monorepo.
+- ✅ **IDX-7** Atualização de versão da imagem no monorepo.
+  (`.github/dependabot.yml`, ecossistema `docker-compose`, semanal, restrito a `ghcr.io/leandrorf/expense-identity`)
   - *Dado* uma versão nova da imagem publicada, *quando* o Dependabot (ecossistema `docker-compose`)
     roda, *então* abre um PR no monorepo trocando a versão fixada, e o E2E do PR prova a
     compatibilidade.

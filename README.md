@@ -126,7 +126,8 @@ Portas/credenciais default (web 5173, identity 5080, usuário demo) são lidas d
 O código, os testes e as migrations do identity ficam em
 [leandrorf/expense-identity](https://github.com/leandrorf/expense-identity). Aqui ele entra pela
 imagem `ghcr.io/leandrorf/expense-identity:<versão>` fixada no `docker-compose.yml`; subir a versão é
-um PR que troca a tag (o E2E do PR prova a compatibilidade).
+um PR que troca a tag (o E2E do PR prova a compatibilidade). O Dependabot
+(`.github/dependabot.yml`) abre esse PR sozinho quando sai versão nova da imagem.
 
 Para testar uma mudança do identity junto com este repositório, sem publicar imagem, clone o
 `expense-identity` ao lado deste e suba com o arquivo opcional:

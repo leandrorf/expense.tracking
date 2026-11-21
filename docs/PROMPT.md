@@ -57,7 +57,7 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 
 > Atualize este bloco quando o estado mudar. Fonte da verdade detalhada: memória do projeto + `docs/architecture.md`.
 
-- Backend: **completo** (`identity`, `accounts`, `transactions`, `reporting`, `gateway`).
+- Backend: **completo** (`identity`, `accounts`, `transactions`, `reporting`, `gateway`). O `identity` vive em repositório próprio ([expense-identity](https://github.com/leandrorf/expense-identity), CI com contrato OIDC, imagem `ghcr.io/leandrorf/expense-identity` por tag SemVer); aqui entra pela imagem com versão fixada, atualizada por PR do Dependabot.
 - Frontend `apps/web`: **completo** (login OAuth + abas Resumo / Lançamentos / Contas / Cartões).
 - Testes E2E (Cypress): **completos** (jornadas PF/Pix e PJ/cartão).
 - Contrato de meios de pagamento: **unificado** (code canônico = nome do enum).
