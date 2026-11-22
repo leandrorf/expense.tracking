@@ -60,7 +60,7 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
         await dbContext.Transactions.AsNoTracking()
             .Where(t => t.OwnerUserId == ownerUserId && t.CreditCardId == null && t.PaymentMethod != "CreditCard"
                 && t.OccurredOn >= from && t.OccurredOn <= to)
-            .Select(t => new CashMovementRecord(t.TransactionType, t.Amount, t.OccurredOn, t.AccountScope))
+            .Select(t => new CashMovementRecord(t.TransactionType, t.Amount, t.OccurredOn, t.AccountScope, t.AccountId))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken)

@@ -82,6 +82,60 @@ public sealed class CashForecastApiTests(InvoicesApiFactory factory) : IClassFix
         Assert.Equal("forecast.months_invalid", (await thirteen.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
     }
+
+    private static decimal? Balance(JsonElement month, string scope)
+    {
+        var balance = month.GetProperty(scope).GetProperty("balance");
+        return balance.ValueKind == JsonValueKind.Null ? null : balance.GetDecimal();
+    }
+
+    [Fact]
+    public async Task Balance_StartsAtTheInformedBalance_AndFollowsCashPaymentsAndInvoicesOfThatAccount()
+    {
+        var owner = Guid.NewGuid();
+        var pf = _factory.Cards.AddAccount(owner, "Personal", openingBalance: 2000m, openingBalanceOn: "2026-11-10");
+        var pj = _factory.Cards.AddAccount(owner, "Business");
+        _factory.Cards.AddAccount(owner, "Personal", isActive: false);
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17, scope: "Personal", accountId: pf.Id);
+        var feed = _factory.EventFeed;
+        // Fatura de 2026-11 (200), paga em 17/11 pela conta PF: sai na data do pagamento.
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 200m, "2026-11-05");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-11", 200m, "2026-11-17", accountId: pf.Id);
+        // Fatura de 2026-12 (300), ainda a pagar: sai em dezembro.
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 300m, "2026-11-15");
+        // Antes do saldo informado (09/11): ja esta nele. Depois: entra.
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 100m, "Antes", accountId: pf.Id, occurredOn: "2026-11-09");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 50m, "Depois", accountId: pf.Id, occurredOn: "2026-11-20");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 5000m, "Salario", accountId: pf.Id, occurredOn: "2026-12-05",
+            transactionType: "Income");
+        // Conta PJ sem saldo: fica fora do saldo projetado (mas continua no fluxo do mes).
+        feed.Registered(Guid.NewGuid(), owner, "Business", 300m, "Contador", accountId: pj.Id, occurredOn: "2026-11-30");
+        await _factory.DrainFeedAsync();
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=3");
+
+        var months = body.GetProperty("months").EnumerateArray().ToList();
+        Assert.Equal([1750m, 6450m, 6450m], months.Select(m => Balance(m, "personal")));
+        Assert.Equal(months.Select(m => Balance(m, "personal")), months.Select(m => Balance(m, "total")));
+        Assert.All(months, m => Assert.Null(Balance(m, "business")));
+        Assert.Equal(300m, months[0].GetProperty("business").GetProperty("expense").GetDecimal());
+        Assert.Equal(1, body.GetProperty("accountsWithoutBalance").GetInt32());
+    }
+
+    [Fact]
+    public async Task Balance_IsNullEverywhere_WhenNoAccountHasAnInformedBalance()
+    {
+        var owner = Guid.NewGuid();
+        _factory.Cards.AddAccount(owner, "Personal");
+        _factory.Cards.AddAccount(owner, "Business");
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=1");
+
+        var month = Assert.Single(body.GetProperty("months").EnumerateArray());
+        Assert.Equal(((decimal?)null, (decimal?)null, (decimal?)null),
+            (Balance(month, "personal"), Balance(month, "business"), Balance(month, "total")));
+        Assert.Equal(2, body.GetProperty("accountsWithoutBalance").GetInt32());
+    }
 }
 
 /// <summary>INV-8: o client do accounts junta cartoes e contas para dar o escopo de cada cartao.</summary>
@@ -107,6 +161,29 @@ public sealed class AccountsCardDirectoryListTests
         Assert.Equal([(card1, "Personal"), (card2, "Business")], cards.Select(c => (c.Card.Id, c.Scope)));
         Assert.All(handler.Authorizations, a => Assert.Equal("Bearer abc", a));
         Assert.Equal(2, handler.Authorizations.Count);
+    }
+
+    [Fact]
+    public async Task ListAccounts_ReadsScopeAndOpeningBalance_ForwardingTheToken()
+    {
+        var (pf, pj) = (Guid.NewGuid(), Guid.NewGuid());
+        var handler = new RoutedAccounts(new Dictionary<string, string>
+        {
+            ["/accounts"] = $$"""
+                [{"id":"{{pf}}","scope":"Personal","isActive":true,"openingBalance":-12.5,"openingBalanceOn":"2026-11-10"},
+                 {"id":"{{pj}}","scope":"Business","isActive":false,"openingBalance":null,"openingBalanceOn":null}]
+                """,
+        });
+        var directory = new Expense.Tracking.Reporting.Infrastructure.Clients.AccountsCardDirectory(
+            new HttpClient(handler) { BaseAddress = new Uri("http://accounts/") }, new Token("abc"));
+
+        var accounts = await directory.ListAccountsAsync(CancellationToken.None);
+
+        Assert.Equal(
+            [new Expense.Tracking.Reporting.Application.Forecast.AccountInfo(pf, "Personal", true, -12.5m, new DateOnly(2026, 11, 10)),
+             new Expense.Tracking.Reporting.Application.Forecast.AccountInfo(pj, "Business", false, null, null)],
+            accounts);
+        Assert.Equal("Bearer abc", Assert.Single(handler.Authorizations));
     }
 
     private sealed class Token(string token) : Expense.Tracking.Reporting.Application.Abstractions.IUserTokenAccessor

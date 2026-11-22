@@ -105,6 +105,8 @@ export interface MonthFlow {
   invoicesPaid: number;
   invoicesRemaining: number;
   result: number;
+  /** INV-13: saldo projetado no fim do mês; nulo sem conta com saldo informado no escopo. */
+  balance: number | null;
 }
 
 export interface ForecastMonth {
@@ -119,6 +121,8 @@ export interface CashForecast {
   currency: string;
   notice: string;
   months: ForecastMonth[];
+  /** INV-13: contas ativas sem saldo informado (ficam fora do saldo projetado). */
+  accountsWithoutBalance: number;
 }
 
 export const forecastApi = {

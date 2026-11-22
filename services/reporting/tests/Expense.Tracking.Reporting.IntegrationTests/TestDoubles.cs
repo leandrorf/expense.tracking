@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication;
@@ -38,13 +39,27 @@ public sealed class TestAuthHandler(
 public sealed class CardRegistry
 {
     private readonly ConcurrentDictionary<Guid, (Guid Owner, CardInfo Card, string Scope)> _cards = new();
+    private readonly ConcurrentDictionary<Guid, (Guid Owner, AccountInfo Account)> _accounts = new();
 
-    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m, string scope = "Personal")
+    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m, string scope = "Personal", Guid? accountId = null)
     {
-        var card = new CardInfo(Guid.NewGuid(), Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true);
+        var card = new CardInfo(Guid.NewGuid(), accountId ?? Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true);
         _cards[card.Id] = (owner, card, scope);
         return card;
     }
+
+    /// <summary>INV-13: conta do usuario, com ou sem saldo informado.</summary>
+    public AccountInfo AddAccount(
+        Guid owner, string scope = "Personal", decimal? openingBalance = null, string? openingBalanceOn = null, bool isActive = true)
+    {
+        var account = new AccountInfo(Guid.NewGuid(), scope, isActive, openingBalance,
+            openingBalanceOn is null ? null : DateOnly.Parse(openingBalanceOn, System.Globalization.CultureInfo.InvariantCulture));
+        _accounts[account.Id] = (owner, account);
+        return account;
+    }
+
+    public IReadOnlyList<AccountInfo> AccountsOf(Guid owner) =>
+        _accounts.Values.Where(e => e.Owner == owner).Select(e => e.Account).ToList();
 
     public CardInfo? Find(Guid cardId, Guid owner) =>
         _cards.TryGetValue(cardId, out var entry) && entry.Owner == owner ? entry.Card : null;
@@ -66,6 +81,12 @@ public sealed class FakeCardDirectory(CardRegistry registry, IHttpContextAccesso
     {
         var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
         return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.ListOf(owner) : []);
+    }
+
+    public Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken)
+    {
+        var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
+        return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.AccountsOf(owner) : []);
     }
 }
 

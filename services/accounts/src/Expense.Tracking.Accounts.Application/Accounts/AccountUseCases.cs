@@ -67,6 +67,52 @@ public sealed class RenameAccountHandler(IAccountRepository accounts, IUnitOfWor
     }
 }
 
+public sealed record SetOpeningBalanceCommand(Guid Id, Guid OwnerUserId, decimal Amount, DateOnly On);
+
+/// <summary>
+/// INV-13: saldo da conta no fim de um dia, ponto de partida do saldo projetado da previsao. "Hoje"
+/// e a data em UTC: no Brasil ela nunca fica atras da data local, entao o saldo de hoje e sempre aceito.
+/// </summary>
+public sealed class SetOpeningBalanceHandler(IAccountRepository accounts, IUnitOfWork unitOfWork, TimeProvider timeProvider)
+{
+    public async Task<Result<AccountDto>> HandleAsync(SetOpeningBalanceCommand command, CancellationToken cancellationToken)
+    {
+        var account = await accounts.GetAsync(command.Id, command.OwnerUserId, cancellationToken);
+        if (account is null)
+        {
+            return Result.Failure<AccountDto>(Error.NotFound("account.not_found", "Conta nao encontrada."));
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var set = account.SetOpeningBalance(command.Amount, command.On, DateOnly.FromDateTime(now.UtcDateTime), now);
+        if (set.IsFailure)
+        {
+            return Result.Failure<AccountDto>(set.Error);
+        }
+
+        accounts.Update(account);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return AccountDto.From(account);
+    }
+}
+
+public sealed class ClearOpeningBalanceHandler(IAccountRepository accounts, IUnitOfWork unitOfWork, TimeProvider timeProvider)
+{
+    public async Task<Result<AccountDto>> HandleAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken)
+    {
+        var account = await accounts.GetAsync(id, ownerUserId, cancellationToken);
+        if (account is null)
+        {
+            return Result.Failure<AccountDto>(Error.NotFound("account.not_found", "Conta nao encontrada."));
+        }
+
+        account.ClearOpeningBalance(timeProvider.GetUtcNow());
+        accounts.Update(account);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return AccountDto.From(account);
+    }
+}
+
 public sealed class DeactivateAccountHandler(IAccountRepository accounts, IUnitOfWork unitOfWork, TimeProvider timeProvider)
 {
     public async Task<Result> HandleAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken)

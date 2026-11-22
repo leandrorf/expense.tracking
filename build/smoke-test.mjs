@@ -413,6 +413,41 @@ async function main() {
     `POST /api/transactions/recategorize muda a categoria (versao ${recat.updated?.[0]?.version}); id repetido = ${recatDup}; versao antiga = conflito`);
   if (toEdit.id) await fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'DELETE', headers: auth });
 
+  // 23) Saldo projetado (INV-13): saldo informado hoje + gasto no mes seguinte, por diferenca (o demo
+  // acumula contas de outras execucoes). No fim o saldo sai, para nao deixar rastro.
+  const balanceAcc = await (await fetch(`${GATEWAY}/api/accounts`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ name: `Saldo E2E ${Date.now()}`, scope: 'Business' }),
+  })).json();
+  const pjBalances = async () => {
+    const f = await (await fetch(`${GATEWAY}/api/reports/cash-forecast?months=2`, { headers: auth })).json();
+    return f.months.map((m) => m.business.balance ?? 0);
+  };
+  const isoDay = (d) => d.toISOString().slice(0, 10);
+  const balanceBefore = await pjBalances();
+  const futureBalance = await fetch(`${GATEWAY}/api/accounts/${balanceAcc.id}/opening-balance`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ amount: 500, date: isoDay(new Date(Date.now() + 3 * 86400000)) }),
+  });
+  const setBalance = await fetch(`${GATEWAY}/api/accounts/${balanceAcc.id}/opening-balance`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ amount: 500, date: isoDay(new Date()) }),
+  });
+  const nextMonthDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 10));
+  const rent = await (await fetch(`${GATEWAY}/api/transactions`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: balanceAcc.id, type: 'Expense', paymentMethod: 'Pix', description: 'Smoke saldo',
+      category: 'Smoke saldo', amount: 120, currency: 'BRL', occurredOn: isoDay(nextMonthDay) }),
+  })).json();
+  let balanceDiff = [];
+  for (let i = 0; i < 30; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    const after = await pjBalances();
+    balanceDiff = after.map((v, k) => Math.round((v - balanceBefore[k]) * 100) / 100);
+    if (balanceDiff[0] === 500 && balanceDiff[1] === 380) break;
+  }
+  ok(futureBalance.status === 400 && setBalance.status === 200 && balanceDiff[0] === 500 && balanceDiff[1] === 380,
+    `PUT /api/accounts/{id}/opening-balance (status ${setBalance.status}; data futura = ${futureBalance.status}); previsao PJ ganha ${balanceDiff.join(' e ')}`);
+  await fetch(`${GATEWAY}/api/accounts/${balanceAcc.id}/opening-balance`, { method: 'DELETE', headers: auth });
+  if (rent.id) await fetch(`${GATEWAY}/api/transactions/${rent.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

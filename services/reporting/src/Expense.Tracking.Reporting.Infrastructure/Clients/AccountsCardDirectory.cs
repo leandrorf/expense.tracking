@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 
 namespace Expense.Tracking.Reporting.Infrastructure.Clients;
@@ -37,6 +38,10 @@ public sealed class AccountsCardDirectory(HttpClient httpClient, IUserTokenAcces
         var scopes = (await accountsTask).ToDictionary(a => a.Id, a => a.Scope);
         return (await cardsTask).Select(c => new ScopedCard(c, scopes.GetValueOrDefault(c.AccountId))).ToList();
     }
+
+    /// <summary>INV-13: contas do usuario com o saldo informado; a lista ja vem filtrada pelo dono do token.</summary>
+    public Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken) =>
+        GetListAsync<AccountInfo>("accounts", cancellationToken);
 
     private async Task<IReadOnlyList<T>> GetListAsync<T>(string path, CancellationToken cancellationToken)
     {

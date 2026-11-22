@@ -10,10 +10,13 @@ public sealed record AccountDto(
     string? TaxId,
     string Currency,
     bool IsActive,
-    DateTimeOffset CreatedAtUtc)
+    DateTimeOffset CreatedAtUtc,
+    decimal? OpeningBalance,
+    DateOnly? OpeningBalanceOn)
 {
     public static AccountDto From(Account a) =>
-        new(a.Id, a.Name, a.Scope.ToString(), a.TaxId, a.Currency, a.IsActive, a.CreatedAtUtc);
+        new(a.Id, a.Name, a.Scope.ToString(), a.TaxId, a.Currency, a.IsActive, a.CreatedAtUtc,
+            a.OpeningBalance, a.OpeningBalanceOn);
 }
 
 public sealed record CreditCardDto(

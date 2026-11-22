@@ -9,6 +9,9 @@ public sealed record CreateAccountRequest(string Name, string Scope, string? Tax
 
 public sealed record RenameAccountRequest(string Name);
 
+/// <summary>INV-13: saldo no fim do dia <c>Date</c> (<c>yyyy-MM-dd</c>).</summary>
+public sealed record OpeningBalanceRequest(decimal? Amount, DateOnly? Date);
+
 public static class AccountsEndpoints
 {
     public static IEndpointRouteBuilder MapAccountsEndpoints(this IEndpointRouteBuilder app)
@@ -68,6 +71,39 @@ public static class AccountsEndpoints
             }
 
             var result = await handler.HandleAsync(new RenameAccountCommand(id, owner.Value, request.Name), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // INV-13: saldo da conta no fim de um dia, para o saldo projetado da previsao.
+        group.MapPut("/{id:guid}/opening-balance", async (
+            Guid id, OpeningBalanceRequest request, HttpContext http, SetOpeningBalanceHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (request.Amount is not { } amount || request.Date is not { } date)
+            {
+                return HttpResults.Problem(Error.Validation(
+                    "account.opening_balance_required", "Informe o saldo e a data a que ele se refere."));
+            }
+
+            var result = await handler.HandleAsync(new SetOpeningBalanceCommand(id, owner.Value, amount, date), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapDelete("/{id:guid}/opening-balance", async (
+            Guid id, HttpContext http, ClearOpeningBalanceHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 

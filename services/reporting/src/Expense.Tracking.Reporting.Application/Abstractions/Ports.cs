@@ -41,6 +41,9 @@ public interface ICardDirectory
 
     /// <summary>INV-8: todos os cartoes do usuario (ativos ou nao), com o escopo da conta de cada um.</summary>
     Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken);
+
+    /// <summary>INV-13: as contas do usuario (ativas ou nao), com o escopo e o saldo informado.</summary>
+    Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Access token do usuario do request atual, para encaminhar ao accounts.</summary>
