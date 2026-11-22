@@ -114,4 +114,16 @@ public sealed class TransactionTests
 
         Assert.Equal(code, result.Error.Code);
     }
+
+    [Fact]
+    public void Create_IncomeOnTheCard_IsARefundInFull_NeverInInstallments()
+    {
+        var refund = Transaction.Create(Owner, AccountId, TransactionType.Income, PaymentMethod.CreditCard, Guid.NewGuid(),
+            "Estorno", "Compras", 300m, "BRL", Today, null, Now);
+        var split = Transaction.Create(Owner, AccountId, TransactionType.Income, PaymentMethod.CreditCard, Guid.NewGuid(),
+            "Estorno", "Compras", 300m, "BRL", Today, null, Now, installments: 3);
+
+        Assert.Equal(1, refund.Value.Installments);
+        Assert.Equal("transaction.installments_not_allowed", split.Error.Code);
+    }
 }

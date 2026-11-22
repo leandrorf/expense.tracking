@@ -171,10 +171,29 @@ public sealed class TransactionsApiTests(TransactionsApiFactory factory) : IClas
         Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
     }
 
-    private static object Purchase(string paymentMethod, Guid? creditCardId, int? installments = null) => new
+    [Fact]
+    public async Task Create_IncomeWithNotes_IsReturnedAsIncome_ButNeverInInstallments()
+    {
+        var client = ClientFor(Guid.NewGuid());
+
+        var income = await client.PostAsJsonAsync("/transactions", new
+        {
+            accountId = Guid.NewGuid(), type = "Income", paymentMethod = "Pix", description = "Cliente A",
+            category = "Servicos", amount = 5000m, currency = "BRL", occurredOn = "2026-11-15", notes = "  NF 12  ",
+        });
+        var dto = await income.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal((HttpStatusCode.Created, "Income", "NF 12"),
+            (income.StatusCode, dto.GetProperty("type").GetString(), dto.GetProperty("notes").GetString()));
+
+        var split = await client.PostAsJsonAsync("/transactions", Purchase("CreditCard", Guid.NewGuid(), 3, type: "Income"));
+        Assert.Equal((HttpStatusCode.BadRequest, "transaction.installments_not_allowed"),
+            (split.StatusCode, (await split.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString()));
+    }
+
+    private static object Purchase(string paymentMethod, Guid? creditCardId, int? installments = null, string type = "Expense") => new
     {
         accountId = Guid.NewGuid(),
-        type = "Expense",
+        type,
         paymentMethod,
         creditCardId,
         description = "Notebook",
