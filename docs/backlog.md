@@ -1111,6 +1111,149 @@ frontend.
 
 ---
 
+## 🔵 EPIC CTB — Exportação contábil PJ  · *Refinado* (decisões em aberto para a ADR-0006)
+**Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
+que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
+um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
+que não tem as categorias nem separa o que é da empresa do que é pessoal. O contador recebe
+informação incompleta e pergunta de novo, e o fechamento do mês atrasa.
+**Objetivo (outcome):** em poucos cliques, o usuário baixa o movimento PJ de um mês num arquivo que
+o contador abre direto no Excel ou importa no sistema dele: cada lançamento com data, descrição,
+categoria, valor com sinal, meio, conta e CNPJ, mais os pagamentos de fatura do mês e um resumo por
+categoria. Só entra o escopo PJ; o que é pessoal nunca vai para o contador.
+**Métricas de sucesso:** (1) o total de saídas e de entradas do arquivo de um mês bate com o Resumo
+PJ do mesmo mês; (2) o arquivo abre no Excel pt-BR sem configurar nada (acentos, datas e valores
+certos); (3) nenhum lançamento de conta PF aparece no arquivo; (4) a jornada "lançar, exportar,
+conferir" passa no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → Contexto ("como sou PJ, tenho conta e gastos da minha
+empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Ideia promovida de
+"Ideias de produto" a pedido do dono do produto (2026-11-22).
+
+**Achados no código que moldam o épico:**
+- **O `transactions` tem o lançamento completo**: descrição, categoria, valor, data, meio, cartão,
+  parcelas, observações e a origem (chave externa e lote, quando importado). A listagem por conta e
+  período já existe (`ITransactionRepository.ListAsync`).
+- **O lançamento não guarda o escopo.** O PF/PJ é da **conta** (`Account.Scope` no accounts); o
+  `transactions` o busca no accounts na hora de publicar o evento. Para filtrar "só PJ", é preciso
+  saber quais contas do usuário são `Business`.
+- **A projeção do `reporting` não serve de fonte completa.** Ela tem o escopo, mas os lançamentos
+  fora do cartão registrados antes do evento v2 (INV-2) ficaram **sem descrição** (o backfill só
+  completou as compras no cartão). Também não tem observações nem a origem, e atrasa alguns
+  segundos em relação ao que acabou de ser lançado ou importado.
+- **A conta PJ tem CNPJ** (`Account.TaxId`, obrigatório e validado quando o escopo é `Business`) e
+  nome. O contador identifica a empresa pelo CNPJ.
+- **Categoria é texto livre**, sem plano de contas. O contador trabalha com códigos de conta do
+  plano dele (ex.: "3.1.02 — Despesas com software"). Hoje não há onde guardar essa
+  correspondência.
+- **Pagamento de fatura não é lançamento** (INV-6): fica em `card_payments`, também no
+  `transactions`. Para o contador, ele explica a saída do banco no dia do pagamento.
+- **Exclusão é física e não há edição.** Um mês já enviado ao contador pode mudar depois (lançamento
+  excluído, importação desfeita), e nada avisa.
+- **Não há geração de arquivo no backend** hoje (só leitura de CSV/OFX na importação), nem
+  armazenamento de arquivos (anexo, nota fiscal). Bibliotecas de planilha e PDF têm licença a
+  checar: o projeto evita libs que viraram pagas para uso comercial (FluentAssertions, MediatR).
+
+**Decisões em aberto (para a ADR-0006, CTB-1; com a recomendação de cada uma):**
+1. **Onde o arquivo é gerado.** Opções: (a) no `transactions`, que tem o lançamento completo e é a
+   fonte da verdade; (b) no `reporting`, a partir da projeção, como o Resumo. *Recomendação: (a)*.
+   O contador precisa de descrição e observações de todos os lançamentos, e do que acabou de ser
+   importado, sem esperar a projeção. Custa o `transactions` buscar no accounts as contas do usuário
+   (nome, escopo, CNPJ), com o token dele, como já faz para validar a conta.
+2. **Formato.** Opções: (a) CSV no padrão do Excel pt-BR: `;` como separador, vírgula decimal, data
+   `dd/MM/aaaa`, UTF-8 com BOM (sem o BOM, o Excel erra os acentos); (b) planilha XLSX (exige
+   biblioteca; ClosedXML é MIT); (c) PDF (exige biblioteca; QuestPDF tem licença comunitária com
+   limite de receita). *Recomendação: (a)*, sem dependência nova; é o que os sistemas contábeis
+   importam e o que o Excel abre direto. (b) fica para depois, se o contador pedir abas; (c) fica
+   fora (é para ler, não para lançar).
+3. **O que vai no arquivo.** *Recomendação:* um **pacote ZIP** do mês (`System.IO.Compression`,
+   nativo) com três CSVs: **lançamentos** (data, descrição, categoria, conta contábil quando
+   houver, tipo, valor com sinal — saída negativa —, meio, cartão, parcelas, conta, CNPJ,
+   observações, origem "digitado"/"importado"); **pagamentos de fatura** do mês (data, cartão,
+   fatura paga, conta de origem, valor); **resumo** por categoria (entradas, saídas, saldo) com o
+   total. Um só arquivo para anexar no e-mail, e cada CSV abre sozinho.
+4. **Período e base de datas.** *Recomendação:* um **mês** (padrão: o anterior, que é o que se manda
+   ao contador), com intervalo livre de datas como opção. Lançamentos entram pela **data do
+   lançamento** (competência), como o Resumo; a compra parcelada entra **inteira** na data da compra
+   (a fatura é visão de caixa, não contábil). Pagamentos de fatura entram pela data do pagamento.
+5. **Escopo.** *Recomendação:* só contas **PJ** (`Business`) ativas e inativas do usuário — todas por
+   padrão, ou uma conta escolhida (empresas com mais de uma conta ou mais de um CNPJ). Conta PF nunca
+   entra, nem por filtro. Sem conta PJ, o pedido responde 400 com código estável.
+6. **Plano de contas.** Opções: (a) fora do escopo; (b) o usuário associa cada categoria PJ a um
+   código e nome de conta do plano do contador, e o código sai numa coluna; (c) importar o plano
+   inteiro do contador. *Recomendação: (b)* como Should, guardado no `transactions` (as categorias
+   são dele) e por usuário; categoria sem código sai com a coluna vazia, sem bloquear a exportação.
+   (c) é Won't: cada sistema contábil tem um layout.
+7. **Mês já enviado que muda depois.** *Recomendação:* guardar um **registro de cada exportação**
+   (mês, contas, quantidade de linhas, totais e uma impressão digital do conteúdo, nunca o arquivo) e,
+   ao abrir a tela, avisar quando o mesmo mês exportado antes mudou. Could: o produto não bloqueia
+   exclusão de mês fechado (não há "fechamento contábil").
+8. **Rota, escopo OAuth e limites.** *Recomendação:* `GET /transactions/accounting-export?month=…`
+   (ou `from`/`to`, no máximo 12 meses) com `expenses.read`, devolvendo o ZIP como download
+   (`Content-Disposition` com nome `contabil-<CNPJ>-<aaaa-mm>.zip`). Pela rota existente do gateway;
+   nenhum escopo novo. O conteúdo do arquivo nunca vai para log ou trace (mesma regra da importação,
+   ADR-0004, decisão 8).
+
+- 🔵 **CTB-1** ADR: exportação contábil PJ.
+  - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0006 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **CTB-2** Lançamentos PJ do mês em CSV.
+  - *Dado* lançamentos em contas PJ e PF no mês, *quando* peço a exportação do mês, *então* recebo um
+    CSV só com os lançamentos das contas PJ, um por linha, com data, descrição, categoria, tipo,
+    valor com sinal, meio, cartão, parcelas, conta, CNPJ, observações e origem.
+  - *Dado* o arquivo, *quando* o abro no Excel pt-BR, *então* acentos, datas (`dd/MM/aaaa`) e valores
+    (`1.234,56` → número) aparecem certos, sem configurar a importação.
+  - *Dado* uma compra em 3x no mês, *quando* exporto, *então* ela aparece uma vez, com o valor inteiro
+    e "3" na coluna de parcelas.
+  - *Dado* uma descrição com `;`, aspas ou quebra de linha, *quando* exporto, *então* o CSV continua
+    com uma linha por lançamento (campo entre aspas, aspas dobradas).
+  - *Dado* um usuário sem conta PJ, ou um mês inválido, *quando* peço a exportação, *então* recebo 400
+    com código estável; sem token, 401; a conta de outro usuário, 404.
+  - Estimativa: 5 · **Must** · Dependências: CTB-1
+- 🔵 **CTB-3** Pacote do mês: pagamentos de fatura e resumo por categoria.
+  - *Dado* pagamentos de fatura de cartões de contas PJ no mês, *quando* exporto, *então* o ZIP traz,
+    além dos lançamentos, um CSV de pagamentos de fatura (data, cartão, fatura paga, conta de origem,
+    valor) e um CSV de resumo por categoria (entradas, saídas, saldo, e a linha de total).
+  - *Dado* o mês exportado, *quando* comparo o resumo com o Resumo PJ da SPA no mesmo mês, *então* os
+    totais de entradas e saídas batem.
+  - Estimativa: 3 · **Must** · Dependências: CTB-2
+- 🔵 **CTB-4** "Exportar para o contador" na SPA.
+  - *Dado* o usuário logado com conta PJ, *quando* abre a exportação, *então* escolhe o mês (padrão: o
+    anterior) e, se tiver mais de uma conta PJ, todas ou uma; vê quantos lançamentos e os totais
+    antes de baixar; e baixa o ZIP com um clique.
+  - *Dado* um usuário sem conta PJ, *quando* abre a exportação, *então* vê o aviso de que ela é só
+    para contas PJ, sem botão de baixar.
+  - Estimativa: 3 · **Must** · Dependências: CTB-3
+- 🔵 **CTB-5** Plano de contas: categoria → conta contábil.
+  - *Dado* as categorias usadas em contas PJ, *quando* associo uma delas a um código e nome de conta
+    do plano do contador, *então* a coluna "conta contábil" do CSV de lançamentos sai preenchida para
+    ela, e a do resumo também.
+  - *Dado* uma categoria sem associação, *quando* exporto, *então* a coluna sai vazia e a tela mostra
+    quantos lançamentos ficaram sem conta, sem impedir a exportação.
+  - Estimativa: 5 · **Should** · Dependências: CTB-2
+- 🔵 **CTB-6** Aviso de mês alterado depois da exportação.
+  - *Dado* um mês já exportado, *quando* um lançamento dele é excluído ou importado depois, *então* a
+    tela de exportação mostra "mudou desde a exportação de dd/mm", com a diferença de linhas e de
+    totais. O registro guarda só totais e a impressão digital, nunca o conteúdo.
+  - Estimativa: 3 · **Could** · Dependências: CTB-4
+- 🔵 **CTB-7** E2E Cypress: lançar, exportar e conferir (PJ e PF).
+  - *Dado* uma conta PJ e uma PF com lançamentos no mês, *quando* exporto pela SPA, *então* o ZIP
+    baixado tem só os lançamentos PJ, o pagamento de fatura PJ e o resumo com os totais da tela.
+  - Estimativa: 3 · **Must** · Dependências: CTB-4
+
+**Fora do escopo (Won't, nesta versão):** exportação PF (para imposto de renda); XLSX e PDF;
+layouts específicos de sistemas contábeis (Domínio, Alterdata etc.) e importação do plano de contas
+inteiro; envio por e-mail ou acesso do contador ao produto (exigiria um papel novo no identity);
+anexos e notas fiscais; "fechamento contábil" que bloqueie excluir lançamentos de mês exportado;
+classificação de despesa pessoal paga pela conta PJ (pró-labore, distribuição de lucros).
+
+**Priorização (MoSCoW):** Must = CTB-1, 2, 3, 4, 7 (16 pts), o mínimo para o contador receber o mês
+PJ completo e conferível, provado ponta a ponta. Should = CTB-5 (5 pts), o que poupa o contador de
+reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
+
+**Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
-- Exportação contábil (relatório PJ para o contador).
+- (A exportação contábil virou o épico CTB, em 2026-11-22.)

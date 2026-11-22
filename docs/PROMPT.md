@@ -67,11 +67,10 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 - **Reporting por eventos** ([ADR-0001](adr/0001-transporte-de-eventos-transactions-reporting.md)): outbox do `transactions` exposto como feed HTTP; o `reporting` mantém uma projeção em banco próprio e o Resumo lê só dela (métrica de atraso no Prometheus). Lançamentos anteriores ao outbox ganharam o escopo PF/PJ por evento.
 
 ### Próximos passos conhecidos
-Épicos em refinamento em `docs/backlog.md`, cada um com decisões em aberto para uma ADR:
-**IMP — importação de extrato e fatura (CSV/OFX)**. O épico **IDX** (identity em repositório
-próprio, ADR-0003) foi concluído: o monorepo consome `ghcr.io/leandrorf/expense-identity` com versão
-fixada. Candidatos a novos épicos (ainda não refinados pelo PO):
-fechamento de fatura de cartão e previsão de caixa, exportação contábil PJ.
+Concluídos depois do briefing: **IDX** (identity em repositório próprio, ADR-0003), **IMP**
+(importação de extrato e fatura, ADR-0004) e **INV** (fatura de cartão e previsão de caixa,
+ADR-0005; só a INV-13, Could, ficou de fora). Em refinamento em `docs/backlog.md`, com decisões em
+aberto para a ADR-0006: **CTB — exportação contábil PJ**.
 
 ---
 
