@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 a LNC-5 feitas; próxima: LNC-6)
+## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (Must concluído; falta a LNC-7, Could)
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1482,9 +1482,16 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     um `PUT` direto no gateway e confere o 409 tratado); `import.cy.ts` confere o aviso do
     importado. Config do Cypress ganhou `gatewayUrl`. Suíte com 17 testes.
   - Estimativa: 3 · **Must** · Dependências: LNC-3
-- 🔵 **LNC-6** E2E Cypress: receita, edição e reflexo nos relatórios.
+- ✅ **LNC-6** E2E Cypress: receita, edição e reflexo nos relatórios. → `transaction-edit-journey.cy.ts`.
   - *Dado* uma conta com orçamento e um cartão, *quando* lanço uma receita e edito um gasto (valor,
     categoria e parcelas) pela SPA, *então* Resumo, orçamento e fatura mostram os valores novos.
+  - Feito assim: tudo pela SPA, no mês de hoje: conta PJ com cartão (fecha 10, vence 17) e dois
+    orçamentos PJ em categorias únicas ("Antes" e "Depois"); receita Pix de R$ 2.500 e compra de
+    R$ 300 em 3x na categoria "Antes" (o orçamento "Antes" chega a R$ 300). A compra é corrigida para
+    R$ 600 em 6x na categoria "Depois": o orçamento "Depois" chega a R$ 600 e o "Antes" volta a zero;
+    no Resumo só aparece "Depois" com R$ 600 e as receitas sobem R$ 2.500 (por diferença); a fatura
+    atual tem a parcela "1/6" de R$ 100, e cinco faturas adiante está a "6/6", a última. Suíte com
+    18 testes, sem retry.
   - Estimativa: 3 · **Must** · Dependências: LNC-2, LNC-4, LNC-5
 - 🔵 **LNC-7** Recategorizar em lote.
   - *Dado* vários lançamentos selecionados na lista, *quando* escolho uma categoria e confirmo,
