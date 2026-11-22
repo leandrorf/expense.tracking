@@ -476,6 +476,13 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at_utc");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ImportBatchId");

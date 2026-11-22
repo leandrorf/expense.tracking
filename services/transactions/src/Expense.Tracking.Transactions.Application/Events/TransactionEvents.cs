@@ -114,6 +114,49 @@ public sealed record TransactionAccountScopeResolved(
     public override string EventType => Name;
 }
 
+/// <summary>
+/// LNC-3 (ADR-0007, decisao 1): um lancamento foi corrigido. Leva o estado completo depois da edicao
+/// e a versao do lancamento (<see cref="TransactionVersion"/>, que nao e a <see cref="TransactionEvent.Version"/>
+/// do formato do evento); nao leva o escopo, porque a conta nao muda. Consumidores aplicam so se o lancamento
+/// ainda existir (uma edicao lida depois da exclusao nao o recria).
+/// </summary>
+public sealed record TransactionUpdated(
+    Guid TransactionId,
+    Guid OwnerUserId,
+    Guid AccountId,
+    string TransactionType,
+    string PaymentMethod,
+    string Category,
+    decimal Amount,
+    string Currency,
+    DateOnly OccurredOn,
+    string Description,
+    Guid? CreditCardId,
+    int Installments,
+    int TransactionVersion)
+    : TransactionEvent(TransactionId, OwnerUserId)
+{
+    public const string Name = "TransactionUpdated";
+
+    [JsonIgnore]
+    public override string EventType => Name;
+
+    public static TransactionUpdated From(Transaction transaction) => new(
+        transaction.Id,
+        transaction.OwnerUserId,
+        transaction.AccountId,
+        transaction.Type.ToString(),
+        transaction.PaymentMethod.ToString(),
+        transaction.Category,
+        transaction.Amount,
+        transaction.Currency,
+        transaction.OccurredOn,
+        transaction.Description,
+        transaction.CreditCardId,
+        transaction.Installments,
+        transaction.Version);
+}
+
 /// <summary>Um lancamento foi excluido (a exclusao e fisica; este evento e o unico registro dela).</summary>
 public sealed record TransactionDeleted(Guid TransactionId, Guid OwnerUserId)
     : TransactionEvent(TransactionId, OwnerUserId)

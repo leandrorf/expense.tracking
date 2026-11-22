@@ -740,6 +740,27 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Upload_SuggestsTheCategoryOfTheLastChange_SoRecategorizingTeachesTheImport()
+    {
+        // LNC-3 (ADR-0007, decisao 8): o lancamento antigo, recategorizado agora, vence o mais novo.
+        var (owner, accountId) = (Guid.NewGuid(), Guid.NewGuid());
+        var old = await SeedTransactionAsync(owner, accountId, "UBER *TRIP", "Viagem", DateTimeOffset.UtcNow.AddDays(-30));
+        await SeedTransactionAsync(owner, accountId, "UBER *TRIP", "Transporte", DateTimeOffset.UtcNow.AddDays(-1));
+        var client = ClientFor(owner);
+
+        var edited = await client.PutAsJsonAsync($"/transactions/{old}", new
+        {
+            accountId, type = "Expense", paymentMethod = "Pix", description = "UBER *TRIP", category = "Mobilidade",
+            amount = 10m, currency = "BRL", occurredOn = "2026-10-05", version = 1,
+        });
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+
+        var batch = await Json(await client.PostAsync("/imports",
+            Upload(OfxWithMemos("UBER *TRIP"), "extrato.ofx", Guid.NewGuid(), paymentMethod: "Pix")));
+        Assert.Equal("Mobilidade", batch.GetProperty("lines")[0].GetProperty("category").GetString());
+    }
+
+    [Fact]
     public async Task Upload_BankStatement_MemoHintsSuggestTheMethod_OtherwiseTheBatchDefault()
     {
         var batch = await Json(await ClientFor(Guid.NewGuid()).PostAsync("/imports",
@@ -767,13 +788,15 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         Assert.Equal("Padaria", (await TransactionsOfAsync(client, accountId)).Single().GetProperty("category").GetString());
     }
 
-    private async Task SeedTransactionAsync(Guid owner, Guid accountId, string description, string category, DateTimeOffset createdAtUtc)
+    private async Task<Guid> SeedTransactionAsync(Guid owner, Guid accountId, string description, string category, DateTimeOffset createdAtUtc)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
-        db.Transactions.Add(Transaction.Create(owner, accountId, TransactionType.Expense, PaymentMethod.Pix, null,
-            description, category, 10m, "BRL", new DateOnly(2026, 10, 5), null, createdAtUtc).Value);
+        var transaction = Transaction.Create(owner, accountId, TransactionType.Expense, PaymentMethod.Pix, null,
+            description, category, 10m, "BRL", new DateOnly(2026, 10, 5), null, createdAtUtc).Value;
+        db.Transactions.Add(transaction);
         await db.SaveChangesAsync();
+        return transaction.Id;
     }
 
     // ---------- IMP-11: mapeamentos de CSV salvos ----------

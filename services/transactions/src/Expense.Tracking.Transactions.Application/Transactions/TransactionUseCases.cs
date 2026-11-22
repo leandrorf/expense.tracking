@@ -60,6 +60,92 @@ public sealed class CreateTransactionHandler(
     }
 }
 
+/// <summary>LNC-3: o lancamento inteiro como deve ficar, mais a versao que o cliente leu.</summary>
+public sealed record UpdateTransactionCommand(
+    Guid Id,
+    Guid OwnerUserId,
+    Guid AccountId,
+    TransactionType Type,
+    PaymentMethod PaymentMethod,
+    Guid? CreditCardId,
+    string Description,
+    string Category,
+    decimal Amount,
+    string? Currency,
+    DateOnly OccurredOn,
+    string? Notes,
+    int Installments,
+    int Version);
+
+/// <summary>
+/// LNC-3 (ADR-0007): corrige um lancamento com as regras da criacao e publica o
+/// <see cref="TransactionUpdated"/> no mesmo commit. A conta nao muda; a versao lida precisa ser a
+/// atual (concorrencia otimista). Edicao sem mudanca nao sobe a versao nem gera evento.
+/// </summary>
+public sealed class UpdateTransactionHandler(
+    ITransactionRepository transactions,
+    IAccountsClient accountsClient,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
+{
+    public static readonly Error ConcurrencyConflict = Error.Conflict(
+        "transaction.concurrency_conflict", "O lancamento mudou depois que voce o leu. Recarregue e tente de novo.");
+
+    public async Task<Result<TransactionDto>> HandleAsync(UpdateTransactionCommand command, CancellationToken cancellationToken)
+    {
+        var transaction = await transactions.GetAsync(command.Id, command.OwnerUserId, cancellationToken);
+        if (transaction is null)
+        {
+            return Result.Failure<TransactionDto>(Error.NotFound("transaction.not_found", "Lancamento nao encontrado."));
+        }
+
+        if (command.AccountId != transaction.AccountId)
+        {
+            return Result.Failure<TransactionDto>(Error.Validation(
+                "transaction.account_immutable", "A conta de um lancamento nao muda: exclua e lance de novo na outra conta."));
+        }
+
+        if (command.Version != transaction.Version)
+        {
+            return Result.Failure<TransactionDto>(ConcurrencyConflict);
+        }
+
+        var previousCard = transaction.CreditCardId;
+        var edited = transaction.Edit(
+            command.Type, command.PaymentMethod, command.CreditCardId, command.Description, command.Category,
+            command.Amount, command.Currency, command.OccurredOn, command.Notes, command.Installments, timeProvider.GetUtcNow());
+        if (edited.IsFailure)
+        {
+            return Result.Failure<TransactionDto>(edited.Error);
+        }
+
+        if (!edited.Value)
+        {
+            return TransactionDto.From(transaction);
+        }
+
+        if (transaction.CreditCardId is { } cardId && cardId != previousCard
+            && !await accountsClient.CreditCardExistsAsync(cardId, cancellationToken))
+        {
+            return Result.Failure<TransactionDto>(Error.NotFound("card.not_found", "Cartao nao encontrado para o usuario."));
+        }
+
+        outbox.Add(TransactionUpdated.From(transaction));
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            // Outra edicao gravou entre a leitura e a gravacao (token de concorrencia da versao).
+            return Result.Failure<TransactionDto>(ConcurrencyConflict);
+        }
+
+        return TransactionDto.From(transaction);
+    }
+}
+
 public sealed record ListTransactionsCommand(
     Guid OwnerUserId,
     Guid? AccountId,

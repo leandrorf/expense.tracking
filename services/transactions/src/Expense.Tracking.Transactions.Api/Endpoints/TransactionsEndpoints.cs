@@ -18,6 +18,23 @@ public sealed record CreateTransactionRequest(
     string? Notes,
     int? Installments = null);
 
+/// <summary>
+/// LNC-3: corpo da edicao. O mesmo da criacao (a conta so e conferida: nao muda) mais a versao lida.
+/// </summary>
+public sealed record UpdateTransactionRequest(
+    Guid AccountId,
+    string? Type,
+    string PaymentMethod,
+    Guid? CreditCardId,
+    string Description,
+    string Category,
+    decimal Amount,
+    string? Currency,
+    DateOnly OccurredOn,
+    string? Notes,
+    int? Installments,
+    int? Version);
+
 public static class TransactionsEndpoints
 {
     public static IEndpointRouteBuilder MapTransactionsEndpoints(this IEndpointRouteBuilder app)
@@ -85,6 +102,42 @@ public static class TransactionsEndpoints
             return result.IsSuccess
                 ? Results.Created($"/transactions/{result.Value.Id}", result.Value)
                 : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // LNC-3 (ADR-0007, decisao 5): corrige o lancamento inteiro, com concorrencia otimista.
+        group.MapPut("/{id:guid}", async (
+            Guid id, UpdateTransactionRequest request, HttpContext http, UpdateTransactionHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var type = TransactionType.Expense;
+            if (!string.IsNullOrWhiteSpace(request.Type) && !Enum.TryParse(request.Type, ignoreCase: true, out type))
+            {
+                return HttpResults.Problem(Error.Validation("transaction.type_invalid", "Tipo invalido: use 'Expense' ou 'Income'."));
+            }
+
+            if (!Enum.TryParse<PaymentMethod>(request.PaymentMethod, ignoreCase: true, out var paymentMethod))
+            {
+                return HttpResults.Problem(Error.Validation("transaction.payment_method_invalid", "Meio de pagamento invalido."));
+            }
+
+            if (request.Version is not { } version)
+            {
+                return HttpResults.Problem(Error.Validation("transaction.version_required", "Informe a versao do lancamento que voce leu."));
+            }
+
+            var result = await handler.HandleAsync(
+                new UpdateTransactionCommand(
+                    id, owner.Value, request.AccountId, type, paymentMethod, request.CreditCardId,
+                    request.Description, request.Category, request.Amount, request.Currency,
+                    request.OccurredOn, request.Notes, request.Installments ?? 1, version),
+                ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
         group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, DeleteTransactionHandler handler, CancellationToken ct) =>

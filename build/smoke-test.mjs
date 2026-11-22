@@ -379,6 +379,21 @@ async function main() {
     `POST /api/transactions com receita (status ${incomeRes.status}); receita em 3x = ${splitIncome.status}`);
   if (incomeTx.id) await fetch(`${GATEWAY}/api/transactions/${incomeTx.id}`, { method: 'DELETE', headers: auth });
 
+  // 21) Edicao (LNC-3): PUT com a versao lida; versao antiga = 409; a conta nao muda.
+  const editBody = (version, category, accountId = account.id) => JSON.stringify({
+    accountId, type: 'Expense', paymentMethod: 'Pix', description: 'Smoke edicao', category,
+    amount: 10, currency: 'BRL', occurredOn: new Date().toISOString().slice(0, 10), version,
+  });
+  const toEdit = await (await fetch(`${GATEWAY}/api/transactions`, { method: 'POST', headers: auth, body: editBody(undefined, 'Antes') })).json();
+  const putTx = (body) => fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'PUT', headers: auth, body });
+  const edited = await putTx(editBody(toEdit.version, 'Depois'));
+  const editedTx = edited.status === 200 ? await edited.json() : {};
+  const [staleEdit, movedEdit] = [await putTx(editBody(toEdit.version, 'Outra aba')), await putTx(editBody(2, 'Depois', pj.id))];
+  ok(toEdit.version === 1 && editedTx.version === 2 && editedTx.category === 'Depois'
+    && staleEdit.status === 409 && movedEdit.status === 400,
+    `PUT /api/transactions/{id} edita (versao ${editedTx.version}); versao antiga = ${staleEdit.status}; outra conta = ${movedEdit.status}`);
+  if (toEdit.id) await fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

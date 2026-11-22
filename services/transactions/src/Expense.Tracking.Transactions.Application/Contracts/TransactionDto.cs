@@ -15,9 +15,12 @@ public sealed record TransactionDto(
     DateOnly OccurredOn,
     string? Notes,
     DateTimeOffset CreatedAtUtc,
-    int Installments)
+    int Installments,
+    int Version,
+    bool Imported)
 {
     public static TransactionDto From(Transaction t) =>
         new(t.Id, t.AccountId, t.Type.ToString(), t.PaymentMethod.ToString(), t.CreditCardId,
-            t.Description, t.Category, t.Amount, t.Currency, t.OccurredOn, t.Notes, t.CreatedAtUtc, t.Installments);
+            t.Description, t.Category, t.Amount, t.Currency, t.OccurredOn, t.Notes, t.CreatedAtUtc, t.Installments,
+            t.Version, t.ImportBatchId is not null || t.ExternalId is not null);
 }
