@@ -108,4 +108,25 @@ public sealed class ReportsApiTests(ReportingApiFactory factory) : IClassFixture
         summary.GetProperty(property).EnumerateArray()
             .Select(t => (t.GetProperty("key").GetString()!, t.GetProperty("total").GetDecimal()))
             .ToArray();
+
+    [Fact]
+    public async Task Summary_FollowsAnEdit_AndAnEditAfterTheDeletionIsIgnored()
+    {
+        // LNC-4 (ADR-0007): o Resumo le a projecao; a edicao troca valor, categoria e tipo.
+        var owner = Guid.NewGuid();
+        var feed = _factory.EventFeed;
+        var (edited, deleted) = (Guid.NewGuid(), Guid.NewGuid());
+        feed.Registered(edited, owner, amount: 100m, category: "Alimentacao");
+        feed.Updated(edited, owner, 250m, "2026-11-19", category: "Feira");
+        feed.Registered(deleted, owner, amount: 70m);
+        feed.Deleted(deleted, owner);
+        feed.Updated(deleted, owner, 999m, "2026-11-19");
+        await _factory.DrainFeedAsync();
+
+        var summary = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/summary");
+
+        Assert.Equal((250m, 0m, 1), (summary.GetProperty("totalExpense").GetDecimal(), summary.GetProperty("totalIncome").GetDecimal(),
+            summary.GetProperty("count").GetInt32()));
+        Assert.Equal("Feira", Assert.Single(summary.GetProperty("byCategory").EnumerateArray()).GetProperty("key").GetString());
+    }
 }

@@ -31,6 +31,7 @@ public static class FeedEventTypes
     public const string TransactionDeleted = "TransactionDeleted";
     public const string TransactionAccountScopeResolved = "TransactionAccountScopeResolved";
     public const string TransactionCardDetailsResolved = "TransactionCardDetailsResolved";
+    public const string TransactionUpdated = "TransactionUpdated";
     public const string CardInvoicePaid = "CardInvoicePaid";
     public const string CardInvoicePaymentDeleted = "CardInvoicePaymentDeleted";
 
@@ -99,6 +100,26 @@ public sealed record CardInvoicePaidV1(
 
 /// <summary>Payload v1 do <c>CardInvoicePaymentDeleted</c> (INV-6).</summary>
 public sealed record CardInvoicePaymentDeletedV1(Guid PaymentId, Guid OwnerUserId, Guid CreditCardId);
+
+/// <summary>
+/// Payload v1 do <c>TransactionUpdated</c> (LNC-3, ADR-0007): o estado completo do lancamento depois
+/// da edicao. Sem escopo, porque a conta nao muda; <see cref="TransactionVersion"/> e a versao do
+/// lancamento, nao a do formato do evento.
+/// </summary>
+public sealed record TransactionUpdatedV1(
+    Guid TransactionId,
+    Guid OwnerUserId,
+    Guid AccountId,
+    string TransactionType,
+    string PaymentMethod,
+    string Category,
+    decimal Amount,
+    string Currency,
+    DateOnly OccurredOn,
+    string Description,
+    Guid? CreditCardId,
+    int Installments,
+    int TransactionVersion);
 
 /// <summary>Payload v1 do <c>TransactionDeleted</c>.</summary>
 public sealed record TransactionDeletedV1(Guid TransactionId, Guid OwnerUserId);
