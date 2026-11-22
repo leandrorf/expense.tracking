@@ -962,11 +962,21 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     lista `payments` (id, conta, valor, data), que a tela da INV-7 usa para excluir. Smoke com
     pagamento, resumo inalterado e exclusão (31 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-4
-- 🔵 **INV-7** Faturas na SPA.
+- ✅ **INV-7** Faturas na SPA.
   - *Dado* o usuário logado, *quando* abre a fatura de um cartão (a partir da aba Cartões), *então*
     vê a fatura atual e navega pelas anteriores e próximas, com total, vencimento, situação e itens.
   - *Dado* uma fatura fechada ou vencida, *quando* clica em "Registrar pagamento", *então* informa
     conta, valor (o que falta, por padrão) e data, e a situação muda.
+  - Feito assim: botão "Faturas" em cada cartão da aba Cartões abre a tela da fatura atual, com
+    setas para as anteriores e próximas (só as que têm compra ou pagamento, mais a atual). Mostra
+    situação (Aberta, Fechada, Parcialmente paga, Vencida, Paga), total, pago, falta pagar,
+    fechamento e vencimento, as compras com a parcela ("2/3" ou "à vista") e os pagamentos, cada um
+    com "excluir". "Registrar pagamento" aparece enquanto falta pagar, inclusive na fatura aberta
+    (pagamento antecipado); o formulário sugere a conta do cartão, o que falta e a data de hoje.
+    Como a fatura lê a projeção, depois de pagar ou excluir a tela recarrega até a mudança chegar
+    (até 20 s). Sem framework de teste unitário na SPA: typecheck, build e o Cypress
+    `card-invoices.cy.ts` (fatura atual aberta, fatura vencida de dois meses atrás, pagamento
+    parcial, pagamento do resto, exclusão). Suíte com 9 testes.
   - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
 - 🔵 **INV-8** API da previsão de caixa.
   - *Dado* lançamentos com data futura, compras no cartão e pagamentos, *quando* consulto
