@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (Must concluído; faltam CTB-5, Should, e CTB-6, Could)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (Must e Should concluídos; falta a CTB-6, Could)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1263,12 +1263,24 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     `accounting-export.cy.ts`: mês anterior por padrão, mês sem movimento e o ZIP baixado começa com
     `PK` (o demo sempre tem conta PJ; o aviso sem PJ não tem E2E). Suíte com 14 testes.
   - Estimativa: 3 · **Must** · Dependências: CTB-3
-- 🔵 **CTB-5** Plano de contas: categoria → conta contábil.
+- ✅ **CTB-5** Plano de contas: categoria → conta contábil. → `/transactions/ledger-accounts`, seção "Plano de contas" na aba Contador.
   - *Dado* as categorias usadas em contas PJ, *quando* associo uma delas a um código e nome de conta
     do plano do contador, *então* a coluna "conta contábil" do CSV de lançamentos sai preenchida para
     ela, e a do resumo também.
   - *Dado* uma categoria sem associação, *quando* exporto, *então* a coluna sai vazia e a tela mostra
     quantos lançamentos ficaram sem conta, sem impedir a exportação.
+  - Feito assim: tabela `ledger_accounts` no `transactions` (dono, categoria, código até 20, nome
+    opcional até 100; único por dono e categoria). A categoria é comparada exatamente como foi
+    digitada ("Software" ≠ "software", como no Resumo): coluna com collation `utf8mb4_bin`, aplicada
+    por SQL explícito na migração, porque o provider da Oracle ignora a collation no CREATE TABLE (o
+    smoke pegou o índice único juntando as duas). Rotas: `GET /transactions/ledger-accounts` (categorias
+    das contas PJ com a quantidade de lançamentos, mais as já associadas sem uso), `PUT` com
+    `{category, code, name}` (associa ou troca, `expenses.write`) e `DELETE ?category=` (a categoria vai
+    na query por ser texto livre). Erros `ledger_account.*`. O código sai na coluna "Conta contábil"
+    do `lancamentos.csv` e do `resumo.csv`; a prévia ganhou `unmappedLines`. SPA: seção "Plano de
+    contas" na aba Contador (`LedgerAccountsSection`), com código e nome por categoria, e o aviso "N
+    lançamento(s) sem conta contábil" na prévia. Smoke passo 19 (40 passos); a jornada Cypress da
+    CTB-7 associa a categoria e confere o código no ZIP.
   - Estimativa: 5 · **Should** · Dependências: CTB-2
 - 🔵 **CTB-6** Aviso de mês alterado depois da exportação.
   - *Dado* um mês já exportado, *quando* um lançamento dele é excluído ou importado depois, *então* a

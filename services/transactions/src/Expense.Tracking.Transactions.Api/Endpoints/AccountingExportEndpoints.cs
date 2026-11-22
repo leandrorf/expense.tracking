@@ -5,6 +5,9 @@ using Expense.Tracking.Transactions.Domain.Common;
 
 namespace Expense.Tracking.Transactions.Api.Endpoints;
 
+/// <summary>CTB-5: corpo da associacao de uma categoria a uma conta contabil (o nome e opcional).</summary>
+public sealed record SetLedgerAccountRequest(string? Category, string? Code, string? Name);
+
 public static class AccountingExportEndpoints
 {
     private static readonly Error InvalidMonth =
@@ -42,6 +45,38 @@ public static class AccountingExportEndpoints
         })
         .WithTags("AccountingExport")
         .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        // CTB-5 (ADR-0006, decisao 7): plano de contas, categoria -> conta contabil.
+        var ledger = app.MapGroup("/transactions/ledger-accounts").WithTags("AccountingExport");
+
+        ledger.MapGet("/", async (HttpContext http, ListLedgerAccountsHandler handler, CancellationToken ct) =>
+            http.User.GetUserId() is { } owner ? Results.Ok(await handler.HandleAsync(owner, ct)) : Results.Unauthorized())
+        .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        ledger.MapPut("/", async (SetLedgerAccountRequest request, HttpContext http, SetLedgerAccountHandler handler, CancellationToken ct) =>
+        {
+            if (http.User.GetUserId() is not { } owner)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new SetLedgerAccountCommand(owner, request.Category, request.Code, request.Name), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        })
+        .RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // A categoria vai na query: e texto livre (pode ter "/" ou "%").
+        ledger.MapDelete("/", async (string? category, HttpContext http, DeleteLedgerAccountHandler handler, CancellationToken ct) =>
+        {
+            if (http.User.GetUserId() is not { } owner)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(owner, category, ct);
+            return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
+        })
+        .RequireAuthorization(AuthenticationSetup.WritePolicy);
 
         // CTB-4: quantidades e totais do mesmo pacote, sem gerar o arquivo, para a tela.
         app.MapGet("/transactions/accounting-export/preview", async (

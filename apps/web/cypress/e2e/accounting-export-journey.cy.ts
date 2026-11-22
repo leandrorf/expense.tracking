@@ -1,7 +1,8 @@
 // CTB-7: jornada da exportacao contabil pela SPA. Lanca numa conta PJ (CNPJ proprio do teste) e numa
 // PF, paga parte da fatura do cartao PJ, exporta a conta PJ na aba Contador e abre o ZIP baixado: so
 // os lancamentos PJ (a compra em 3x uma vez, inteira), o pagamento e o resumo com os totais da previa.
-// Tudo no mes de hoje; o formulario de lancamento so registra gastos, entao a jornada nao tem receita.
+// A categoria ganha uma conta contabil (CTB-5), que sai nas planilhas. Tudo no mes de hoje; o
+// formulario de lancamento so registra gastos, entao a jornada nao tem receita.
 describe('Exportacao contabil (jornada PJ e PF)', () => {
   const pad = (n: number) => String(n).padStart(2, '0');
   const today = new Date();
@@ -111,6 +112,17 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
     cy.get('[data-cy=accounting-payments]').should('have.text', '1');
     cy.get('[data-cy=accounting-total][data-currency=BRL] [data-cy=accounting-expense]').should('contain', '1.020,50');
 
+    // Plano de contas: sem codigo, a previa avisa; com codigo, o aviso some.
+    cy.get('[data-cy=accounting-unmapped]').should('contain', '2 lançamento(s) sem conta contábil');
+    cy.get(`[data-cy=ledger-row][data-category="Contabil ${stamp}"]`).within(() => {
+      cy.get('[data-cy=ledger-code]').type('3.1.02');
+      cy.get('[data-cy=ledger-name]').type('Despesas operacionais');
+      cy.get('[data-cy=ledger-save]').click();
+    });
+    cy.wait('@preview');
+    cy.get('[data-cy=accounting-unmapped]').should('not.exist');
+    cy.get(`[data-cy=ledger-row][data-category="Contabil ${stamp}"] [data-cy=ledger-remove]`).should('be.visible');
+
     const fileName = `contabil-${cnpj}-${month}.zip`;
     cy.get('[data-cy=accounting-download]').should('contain.text', fileName).click();
     cy.readFile(`${Cypress.config('downloadsFolder')}/${fileName}`, null).should('exist');
@@ -121,8 +133,8 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
       // Lancamentos: os dois PJ, a compra em 3x uma vez e inteira; o gasto PF nao entra.
       expect(lines('lancamentos.csv')).to.deep.equal([
         'Data;Descrição;Categoria;Conta contábil;Tipo;Valor;Moeda;Meio;Cartão;Parcelas;Conta;CNPJ;Observações;Origem',
-        `${br};Software ${stamp};Contabil ${stamp};;Despesa;-120,50;BRL;Pix;;1;${pj};${cnpjText};;digitado`,
-        `${br};Notebook ${stamp};Contabil ${stamp};;Despesa;-900,00;BRL;Cartão de crédito;${card} final 5555;3;${pj};${cnpjText};;digitado`,
+        `${br};Software ${stamp};Contabil ${stamp};3.1.02;Despesa;-120,50;BRL;Pix;;1;${pj};${cnpjText};;digitado`,
+        `${br};Notebook ${stamp};Contabil ${stamp};3.1.02;Despesa;-900,00;BRL;Cartão de crédito;${card} final 5555;3;${pj};${cnpjText};;digitado`,
       ]);
       expect(files['lancamentos.csv']).not.to.contain(`Mercado ${stamp}`);
 
@@ -136,7 +148,7 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
       // Resumo: os mesmos totais que a previa mostrou na tela.
       expect(lines('resumo.csv')).to.deep.equal([
         'Moeda;Categoria;Conta contábil;Entradas;Saídas;Saldo',
-        `BRL;Contabil ${stamp};;0,00;1020,50;-1020,50`,
+        `BRL;Contabil ${stamp};3.1.02;0,00;1020,50;-1020,50`,
         'BRL;Total;;0,00;1020,50;-1020,50',
       ]);
     });

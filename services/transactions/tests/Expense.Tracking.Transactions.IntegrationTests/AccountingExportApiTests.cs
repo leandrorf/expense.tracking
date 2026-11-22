@@ -177,6 +177,7 @@ public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : I
         Assert.Equal(($"contabil-{Cnpj}-2026-10.zip", 1, 2, 1), (preview.GetProperty("fileName").GetString(),
             preview.GetProperty("accounts").GetInt32(), preview.GetProperty("lines").GetInt32(), preview.GetProperty("payments").GetInt32()));
         var brl = Assert.Single(preview.GetProperty("totals").EnumerateArray());
+        Assert.Equal(2, preview.GetProperty("unmappedLines").GetInt32());
         Assert.Equal(("BRL", 5000m, 300.25m, 4699.75m), (brl.GetProperty("currency").GetString(),
             brl.GetProperty("income").GetDecimal(), brl.GetProperty("expense").GetDecimal(), brl.GetProperty("balance").GetDecimal()));
 
