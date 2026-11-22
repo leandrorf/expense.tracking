@@ -264,6 +264,15 @@ async function main() {
   ok(unpayRes.status === 204 && unpaid.paid === 0 && unpaid.remaining === 77.7,
     `DELETE do pagamento devolve o saldo da fatura (status ${unpayRes.status}, pago=${unpaid.paid}, falta=${unpaid.remaining})`);
 
+  // 16) Previsao de caixa (INV-8): a fatura do cartao entra no mes de vencimento, a pagar.
+  const forecastRes = await fetch(`${GATEWAY}/api/reports/cash-forecast?months=3`, { headers: auth });
+  const forecast = forecastRes.status === 200 ? await forecastRes.json() : {};
+  const dueMonth = (forecast.months ?? []).find((m) => m.month === current?.dueMonth);
+  ok(forecastRes.status === 200 && forecast.months?.length === 3 && dueMonth?.total.invoicesRemaining >= 77.7,
+    `GET /api/reports/cash-forecast traz a fatura em ${current?.dueMonth} (status ${forecastRes.status}, faturas a pagar=${dueMonth?.total.invoicesRemaining})`);
+  const badForecast = await fetch(`${GATEWAY}/api/reports/cash-forecast?months=13`, { headers: auth });
+  ok(badForecast.status === 400, `previsao com 13 meses responde 400 (status ${badForecast.status})`);
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

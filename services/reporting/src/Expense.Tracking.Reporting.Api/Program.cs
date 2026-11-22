@@ -50,6 +50,7 @@ app.MapHealthEndpoints();
 app.MapReportsEndpoints();
 app.MapBudgetsEndpoints();
 app.MapInvoicesEndpoints();
+app.MapForecastEndpoints();
 
 await InitializeDatabaseAsync(app);
 

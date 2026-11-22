@@ -8,6 +8,9 @@ namespace Expense.Tracking.Reporting.Application.Invoices;
 public sealed record CardInfo(
     Guid Id, Guid AccountId, string Label, string LastFourDigits, decimal CreditLimit, int ClosingDay, int DueDay, bool IsActive);
 
+/// <summary>INV-8: cartao do usuario com o escopo PF/PJ da conta dele (nulo se a conta nao veio).</summary>
+public sealed record ScopedCard(CardInfo Card, string? Scope);
+
 /// <summary>Compra ou estorno no cartao, lido da projecao.</summary>
 public sealed record CardTransactionRecord(
     Guid TransactionId, string TransactionType, string Category, string? Description, decimal Amount, string Currency,
@@ -79,9 +82,7 @@ public sealed class GetCardInvoicesHandler(
         var current = cycle.DueMonthOf(today);
 
         var records = await projection.GetCardTransactionsAsync(ownerUserId, cardId, cancellationToken);
-        var charges = records.Select(r => new CardCharge(
-            r.TransactionId, r.Category, r.Amount, r.OccurredOn, r.Installments,
-            IsRefund: r.TransactionType == "Income", Description: r.Description));
+        var charges = ChargesOf(records);
 
         var payments = await projection.GetCardPaymentsAsync(ownerUserId, cardId, cancellationToken);
         var paymentsByMonth = payments
@@ -118,6 +119,12 @@ public sealed class GetCardInvoicesHandler(
                 .Select(i => ToDto(i, paymentsByMonth.GetValueOrDefault(i.Period.DueMonth) ?? []))
                 .ToList());
     }
+
+    /// <summary>Compras e estornos da projecao como a regra da fatura os le (receita no cartao = estorno).</summary>
+    public static IEnumerable<CardCharge> ChargesOf(IEnumerable<CardTransactionRecord> records) =>
+        records.Select(r => new CardCharge(
+            r.TransactionId, r.Category, r.Amount, r.OccurredOn, r.Installments,
+            IsRefund: r.TransactionType == "Income", Description: r.Description));
 
     private static InvoiceDto ToDto(Invoice invoice, IReadOnlyList<InvoicePaymentDto> payments) => new(
         Month(invoice.Period.DueMonth),

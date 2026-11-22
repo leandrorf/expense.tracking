@@ -978,13 +978,25 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     `card-invoices.cy.ts` (fatura atual aberta, fatura vencida de dois meses atrás, pagamento
     parcial, pagamento do resto, exclusão). Suíte com 9 testes.
   - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
-- 🔵 **INV-8** API da previsão de caixa.
+- ✅ **INV-8** API da previsão de caixa.
   - *Dado* lançamentos com data futura, compras no cartão e pagamentos, *quando* consulto
     `GET /reports/cash-forecast?months=6`, *então* recebo, por mês e por escopo (PF, PJ e total):
     entradas, saídas fora do cartão, faturas a vencer (o que falta pagar) e o resultado do mês.
   - *Dado* uma compra no cartão em 10x, *quando* olho a previsão, *então* cada parcela aparece no mês
     de vencimento da sua fatura, e a compra não aparece de novo na data em que foi feita.
   - *Dado* uma fatura já paga, *quando* olho a previsão, *então* ela não conta como saída a vencer.
+  - Feito assim: `GET /reports/cash-forecast?months=N` (1 a 12, padrão 6; fora disso 400
+    `forecast.months_invalid`) começa no mês atual (fuso `Reports:TimeZone`). Cada mês traz
+    `personal`, `business` e `total`, cada um com `income`, `expense`, `invoices` (total das faturas
+    que vencem no mês), `invoicesPaid`, `invoicesRemaining` (o que falta: fatura paga = 0) e
+    `result` = entradas − saídas − faturas (total, como na ADR, para o resultado não mudar quando a
+    fatura é paga antes). Fora do cartão = sem cartão e meio diferente de `CreditCard`, pela data.
+    As faturas são as da INV-4, de todos os cartões do usuário (inclusive desativados, que ainda
+    podem ter parcelas), no escopo da conta do cartão: o reporting lê `GET /credit-cards` e
+    `GET /accounts` do accounts com o token do usuário e junta pelo id da conta. Lançamento sem
+    escopo conhecido entra só no total. A resposta traz `notice` ("só o que já está lançado") para
+    a tela da INV-9. Regra pura em `CashForecastCalculator` (Domain/Forecast). Smoke com previsão e
+    400 (33 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
 - 🔵 **INV-9** Previsão de caixa na SPA.
   - *Dado* o usuário logado, *quando* abre a previsão, *então* vê os próximos 6 meses com entradas,
