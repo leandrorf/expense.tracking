@@ -164,6 +164,10 @@ public sealed class UndoImportHandlerTests
 
         public Task<IReadOnlyList<Transaction>> ListAsync(TransactionQuery query, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Transaction>>([]);
+
+        public Task<IReadOnlyList<Transaction>> ListByIdsAsync(
+            Guid ownerUserId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Transaction>>([]);
     }
 
     private sealed class RecordingOutbox : IEventOutbox

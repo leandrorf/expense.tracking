@@ -35,6 +35,11 @@ export function TransactionsView() {
   // LNC-5 (ADR-0007): lancamento em edicao (o formulario e o mesmo da criacao) e o aviso de conflito.
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [conflict, setConflict] = useState(false);
+  // LNC-7: lancamentos marcados na lista para recategorizar de uma vez.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkOutcome, setBulkOutcome] = useState<BulkOutcome | null>(null);
   const { categories, remember } = useCategorySuggestions();
 
   const requiresCard = useMemo(
@@ -56,7 +61,11 @@ export function TransactionsView() {
   }
 
   async function loadTransactions() {
-    setTransactions(await transactionsApi.list(filterAccount ? { accountId: filterAccount } : {}));
+    const items = await transactionsApi.list(filterAccount ? { accountId: filterAccount } : {});
+    setTransactions(items);
+    // A selecao so guarda o que continua na lista (filtro trocado, excluido...).
+    const visible = new Set(items.map((t) => t.id));
+    setSelected((current) => new Set([...current].filter((id) => visible.has(id))));
   }
 
   async function loadAll() {
@@ -168,6 +177,52 @@ export function TransactionsView() {
       await loadTransactions();
     } catch (err) {
       setError(messageOf(err));
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allSelected = transactions.length > 0 && transactions.every((t) => selected.has(t.id));
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(transactions.map((t) => t.id)));
+  }
+
+  /** LNC-7: manda a versao que a lista leu; o que mudou em outra aba volta como conflito. */
+  async function handleRecategorize(e: React.FormEvent) {
+    e.preventDefault();
+    const items = transactions.filter((t) => selected.has(t.id)).map((t) => ({ id: t.id, version: t.version }));
+    if (items.length === 0) return;
+    setBulkSubmitting(true);
+    setError(null);
+    setBulkOutcome(null);
+    try {
+      const result = await transactionsApi.recategorize(bulkCategory, items);
+      remember(bulkCategory);
+      setBulkOutcome({
+        category: bulkCategory.trim(),
+        updated: result.updated.length,
+        unchanged: result.unchanged.length,
+        conflicts: result.conflicts,
+        notFound: result.notFound.length,
+        rejected: result.rejected.length,
+      });
+      // Os que mudaram em outra aba continuam marcados: a lista recarrega com o valor atual e o
+      // usuario decide se aplica de novo.
+      setSelected(new Set(result.conflicts.map((t) => t.id)));
+      setBulkCategory('');
+      await loadTransactions();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
@@ -308,12 +363,46 @@ export function TransactionsView() {
       </div>
 
       {error && <p className="error">{error}</p>}
+      {bulkOutcome && <BulkOutcomeNotice outcome={bulkOutcome} onClose={() => setBulkOutcome(null)} />}
+      {selected.size > 0 && (
+        <form className="row-form wrap bulk-bar" onSubmit={handleRecategorize} data-cy="tx-bulk">
+          <strong data-cy="tx-bulk-count">
+            {selected.size} {selected.size === 1 ? 'selecionado' : 'selecionados'}
+          </strong>
+          <input
+            data-cy="tx-bulk-category"
+            placeholder="Nova categoria"
+            aria-label="Nova categoria para os selecionados"
+            list="tx-category-suggestions"
+            autoComplete="off"
+            maxLength={60}
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            required
+          />
+          <button data-cy="tx-bulk-apply" className="primary" type="submit" disabled={bulkSubmitting}>
+            {bulkSubmitting ? 'Recategorizando…' : 'Recategorizar'}
+          </button>
+          <button data-cy="tx-bulk-clear" className="ghost" type="button" onClick={() => setSelected(new Set())}>
+            Limpar seleção
+          </button>
+        </form>
+      )}
       {transactions.length === 0 ? (
         <p className="muted">Nenhum lançamento.</p>
       ) : (
         <table className="data" data-cy="tx-table">
           <thead>
             <tr>
+              <th className="select-cell">
+                <input
+                  type="checkbox"
+                  data-cy="tx-select-all"
+                  aria-label="Selecionar todos"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                />
+              </th>
               <th>Data</th>
               <th>Descrição</th>
               <th>Categoria</th>
@@ -325,7 +414,16 @@ export function TransactionsView() {
           </thead>
           <tbody>
             {transactions.map((t) => (
-              <tr key={t.id} data-cy="tx-row" data-type={t.type}>
+              <tr key={t.id} data-cy="tx-row" data-type={t.type} className={selected.has(t.id) ? 'selected' : undefined}>
+                <td className="select-cell">
+                  <input
+                    type="checkbox"
+                    data-cy="tx-select"
+                    aria-label={`Selecionar ${t.description}`}
+                    checked={selected.has(t.id)}
+                    onChange={() => toggleSelected(t.id)}
+                  />
+                </td>
                 <td>{t.occurredOn}</td>
                 <td>
                   {t.description}
@@ -361,6 +459,60 @@ export function TransactionsView() {
         </table>
       )}
     </section>
+  );
+}
+
+interface BulkOutcome {
+  category: string;
+  updated: number;
+  unchanged: number;
+  conflicts: Transaction[];
+  notFound: number;
+  rejected: number;
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function BulkOutcomeNotice({ outcome, onClose }: { outcome: BulkOutcome; onClose: () => void }) {
+  const done = outcome.updated + outcome.unchanged;
+  return (
+    <div className="notice" data-cy="tx-bulk-result">
+      <p>
+        {plural(done, 'lançamento ficou', 'lançamentos ficaram')} em <strong>{outcome.category}</strong>.
+      </p>
+      {outcome.conflicts.length > 0 && (
+        <div className="warning" data-cy="tx-bulk-conflicts">
+          <p>
+            {plural(outcome.conflicts.length, 'lançamento mudou', 'lançamentos mudaram')} em outra aba e não{' '}
+            {outcome.conflicts.length === 1 ? 'foi alterado' : 'foram alterados'}. A lista mostra o que está gravado
+            agora e {outcome.conflicts.length === 1 ? 'ele continua marcado' : 'eles continuam marcados'}:
+          </p>
+          <ul>
+            {outcome.conflicts.map((t) => (
+              <li key={t.id} data-cy="tx-bulk-conflict">
+                {t.description} — {t.category}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {outcome.notFound > 0 && (
+        <p className="muted" data-cy="tx-bulk-not-found">
+          {plural(outcome.notFound, 'lançamento já tinha sido excluído', 'lançamentos já tinham sido excluídos')}.
+        </p>
+      )}
+      {outcome.rejected > 0 && (
+        <p className="muted" data-cy="tx-bulk-rejected">
+          {plural(outcome.rejected, 'lançamento não pôde', 'lançamentos não puderam')} ser recategorizado(s); abra a
+          edição para corrigi-lo(s).
+        </p>
+      )}
+      <button className="link" type="button" onClick={onClose}>
+        fechar
+      </button>
+    </div>
   );
 }
 

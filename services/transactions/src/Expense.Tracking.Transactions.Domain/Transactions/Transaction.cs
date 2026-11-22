@@ -109,7 +109,7 @@ public sealed class Transaction
             return Result.Failure<Transaction>(descriptionResult.Error);
         }
 
-        var categoryResult = ValidateRequiredText(category, CategoryMaxLength, "category", "A categoria");
+        var categoryResult = ValidateCategory(category);
         if (categoryResult.IsFailure)
         {
             return Result.Failure<Transaction>(categoryResult.Error);
@@ -228,6 +228,17 @@ public sealed class Transaction
         Version++;
         return true;
     }
+
+    /// <summary>
+    /// LNC-7: troca so a categoria, com a mesma validacao e o mesmo controle de versao da edicao.
+    /// Devolve <c>true</c> quando a categoria mudou.
+    /// </summary>
+    public Result<bool> Recategorize(string? category, DateTimeOffset nowUtc) =>
+        Edit(Type, PaymentMethod, CreditCardId, Description, category, Amount, Currency, OccurredOn, Notes, Installments, nowUtc);
+
+    /// <summary>LNC-7: a categoria como a criacao a gravaria (aparada), ou o erro da regra.</summary>
+    public static Result<string> ValidateCategory(string? category) =>
+        ValidateRequiredText(category, CategoryMaxLength, "category", "A categoria");
 
     /// <summary>A mesma normalizacao da impressao digital da importacao (ADR-0004, decisao 3).</summary>
     public static string DescriptionKeyOf(string description) => StatementFingerprint.NormalizeDescription(description);

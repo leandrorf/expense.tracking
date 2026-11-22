@@ -146,6 +146,124 @@ public sealed class UpdateTransactionHandler(
     }
 }
 
+/// <summary>LNC-7: um lancamento selecionado na lista e a versao que a tela leu.</summary>
+public sealed record RecategorizeItem(Guid Id, int Version);
+
+public sealed record RecategorizeTransactionsCommand(Guid OwnerUserId, string Category, IReadOnlyList<RecategorizeItem> Items);
+
+/// <summary>Um lancamento do lote que a regra de hoje recusa (ex.: dado antigo que nao valida mais).</summary>
+public sealed record RecategorizeRejection(Guid Id, string Code);
+
+/// <summary>
+/// O que aconteceu com cada lancamento do lote: mudou, ja estava na categoria, mudou em outra aba
+/// (vem o estado atual, sem sobrescrever), nao existe (ou e de outro usuario) ou foi recusado.
+/// </summary>
+public sealed record RecategorizeTransactionsResult(
+    IReadOnlyList<TransactionDto> Updated,
+    IReadOnlyList<TransactionDto> Unchanged,
+    IReadOnlyList<TransactionDto> Conflicts,
+    IReadOnlyList<Guid> NotFound,
+    IReadOnlyList<RecategorizeRejection> Rejected);
+
+/// <summary>
+/// LNC-7: recategoriza varios lancamentos de uma vez. Cada um segue a concorrencia otimista da
+/// edicao (LNC-3): so muda o que esta na versao lida, e cada mudanca sai como um
+/// <see cref="TransactionUpdated"/> no mesmo commit. Lancamento com versao antiga e informado, nao
+/// sobrescrito. Se outra gravacao passar entre a leitura e o commit, nada do lote e gravado (409).
+/// </summary>
+public sealed class RecategorizeTransactionsHandler(
+    ITransactionRepository transactions,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
+{
+    public const int MaxItems = 500;
+
+    public async Task<Result<RecategorizeTransactionsResult>> HandleAsync(
+        RecategorizeTransactionsCommand command, CancellationToken cancellationToken)
+    {
+        var category = Transaction.ValidateCategory(command.Category);
+        if (category.IsFailure)
+        {
+            return Result.Failure<RecategorizeTransactionsResult>(category.Error);
+        }
+
+        if (command.Items.Count == 0)
+        {
+            return Result.Failure<RecategorizeTransactionsResult>(Error.Validation(
+                "transaction.batch_empty", "Selecione pelo menos um lancamento."));
+        }
+
+        if (command.Items.Count > MaxItems)
+        {
+            return Result.Failure<RecategorizeTransactionsResult>(Error.Validation(
+                "transaction.batch_too_large", $"Recategorize no maximo {MaxItems} lancamentos por vez."));
+        }
+
+        if (command.Items.Select(i => i.Id).Distinct().Count() != command.Items.Count)
+        {
+            return Result.Failure<RecategorizeTransactionsResult>(Error.Validation(
+                "transaction.batch_duplicated", "O mesmo lancamento aparece mais de uma vez no lote."));
+        }
+
+        var ids = command.Items.Select(i => i.Id).ToArray();
+        var found = (await transactions.ListByIdsAsync(command.OwnerUserId, ids, cancellationToken)).ToDictionary(t => t.Id);
+
+        var (updated, unchanged, conflicts) = (new List<Transaction>(), new List<Transaction>(), new List<Transaction>());
+        var (notFound, rejected) = (new List<Guid>(), new List<RecategorizeRejection>());
+        var now = timeProvider.GetUtcNow();
+
+        foreach (var item in command.Items)
+        {
+            if (!found.TryGetValue(item.Id, out var transaction))
+            {
+                notFound.Add(item.Id);
+                continue;
+            }
+
+            if (item.Version != transaction.Version)
+            {
+                conflicts.Add(transaction);
+                continue;
+            }
+
+            var changed = transaction.Recategorize(category.Value, now);
+            if (changed.IsFailure)
+            {
+                rejected.Add(new RecategorizeRejection(transaction.Id, changed.Error.Code));
+            }
+            else if (changed.Value)
+            {
+                outbox.Add(TransactionUpdated.From(transaction));
+                updated.Add(transaction);
+            }
+            else
+            {
+                unchanged.Add(transaction);
+            }
+        }
+
+        if (updated.Count > 0)
+        {
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (PersistenceConflictException)
+            {
+                return Result.Failure<RecategorizeTransactionsResult>(UpdateTransactionHandler.ConcurrencyConflict);
+            }
+        }
+
+        return new RecategorizeTransactionsResult(
+            updated.Select(TransactionDto.From).ToArray(),
+            unchanged.Select(TransactionDto.From).ToArray(),
+            conflicts.Select(TransactionDto.From).ToArray(),
+            notFound,
+            rejected);
+    }
+}
+
 public sealed record ListTransactionsCommand(
     Guid OwnerUserId,
     Guid? AccountId,

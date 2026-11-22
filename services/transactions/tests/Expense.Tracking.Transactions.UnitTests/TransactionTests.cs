@@ -176,6 +176,34 @@ public sealed class TransactionTests
         Assert.Equal(("FIT-1", batch, 2), (imported.ExternalId, imported.ImportBatchId, imported.Version));
     }
 
+    // ---------- LNC-7: recategorizar ----------
+
+    [Fact]
+    public void Recategorize_ChangesOnlyTheCategory_AndBumpsTheVersion()
+    {
+        var transaction = Purchase();
+
+        var result = transaction.Recategorize(" Mercado do mes ", Now.AddHours(1));
+
+        Assert.True(result.Value);
+        Assert.Equal(("Mercado do mes", "Mercado", 100m, PaymentMethod.Pix, 2, Now.AddHours(1)),
+            (transaction.Category, transaction.Description, transaction.Amount, transaction.PaymentMethod,
+                transaction.Version, transaction.UpdatedAtUtc));
+    }
+
+    [Fact]
+    public void Recategorize_ToTheSameCategory_ChangesNothing_AndAnEmptyCategoryIsRefused()
+    {
+        var transaction = Purchase();
+
+        var same = transaction.Recategorize("Alimentacao", Now.AddHours(1));
+        var empty = transaction.Recategorize("  ", Now.AddHours(1));
+
+        Assert.False(same.Value);
+        Assert.Equal("transaction.category_required", empty.Error.Code);
+        Assert.Equal(("Alimentacao", 1, Now), (transaction.Category, transaction.Version, transaction.UpdatedAtUtc));
+    }
+
     [Fact]
     public void Create_IncomeOnTheCard_IsARefundInFull_NeverInInstallments()
     {

@@ -401,6 +401,16 @@ async function main() {
     editedTotal = s.byCategory?.find((c) => c.key === 'Depois')?.total;
   }
   ok(editedTotal === 35, `GET /api/reports/summary reflete a edicao (categoria "Depois" = ${editedTotal})`);
+  // 22) Recategorizar em lote (LNC-7): o que esta na versao lida muda; versao antiga vira conflito.
+  const recategorize = (items) => fetch(`${GATEWAY}/api/transactions/recategorize`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ category: 'Smoke lote', items }),
+  });
+  const recatDup = (await recategorize([{ id: toEdit.id, version: editedTx.version }, { id: toEdit.id, version: 1 }])).status;
+  const recat = await (await recategorize([{ id: toEdit.id, version: editedTx.version }])).json();
+  const recatStale = await (await recategorize([{ id: toEdit.id, version: editedTx.version }])).json();
+  ok(recatDup === 400 && recat.updated?.[0]?.category === 'Smoke lote' && recat.updated[0].version === editedTx.version + 1
+    && recatStale.conflicts?.length === 1 && recatStale.updated?.length === 0,
+    `POST /api/transactions/recategorize muda a categoria (versao ${recat.updated?.[0]?.version}); id repetido = ${recatDup}; versao antiga = conflito`);
   if (toEdit.id) await fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'DELETE', headers: auth });
 
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as

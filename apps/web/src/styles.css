@@ -262,6 +262,33 @@ table.data tr.inactive {
   margin-bottom: 0.5rem;
 }
 
+/* LNC-7: recategorizar em lote. */
+.bulk-bar {
+  border-left: 3px solid #93c5fd;
+  padding: 0.4rem 0.8rem;
+  margin: 0.5rem 0;
+  align-items: center;
+}
+
+.select-cell {
+  width: 2rem;
+}
+
+table.data tr.selected td {
+  background: rgba(147, 197, 253, 0.08);
+}
+
+.notice .warning {
+  border-left: 3px solid #f59e0b;
+  padding-left: 0.6rem;
+  margin: 0.4rem 0;
+}
+
+.notice ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.2rem;
+}
+
 .link-danger {
   background: transparent;
   color: #f87171;

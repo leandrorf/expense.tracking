@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (Must concluído; falta a LNC-7, Could)
+## 🟢 EPIC LNC — Receita e edição de lançamentos  · *Done*
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1493,10 +1493,23 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     atual tem a parcela "1/6" de R$ 100, e cinco faturas adiante está a "6/6", a última. Suíte com
     18 testes, sem retry.
   - Estimativa: 3 · **Must** · Dependências: LNC-2, LNC-4, LNC-5
-- 🔵 **LNC-7** Recategorizar em lote.
+- ✅ **LNC-7** Recategorizar em lote. → `POST /transactions/recategorize`, seleção na lista.
   - *Dado* vários lançamentos selecionados na lista, *quando* escolho uma categoria e confirmo,
     *então* todos mudam de categoria de uma vez (um `TransactionUpdated` por lançamento), e os que
     mudaram em outra aba são informados, sem sobrescrever.
+  - Feito assim: `POST /transactions/recategorize` com `{ category, items: [{ id, version }] }`
+    (`expenses.write`, pela rota existente do gateway; até 500 por vez). Cada lançamento segue a
+    concorrência da LNC-3 (`Transaction.Recategorize` reusa o `Edit`): na versão lida, muda e gera um
+    `TransactionUpdated`; já na categoria, fica sem versão nem evento; versão antiga volta em
+    `conflicts` com o estado gravado; id inexistente ou de outro usuário em `notFound` (sem distinguir);
+    dado antigo que a regra de hoje recusa em `rejected`. Tudo num commit só; se outra gravação passar
+    entre a leitura e o commit, nada do lote grava (409 `transaction.concurrency_conflict`). Categoria
+    inválida, lote vazio ou id repetido = 400 (`transaction.category_*`, `transaction.batch_empty`,
+    `transaction.batch_duplicated`). Na SPA, a lista ganhou caixas de seleção (`tx-select`,
+    `tx-select-all`) e, com algo marcado, a barra `tx-bulk` (categoria com as sugestões, "Recategorizar",
+    "Limpar seleção"); o resultado (`tx-bulk-result`) lista os conflitos (`tx-bulk-conflict`), que
+    continuam marcados para aplicar de novo sobre o valor atual. Smoke passo 22 (44 passos). Cypress
+    `transaction-recategorize.cy.ts` (19 testes na suíte).
   - Estimativa: 3 · **Could** · Dependências: LNC-5
 
 **Fora do escopo (Won't, nesta versão):** trocar a conta de um lançamento; histórico/auditoria de

@@ -35,6 +35,11 @@ public sealed record UpdateTransactionRequest(
     int? Installments,
     int? Version);
 
+/// <summary>LNC-7: a categoria nova e os lancamentos selecionados, cada um com a versao lida.</summary>
+public sealed record RecategorizeTransactionsRequest(string? Category, IReadOnlyList<RecategorizeItemRequest>? Items);
+
+public sealed record RecategorizeItemRequest(Guid Id, int Version);
+
 public static class TransactionsEndpoints
 {
     public static IEndpointRouteBuilder MapTransactionsEndpoints(this IEndpointRouteBuilder app)
@@ -136,6 +141,23 @@ public static class TransactionsEndpoints
                     request.Description, request.Category, request.Amount, request.Currency,
                     request.OccurredOn, request.Notes, request.Installments ?? 1, version),
                 ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // LNC-7: recategoriza varios lancamentos, cada um com a versao que a tela leu.
+        group.MapPost("/recategorize", async (
+            RecategorizeTransactionsRequest request, HttpContext http, RecategorizeTransactionsHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var items = (request.Items ?? []).Select(i => new RecategorizeItem(i.Id, i.Version)).ToArray();
+            var result = await handler.HandleAsync(
+                new RecategorizeTransactionsCommand(owner.Value, request.Category ?? string.Empty, items), ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
