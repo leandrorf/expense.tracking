@@ -25,6 +25,8 @@ export function TransactionsView() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
+  // INV-5: parcelas so no cartao de credito (o debito tambem exige cartao, mas e sempre a vista).
+  const [installments, setInstallments] = useState(1);
   const [occurredOn, setOccurredOn] = useState(today());
   const [submitting, setSubmitting] = useState(false);
   const { categories, remember } = useCategorySuggestions();
@@ -88,11 +90,13 @@ export function TransactionsView() {
         category,
         amount: Number(amount),
         occurredOn,
+        installments: paymentMethod === 'CreditCard' ? installments : undefined,
       });
       setDescription('');
       remember(category);
       setCategory('');
       setAmount('');
+      setInstallments(1);
       await loadTransactions();
     } catch (err) {
       setError(messageOf(err));
@@ -166,6 +170,21 @@ export function TransactionsView() {
           />
           <CategoryDatalist id="tx-category-suggestions" categories={categories} />
           <input data-cy="tx-amount" placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          {paymentMethod === 'CreditCard' && (
+            <select
+              data-cy="tx-installments"
+              aria-label="Parcelas"
+              title="O valor é o total da compra; cada parcela cai numa fatura"
+              value={installments}
+              onChange={(e) => setInstallments(Number(e.target.value))}
+            >
+              {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? 'À vista' : `${n}x`}
+                </option>
+              ))}
+            </select>
+          )}
           <input data-cy="tx-date" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
           <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>
             {submitting ? 'Salvando…' : 'Registrar'}
@@ -211,6 +230,11 @@ export function TransactionsView() {
                 <td>{accountName(t.accountId)}</td>
                 <td className="right">
                   {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: t.currency })}
+                  {t.installments > 1 && (
+                    <span className="sub" data-cy="tx-installments-label">
+                      em {t.installments}x
+                    </span>
+                  )}
                 </td>
                 <td>
                   <button className="link-danger" onClick={() => void handleRemove(t.id)}>

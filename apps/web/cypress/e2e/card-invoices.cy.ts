@@ -21,7 +21,7 @@ describe('Faturas do cartao de credito', () => {
     cy.get('[data-cy=session-active]').should('be.visible');
   });
 
-  const purchase = (description: string, amount: string, date: string) => {
+  const purchase = (description: string, amount: string, date: string, installments = 1) => {
     cy.get('[data-cy=tx-account]').select(accountName);
     cy.get('[data-cy=tx-payment-method]').select('CreditCard');
     cy.get('[data-cy=tx-card]').find('option').contains(cardLabel).then(($opt) => {
@@ -31,6 +31,7 @@ describe('Faturas do cartao de credito', () => {
     cy.get('[data-cy=tx-category]').clear().type(`Fatura ${stamp}`);
     cy.get('[data-cy=tx-amount]').clear().type(amount);
     cy.get('[data-cy=tx-date]').clear().type(date);
+    cy.get('[data-cy=tx-installments]').select(String(installments));
     cy.get('[data-cy=tx-submit]').click();
     cy.get('[data-cy=tx-table]').contains('td', description).should('be.visible');
   };
@@ -69,13 +70,17 @@ describe('Faturas do cartao de credito', () => {
     // A antiga primeiro: o feed e ordenado, entao quando a de hoje aparecer a antiga ja esta projetada.
     purchase(`Farmacia ${stamp}`, '80.00', iso(past));
     purchase(`Mercado ${stamp}`, '120.00', iso(today));
+    // INV-5: compra em 3x; a lista de lancamentos mostra o valor total e "em 3x".
+    purchase(`Notebook ${stamp}`, '300.00', iso(today), 3);
+    cy.get('[data-cy=tx-table]').contains('tr', `Notebook ${stamp}`).should('contain', '300,00').and('contain', 'em 3x');
 
     // Fatura atual: aberta, com a compra de hoje.
     cy.get('[data-cy=tab-cards]').click();
-    openInvoicesUntil(`Mercado ${stamp}`);
+    openInvoicesUntil(`Notebook ${stamp}`);
     cy.get('[data-cy=invoice-month]').should('contain', '(atual)');
     cy.get('[data-cy=invoice-status]').should('have.attr', 'data-status', 'Open');
     cy.get('[data-cy=invoice-items]').should('contain', `Mercado ${stamp}`).and('contain', 'à vista');
+    cy.get('[data-cy=invoice-items]').contains('tr', `Notebook ${stamp}`).should('contain', '1/3').and('contain', '100,00');
 
     // Anterior: a de dois meses atras, vencida.
     cy.get('[data-cy=invoice-prev]').click();
@@ -105,5 +110,14 @@ describe('Faturas do cartao de credito', () => {
     cy.get('[data-cy=invoice-payment-row]', { timeout: 30_000 }).should('have.length', 1);
     cy.get('[data-cy=invoice-status]').should('have.attr', 'data-status', 'Overdue');
     cy.get('[data-cy=invoice-remaining]').should('contain', '50,00');
+
+    // As outras parcelas, uma em cada fatura seguinte.
+    cy.get('[data-cy=invoice-next]').click();
+    cy.get('[data-cy=invoice-month]').should('contain', '(atual)');
+    cy.get('[data-cy=invoice-next]').click();
+    cy.get('[data-cy=invoice-items]').contains('tr', `Notebook ${stamp}`).should('contain', '2/3');
+    cy.get('[data-cy=invoice-next]').click();
+    cy.get('[data-cy=invoice-items]').contains('tr', `Notebook ${stamp}`).should('contain', '3/3');
+    cy.get('[data-cy=invoice-next]').should('be.disabled');
   });
 });

@@ -273,6 +273,22 @@ async function main() {
   const badForecast = await fetch(`${GATEWAY}/api/reports/cash-forecast?months=13`, { headers: auth });
   ok(badForecast.status === 400, `previsao com 13 meses responde 400 (status ${badForecast.status})`);
 
+  // 17) Compra parcelada (INV-5): so no cartao de credito, de 1 a 24; o valor e o total.
+  const installmentPurchase = (paymentMethod, creditCardId, installments) => fetch(`${GATEWAY}/api/transactions`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({
+      accountId: account.id, type: 'Expense', paymentMethod, creditCardId, installments,
+      description: 'Smoke parcelado', category: 'Smoke cartão', amount: 300, currency: 'BRL',
+      occurredOn: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  const parcelRes = await installmentPurchase('CreditCard', card.id, 3);
+  const parcel = parcelRes.status === 201 ? await parcelRes.json() : {};
+  const pixParcel = await installmentPurchase('Pix', undefined, 3);
+  ok(parcel.installments === 3 && parcel.amount === 300 && pixParcel.status === 400,
+    `POST /api/transactions em 3x no cartao (status ${parcelRes.status}, parcelas=${parcel.installments}); Pix parcelado = ${pixParcel.status}`);
+  if (parcel.id) await fetch(`${GATEWAY}/api/transactions/${parcel.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

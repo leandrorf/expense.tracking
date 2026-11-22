@@ -12,6 +12,8 @@ export interface CreateTransactionInput {
   currency?: string;
   occurredOn: string;
   notes?: string;
+  /** INV-5: 1 a 24, só no cartão de crédito. */
+  installments?: number;
 }
 
 export interface TransactionFilters {

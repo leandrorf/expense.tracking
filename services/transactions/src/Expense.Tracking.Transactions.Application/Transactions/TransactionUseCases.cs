@@ -17,7 +17,8 @@ public sealed record CreateTransactionCommand(
     decimal Amount,
     string? Currency,
     DateOnly OccurredOn,
-    string? Notes);
+    string? Notes,
+    int Installments = 1);
 
 public sealed class CreateTransactionHandler(
     ITransactionRepository transactions,
@@ -31,7 +32,7 @@ public sealed class CreateTransactionHandler(
         var result = Transaction.Create(
             command.OwnerUserId, command.AccountId, command.Type, command.PaymentMethod, command.CreditCardId,
             command.Description, command.Category, command.Amount, command.Currency, command.OccurredOn,
-            command.Notes, timeProvider.GetUtcNow());
+            command.Notes, timeProvider.GetUtcNow(), command.Installments);
 
         if (result.IsFailure)
         {

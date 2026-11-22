@@ -87,4 +87,31 @@ public sealed class TransactionTests
         Assert.True(result.IsFailure);
         Assert.Equal("transaction.description_required", result.Error.Code);
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    [InlineData(24)]
+    public void Create_CreditCardInInstallments_KeepsTheTotalAmount(int installments)
+    {
+        var result = Transaction.Create(Owner, AccountId, TransactionType.Expense, PaymentMethod.CreditCard, Guid.NewGuid(),
+            "Notebook", "Eletronicos", 3000m, "BRL", Today, null, Now, installments);
+
+        Assert.Equal((installments, 3000m), (result.Value.Installments, result.Value.Amount));
+    }
+
+    [Theory]
+    [InlineData(PaymentMethod.CreditCard, 0, "transaction.installments_invalid")]
+    [InlineData(PaymentMethod.CreditCard, 25, "transaction.installments_invalid")]
+    [InlineData(PaymentMethod.Pix, 3, "transaction.installments_not_allowed")]
+    [InlineData(PaymentMethod.DebitCard, 2, "transaction.installments_not_allowed")]
+    public void Create_WithInvalidInstallments_Fails(PaymentMethod method, int installments, string code)
+    {
+        var card = method == PaymentMethod.CreditCard ? Guid.NewGuid() : (Guid?)null;
+
+        var result = Transaction.Create(Owner, AccountId, TransactionType.Expense, method, card,
+            "Compra", "Compras", 300m, "BRL", Today, null, Now, installments);
+
+        Assert.Equal(code, result.Error.Code);
+    }
 }
