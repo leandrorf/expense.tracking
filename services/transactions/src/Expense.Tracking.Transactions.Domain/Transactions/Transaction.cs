@@ -87,6 +87,12 @@ public sealed class Transaction
     /// </summary>
     public int Installments { get; private set; } = 1;
 
+    /// <summary>
+    /// LNC-3 (ADR-0007, decisao 4): sobe a cada edicao que muda algo; a edicao manda a versao que leu
+    /// e e recusada se ela mudou (concorrencia otimista). Comeca em 1.
+    /// </summary>
+    public int Version { get; private set; } = 1;
+
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,
@@ -179,6 +185,48 @@ public sealed class Transaction
         result.Value.ExternalId = externalId;
         result.Value.ImportBatchId = importBatchId;
         return result;
+    }
+
+    /// <summary>
+    /// LNC-3 (ADR-0007, decisoes 2, 3 e 6): corrige o lancamento com as regras da criacao. Conta, id e
+    /// origem (chave externa e lote) ficam. Devolve <c>true</c> quando algo mudou (a versao sobe e
+    /// <see cref="UpdatedAtUtc"/> anda); sem mudanca, nada e tocado.
+    /// </summary>
+    public Result<bool> Edit(
+        TransactionType type, PaymentMethod paymentMethod, Guid? creditCardId, string? description, string? category,
+        decimal amount, string? currency, DateOnly occurredOn, string? notes, int installments, DateTimeOffset nowUtc)
+    {
+        var valid = Create(OwnerUserId, AccountId, type, paymentMethod, creditCardId, description, category,
+            amount, currency, occurredOn, notes, nowUtc, installments);
+        if (valid.IsFailure)
+        {
+            return Result.Failure<bool>(valid.Error);
+        }
+
+        var next = valid.Value;
+        var changed = Type != next.Type || PaymentMethod != next.PaymentMethod || CreditCardId != next.CreditCardId
+            || Description != next.Description || Category != next.Category || Amount != next.Amount
+            || Currency != next.Currency || OccurredOn != next.OccurredOn || Notes != next.Notes
+            || Installments != next.Installments;
+        if (!changed)
+        {
+            return false;
+        }
+
+        Type = next.Type;
+        PaymentMethod = next.PaymentMethod;
+        CreditCardId = next.CreditCardId;
+        Description = next.Description;
+        DescriptionKey = next.DescriptionKey;
+        Category = next.Category;
+        Amount = next.Amount;
+        Currency = next.Currency;
+        OccurredOn = next.OccurredOn;
+        Notes = next.Notes;
+        Installments = next.Installments;
+        UpdatedAtUtc = nowUtc;
+        Version++;
+        return true;
     }
 
     /// <summary>A mesma normalizacao da impressao digital da importacao (ADR-0004, decisao 3).</summary>

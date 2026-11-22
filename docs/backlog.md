@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 e LNC-2 feitas; próxima: LNC-3)
+## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 a LNC-3 feitas; próxima: LNC-4)
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1423,7 +1423,7 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     vermelho (gasto) e as observações abaixo da descrição. Smoke passo 20 (receita com observação;
     receita em 3x = 400; 41 passos). Cypress `transaction-income.cy.ts` (16 testes na suíte).
   - Estimativa: 3 · **Must** · Dependências: LNC-1
-- 🔵 **LNC-3** Editar lançamento na API.
+- ✅ **LNC-3** Editar lançamento na API. → `PUT /transactions/{id}`, `version`, `TransactionUpdated`.
   - *Dado* um lançamento meu, *quando* envio `PUT /transactions/{id}` com os campos e a `version`
     que li, *então* ele muda com as regras da criação, a `version` sobe, o id e a origem
     (chave externa e lote) ficam, e um `TransactionUpdated` sai no outbox no mesmo commit.
@@ -1435,6 +1435,18 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     lançamento de outro usuário, 404; sem `expenses.write`, 403.
   - *Dado* que recategorizei um lançamento, *quando* importo um extrato com a mesma descrição,
     *então* a sugestão é a categoria nova.
+  - Feito assim: `Transaction.Edit` valida com as mesmas regras da criação (monta um lançamento
+    temporário com `Create`) e só copia os campos quando algo muda; aí sobe a `version` e anda o
+    `UpdatedAtUtc`. Coluna `version` (migração `TransactionVersion`, padrão 1 nos existentes) é token
+    de concorrência do EF; o handler compara a versão enviada e, na corrida entre leitura e gravação,
+    converte o conflito do EF no mesmo 409 `transaction.concurrency_conflict`. `PUT` exige `version`
+    (400 `transaction.version_required`); conta diferente = 400 `transaction.account_immutable`;
+    cartão novo é conferido no accounts (404 `card.not_found`). O DTO ganhou `version` e `imported`
+    (para o aviso da LNC-5). Evento `TransactionUpdated` v1 com o estado completo; a versão do
+    lançamento vai em **`transactionVersion`** (e não `version`, que no envelope do feed é a versão do
+    formato do evento; o primeiro rascunho colidia com ela e o teste do feed pegou). O reporting
+    ainda ignora o tipo novo (LNC-4). Sugestão de categoria da importação pelo `UpdatedAtUtc`. Smoke
+    passo 21 no MySQL real (edita, versão antiga = 409, outra conta = 400; 42 passos).
   - Estimativa: 5 · **Must** · Dependências: LNC-1
 - 🔵 **LNC-4** Projeção aplica a edição.
   - *Dado* um `TransactionUpdated`, *quando* o `reporting` o lê, *então* a linha da projeção fica

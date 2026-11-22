@@ -115,6 +115,67 @@ public sealed class TransactionTests
         Assert.Equal(code, result.Error.Code);
     }
 
+    // ---------- LNC-3 (ADR-0007): edicao ----------
+
+    private static Transaction Purchase() => Transaction.Create(Owner, AccountId, TransactionType.Expense, PaymentMethod.Pix,
+        null, "Mercado", "Alimentacao", 100m, "BRL", Today, null, Now).Value;
+
+    [Fact]
+    public void Edit_ChangesTheFields_BumpsTheVersion_AndKeepsIdAccountAndCreation()
+    {
+        var transaction = Purchase();
+        var (id, created, card) = (transaction.Id, transaction.CreatedAtUtc, Guid.NewGuid());
+
+        var result = transaction.Edit(TransactionType.Expense, PaymentMethod.CreditCard, card, " Notebook ", "Eletronicos",
+            3000m, "BRL", Today.AddDays(-2), " parcelado ", 6, Now.AddHours(1));
+
+        Assert.True(result.Value);
+        Assert.Equal((id, AccountId, created, 2, Now.AddHours(1)),
+            (transaction.Id, transaction.AccountId, transaction.CreatedAtUtc, transaction.Version, transaction.UpdatedAtUtc));
+        Assert.Equal(("Notebook", "Eletronicos", 3000m, 6, card, "parcelado", Transaction.DescriptionKeyOf("Notebook")),
+            (transaction.Description, transaction.Category, transaction.Amount, transaction.Installments,
+                transaction.CreditCardId, transaction.Notes, transaction.DescriptionKey));
+    }
+
+    [Fact]
+    public void Edit_WithoutChanges_KeepsTheVersionAndTheUpdateTime()
+    {
+        var transaction = Purchase();
+
+        var result = transaction.Edit(TransactionType.Expense, PaymentMethod.Pix, null, "Mercado ", "Alimentacao",
+            100m, null, Today, "  ", 1, Now.AddHours(1));
+
+        Assert.False(result.Value);
+        Assert.Equal((1, Now), (transaction.Version, transaction.UpdatedAtUtc));
+    }
+
+    [Fact]
+    public void Edit_FollowsTheCreationRules_AndChangesNothingWhenInvalid()
+    {
+        var transaction = Purchase();
+
+        var income = transaction.Edit(TransactionType.Income, PaymentMethod.CreditCard, Guid.NewGuid(), "Estorno", "Compras",
+            100m, "BRL", Today, null, 3, Now.AddHours(1));
+        var empty = transaction.Edit(TransactionType.Expense, PaymentMethod.Pix, null, " ", "Alimentacao",
+            100m, "BRL", Today, null, 1, Now.AddHours(1));
+
+        Assert.Equal(("transaction.installments_not_allowed", "transaction.description_required"), (income.Error.Code, empty.Error.Code));
+        Assert.Equal(("Mercado", 1), (transaction.Description, transaction.Version));
+    }
+
+    [Fact]
+    public void Edit_AnImportedTransaction_KeepsItsExternalIdAndBatch()
+    {
+        var batch = Guid.NewGuid();
+        var imported = Transaction.CreateImported(Owner, AccountId, TransactionType.Expense, PaymentMethod.Pix, null,
+            "PADARIA", "Padaria", 30m, "BRL", Today, "FIT-1", batch, Now).Value;
+
+        imported.Edit(TransactionType.Expense, PaymentMethod.Pix, null, "Padaria do bairro", "Alimentacao",
+            30m, "BRL", Today, null, 1, Now.AddHours(1));
+
+        Assert.Equal(("FIT-1", batch, 2), (imported.ExternalId, imported.ImportBatchId, imported.Version));
+    }
+
     [Fact]
     public void Create_IncomeOnTheCard_IsARefundInFull_NeverInInstallments()
     {
