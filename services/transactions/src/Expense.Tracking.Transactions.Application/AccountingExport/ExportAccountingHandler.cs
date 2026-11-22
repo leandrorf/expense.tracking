@@ -2,6 +2,7 @@ using System.IO.Compression;
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Domain.AccountingExport;
 using Expense.Tracking.Transactions.Domain.Common;
+using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.AccountingExport;
 
@@ -15,11 +16,19 @@ public sealed record ExportAccountingQuery(Guid OwnerUserId, DateOnly Month, Gui
 /// </summary>
 public sealed record AccountingExportFile(string FileName, byte[] Content, int Accounts, int Lines, int Payments);
 
+/// <summary>CTB-4: totais de uma moeda, iguais a linha "Total" do <c>resumo.csv</c>.</summary>
+public sealed record AccountingTotalsDto(string Currency, decimal Income, decimal Expense, decimal Balance);
+
+/// <summary>CTB-4: o que o ZIP vai ter, sem gera-lo, para a tela mostrar antes de baixar.</summary>
+public sealed record AccountingExportPreviewDto(
+    string FileName, int Accounts, int Lines, int Payments, IReadOnlyList<AccountingTotalsDto> Totals);
+
 /// <summary>
 /// CTB-2 e CTB-3 (ADR-0006): exportacao contabil do mes, so com contas PJ (ativas e inativas), num
 /// ZIP com lancamentos, pagamentos de fatura e resumo. Contas e cartoes vem do accounts com o token
 /// do usuario; os lancamentos, deste servico, pela data do lancamento (competencia), e os
-/// pagamentos, pela data do pagamento. Nada e gravado.
+/// pagamentos, pela data do pagamento. Nada e gravado. A previa (CTB-4) le o mesmo pacote, para os
+/// numeros da tela baterem com o arquivo.
 /// </summary>
 public sealed class ExportAccountingHandler(
     ITransactionRepository transactions, ICardPaymentRepository cardPayments, IAccountsClient accountsClient)
@@ -32,6 +41,46 @@ public sealed class ExportAccountingHandler(
 
     public async Task<Result<AccountingExportFile>> HandleAsync(ExportAccountingQuery query, CancellationToken cancellationToken)
     {
+        var loaded = await LoadAsync(query, cancellationToken);
+        if (loaded.IsFailure)
+        {
+            return Result.Failure<AccountingExportFile>(loaded.Error);
+        }
+
+        var package = loaded.Value;
+        var content = Zip(
+            (AccountingEntriesSheet.FileName, AccountingEntriesSheet.Write(package.Entries)),
+            (AccountingPaymentsSheet.FileName, AccountingPaymentsSheet.Write(package.Payments)),
+            (AccountingSummarySheet.FileName, AccountingSummarySheet.Write(package.Entries)));
+        return new AccountingExportFile(package.FileName, content, package.Accounts, package.Entries.Count, package.Payments.Count);
+    }
+
+    public async Task<Result<AccountingExportPreviewDto>> PreviewAsync(ExportAccountingQuery query, CancellationToken cancellationToken)
+    {
+        var loaded = await LoadAsync(query, cancellationToken);
+        if (loaded.IsFailure)
+        {
+            return Result.Failure<AccountingExportPreviewDto>(loaded.Error);
+        }
+
+        var package = loaded.Value;
+        var totals = package.Entries
+            .GroupBy(e => e.Currency)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g =>
+            {
+                var income = g.Where(e => e.Type == TransactionType.Income).Sum(e => e.Amount);
+                var expense = g.Where(e => e.Type == TransactionType.Expense).Sum(e => e.Amount);
+                return new AccountingTotalsDto(g.Key, income, expense, income - expense);
+            })
+            .ToList();
+        return new AccountingExportPreviewDto(package.FileName, package.Accounts, package.Entries.Count, package.Payments.Count, totals);
+    }
+
+    private sealed record Package(string FileName, int Accounts, IReadOnlyList<AccountingEntry> Entries, IReadOnlyList<AccountingPayment> Payments);
+
+    private async Task<Result<Package>> LoadAsync(ExportAccountingQuery query, CancellationToken cancellationToken)
+    {
         var accounts = await accountsClient.ListAccountsAsync(cancellationToken);
         IReadOnlyList<AccountInfo> selected;
         if (query.AccountId is { } accountId)
@@ -39,12 +88,12 @@ public sealed class ExportAccountingHandler(
             var account = accounts.FirstOrDefault(a => a.Id == accountId);
             if (account is null)
             {
-                return Result.Failure<AccountingExportFile>(Error.NotFound("account.not_found", "Conta nao encontrada para o usuario."));
+                return Result.Failure<Package>(Error.NotFound("account.not_found", "Conta nao encontrada para o usuario."));
             }
 
             if (!account.IsBusiness)
             {
-                return Result.Failure<AccountingExportFile>(AccountNotBusiness);
+                return Result.Failure<Package>(AccountNotBusiness);
             }
 
             selected = [account];
@@ -54,7 +103,7 @@ public sealed class ExportAccountingHandler(
             selected = accounts.Where(a => a.IsBusiness).ToList();
             if (selected.Count == 0)
             {
-                return Result.Failure<AccountingExportFile>(NoBusinessAccount);
+                return Result.Failure<Package>(NoBusinessAccount);
             }
         }
 
@@ -90,11 +139,7 @@ public sealed class ExportAccountingHandler(
                 p.Currency))
             .ToList();
 
-        var content = Zip(
-            (AccountingEntriesSheet.FileName, AccountingEntriesSheet.Write(ordered)),
-            (AccountingPaymentsSheet.FileName, AccountingPaymentsSheet.Write(payments)),
-            (AccountingSummarySheet.FileName, AccountingSummarySheet.Write(ordered)));
-        return new AccountingExportFile(FileName(selected, query.Month), content, selected.Count, ordered.Count, payments.Count);
+        return new Package(FileName(selected, query.Month), selected.Count, ordered, payments);
     }
 
     /// <summary><c>contabil-&lt;CNPJ&gt;-&lt;aaaa-mm&gt;.zip</c>; sem o CNPJ quando as contas tem mais de um.</summary>

@@ -43,6 +43,27 @@ public static class AccountingExportEndpoints
         .WithTags("AccountingExport")
         .RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
+        // CTB-4: quantidades e totais do mesmo pacote, sem gerar o arquivo, para a tela.
+        app.MapGet("/transactions/accounting-export/preview", async (
+            HttpContext http, ExportAccountingHandler handler, CancellationToken ct, string? month, Guid? accountId) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!DateOnly.TryParseExact(month, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var first))
+            {
+                return HttpResults.Problem(InvalidMonth);
+            }
+
+            var result = await handler.PreviewAsync(new ExportAccountingQuery(owner.Value, first, accountId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        })
+        .WithTags("AccountingExport")
+        .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
         return app;
     }
 }

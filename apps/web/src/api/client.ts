@@ -27,6 +27,39 @@ interface ProblemDetails {
  * tenta renovar uma vez (rotação de refresh token) e repete.
  */
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await authorizedFetch(path, options);
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : undefined;
+
+  if (!response.ok) {
+    throw problemOf(response, data);
+  }
+
+  return data as T;
+}
+
+/** CTB-4: baixa um arquivo (ex.: o ZIP da exportação contábil) com a mesma autenticação. */
+export async function apiDownload(path: string): Promise<Blob> {
+  const response = await authorizedFetch(path);
+  if (!response.ok) {
+    const text = await response.text();
+    throw problemOf(response, text ? JSON.parse(text) : undefined);
+  }
+
+  return response.blob();
+}
+
+function problemOf(response: Response, data: unknown): ApiError {
+  const { title, detail, ...extensions } = (data ?? {}) as ProblemDetails;
+  return new ApiError(response.status, title ?? 'error', detail ?? response.statusText, extensions);
+}
+
+async function authorizedFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const send = async (): Promise<Response> => {
     const tokens = getTokens();
     const headers = new Headers(options.headers);
@@ -45,17 +78,5 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     response = await send();
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : undefined;
-
-  if (!response.ok) {
-    const { title, detail, ...extensions } = (data ?? {}) as ProblemDetails;
-    throw new ApiError(response.status, title ?? 'error', detail ?? response.statusText, extensions);
-  }
-
-  return data as T;
+  return response;
 }

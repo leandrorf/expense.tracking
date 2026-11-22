@@ -337,6 +337,11 @@ async function main() {
   }
   ok(pjSummary.totalExpense === 1234.56 && pjSummary.totalIncome === 0,
     `resumo do ZIP bate com GET /api/reports/summary da conta PJ (saidas ${pjSummary.totalExpense})`);
+  // Previa (CTB-4): as mesmas quantidades e totais, sem o arquivo.
+  const previewRes = await fetch(`${GATEWAY}/api/transactions/accounting-export/preview?month=${month}&accountId=${pj.id}`, { headers: auth });
+  const preview = previewRes.status === 200 ? await previewRes.json() : {};
+  ok(preview.lines === 1 && preview.totals?.[0]?.expense === 1234.56 && preview.fileName === `contabil-11222333000181-${month}.zip`,
+    `GET /api/transactions/accounting-export/preview (status ${previewRes.status}, lancamentos=${preview.lines})`);
   const pfExport = await fetch(`${GATEWAY}/api/transactions/accounting-export?month=${month}&accountId=${account.id}`, { headers: auth });
   ok(pfExport.status === 400, `exportacao contabil de conta PF responde 400 (status ${pfExport.status})`);
 
