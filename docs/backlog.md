@@ -756,7 +756,7 @@ contrato da API descrito na história de backend antes da de frontend.
 
 ---
 
-## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress*
+## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress* (Must concluído; faltam INV-10, INV-11 e INV-13)
 **Problema:** o cartão de crédito é o meio mais usado, mas o produto só enxerga a compra no dia em
 que ela aconteceu. O usuário não sabe quanto vai pagar na próxima fatura, em que dia, nem quanto as
 compras de hoje vão pesar no caixa dos próximos meses. Para piorar, pagar a fatura pela conta e
@@ -1029,11 +1029,20 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* a sugestão errada, *quando* troco a linha para lançamento comum, *então* ela entra como
     gasto, como hoje.
   - Estimativa: 3 · **Should** · Dependências: INV-6, IMP-6
-- 🔵 **INV-12** E2E Cypress: fatura e previsão nas jornadas PF e PJ.
+- ✅ **INV-12** E2E Cypress: fatura e previsão nas jornadas PF e PJ.
   - *Dado* um cartão PF, *quando* lanço uma compra à vista e outra em 3x, *então* a fatura atual e as
     duas seguintes mostram as parcelas e a previsão mostra cada uma no mês de vencimento.
   - *Dado* um cartão PJ com fatura fechada, *quando* registro o pagamento, *então* a fatura fica Paga,
     a previsão deixa de contá-la e o Resumo PJ não ganha gasto novo.
+  - Feito assim: `invoice-forecast-journeys.cy.ts`, dois testes pela SPA, comparando previsão e
+    Resumo por diferença (o usuário demo acumula dados). PF: cartão fecha 10/vence 17, compra de
+    R$ 50 à vista e R$ 300 em 3x hoje; a previsão PF ganha 150, 100 e 100 nas faturas dos três meses
+    de vencimento, as saídas do mês atual não mudam, e as faturas mostram à vista + 1/3, 2/3 e 3/3.
+    PJ: o ciclo do cartão é montado a partir da data do teste para haver uma fatura já fechada e
+    ainda não vencida (fecha ontem e vence dia 28; nos dias 1 e 29 a 31, fecha 28 e vence 5), com a
+    compra no dia do fechamento; o pagamento do valor sugerido deixa a fatura Paga, a previsão PJ
+    mantém o total da fatura no mês e tira 456,78 do "falta pagar", e o Resumo PJ fica só com a
+    compra. Suíte com 12 testes, sem retry.
   - Estimativa: 5 · **Must** · Dependências: INV-7, INV-9
 - 🔵 **INV-13** Saldo inicial por conta na previsão.
   - *Dado* uma conta com saldo informado pelo usuário numa data, *quando* olho a previsão, *então*
