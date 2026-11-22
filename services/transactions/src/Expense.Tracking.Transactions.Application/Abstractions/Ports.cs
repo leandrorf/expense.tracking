@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Application.Events;
+using Expense.Tracking.Transactions.Domain.AccountingExport;
 using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Imports;
@@ -38,6 +39,23 @@ public interface ITransactionRepository
     /// <summary>IMP-4: quais das chaves externas ja estao lancadas na conta (deduplicacao da previa).</summary>
     Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// CTB-5: a categoria de cada lancamento do dono nas contas (uma por lancamento, sem agrupar: o
+    /// banco ignora maiusculas, e a categoria e comparada como foi digitada).
+    /// </summary>
+    Task<IReadOnlyList<string>> ListCategoriesAsync(
+        Guid ownerUserId, IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken);
+}
+
+/// <summary>CTB-5: plano de contas do usuario (categoria → conta contabil).</summary>
+public interface ILedgerAccountRepository
+{
+    Task<IReadOnlyList<LedgerAccount>> ListAsync(Guid ownerUserId, CancellationToken cancellationToken);
+
+    Task AddAsync(LedgerAccount account, CancellationToken cancellationToken);
+
+    void Remove(LedgerAccount account);
 }
 
 /// <summary>IMP-4: lotes de importacao (previa guardada no servidor; ADR-0004, decisao 2).</summary>

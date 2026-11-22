@@ -124,6 +124,10 @@ public sealed class ConfirmImportHandlerTests
 
         public bool Retrying { get; set; }
 
+        public Task<IReadOnlyList<string>> ListCategoriesAsync(
+            Guid ownerUserId, IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+
         public Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
             Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<string>>(Retrying ? LaunchedOnRetry : new HashSet<string>());

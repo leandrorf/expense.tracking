@@ -38,6 +38,10 @@ public static class DependencyInjection
         services.AddScoped<ListCardPaymentsHandler>();
         services.AddScoped<DeleteCardPaymentHandler>();
         services.AddScoped<ExportAccountingHandler>();
+        services.AddScoped<ILedgerAccountRepository, LedgerAccountRepository>();
+        services.AddScoped<ListLedgerAccountsHandler>();
+        services.AddScoped<SetLedgerAccountHandler>();
+        services.AddScoped<DeleteLedgerAccountHandler>();
 
         // IMP-3/IMP-4: leitura de CSV, lotes e previa da importacao (ADR-0004).
         services.AddSingleton<ICsvTableReader, CsvHelperTableReader>();

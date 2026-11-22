@@ -72,6 +72,13 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
             .Where(t => t.OwnerUserId == ownerUserId && t.ImportBatchId == importBatchId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListCategoriesAsync(
+        Guid ownerUserId, IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken) =>
+        await dbContext.Transactions
+            .Where(t => t.OwnerUserId == ownerUserId && accountIds.Contains(t.AccountId))
+            .Select(t => t.Category)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
     {

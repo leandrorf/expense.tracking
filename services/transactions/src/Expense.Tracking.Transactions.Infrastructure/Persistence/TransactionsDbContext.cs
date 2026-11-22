@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.AccountingExport;
 using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
@@ -18,6 +19,8 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
     public DbSet<SavedCsvMapping> CsvMappings => Set<SavedCsvMapping>();
 
     public DbSet<CardPayment> CardPayments => Set<CardPayment>();
+
+    public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

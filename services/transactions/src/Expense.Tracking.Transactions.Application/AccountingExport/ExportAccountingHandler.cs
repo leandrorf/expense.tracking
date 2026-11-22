@@ -20,8 +20,9 @@ public sealed record AccountingExportFile(string FileName, byte[] Content, int A
 public sealed record AccountingTotalsDto(string Currency, decimal Income, decimal Expense, decimal Balance);
 
 /// <summary>CTB-4: o que o ZIP vai ter, sem gera-lo, para a tela mostrar antes de baixar.</summary>
+/// <param name="UnmappedLines">CTB-5: lancamentos cuja categoria nao tem conta contabil (a coluna sai vazia).</param>
 public sealed record AccountingExportPreviewDto(
-    string FileName, int Accounts, int Lines, int Payments, IReadOnlyList<AccountingTotalsDto> Totals);
+    string FileName, int Accounts, int Lines, int Payments, IReadOnlyList<AccountingTotalsDto> Totals, int UnmappedLines);
 
 /// <summary>
 /// CTB-2 e CTB-3 (ADR-0006): exportacao contabil do mes, so com contas PJ (ativas e inativas), num
@@ -31,7 +32,10 @@ public sealed record AccountingExportPreviewDto(
 /// numeros da tela baterem com o arquivo.
 /// </summary>
 public sealed class ExportAccountingHandler(
-    ITransactionRepository transactions, ICardPaymentRepository cardPayments, IAccountsClient accountsClient)
+    ITransactionRepository transactions,
+    ICardPaymentRepository cardPayments,
+    ILedgerAccountRepository ledgerAccounts,
+    IAccountsClient accountsClient)
 {
     public static readonly Error NoBusinessAccount = Error.Validation(
         "accounting_export.no_business_account", "A exportacao contabil e so para contas PJ, e o usuario nao tem nenhuma.");
@@ -74,7 +78,8 @@ public sealed class ExportAccountingHandler(
                 return new AccountingTotalsDto(g.Key, income, expense, income - expense);
             })
             .ToList();
-        return new AccountingExportPreviewDto(package.FileName, package.Accounts, package.Entries.Count, package.Payments.Count, totals);
+        return new AccountingExportPreviewDto(package.FileName, package.Accounts, package.Entries.Count, package.Payments.Count, totals,
+            package.Entries.Count(e => e.LedgerAccount is null));
     }
 
     private sealed record Package(string FileName, int Accounts, IReadOnlyList<AccountingEntry> Entries, IReadOnlyList<AccountingPayment> Payments);
@@ -110,13 +115,17 @@ public sealed class ExportAccountingHandler(
         var cards = (await accountsClient.ListCardsAsync(cancellationToken)).ToDictionary(c => c.Id);
         var (from, to) = (query.Month, query.Month.AddMonths(1).AddDays(-1));
 
+        // CTB-5: codigo da conta contabil de cada categoria, comparada como foi digitada.
+        var ledger = (await ledgerAccounts.ListAsync(query.OwnerUserId, cancellationToken))
+            .ToDictionary(l => l.Category, l => l.Code, StringComparer.Ordinal);
+
         var entries = new List<(DateOnly Date, DateTimeOffset CreatedAt, AccountingEntry Entry)>();
         foreach (var account in selected)
         {
             var listed = await transactions.ListAsync(
                 new TransactionQuery(query.OwnerUserId, account.Id, From: from, To: to), cancellationToken);
             entries.AddRange(listed.Select(t => (t.OccurredOn, t.CreatedAtUtc, new AccountingEntry(
-                t.OccurredOn, t.Description, t.Category, LedgerAccount: null, t.Type, t.Amount, t.Currency,
+                t.OccurredOn, t.Description, t.Category, ledger.GetValueOrDefault(t.Category), t.Type, t.Amount, t.Currency,
                 t.PaymentMethod, CardName(t.CreditCardId, cards), t.Installments, account.Name, account.TaxId, t.Notes,
                 Imported: t.ImportBatchId is not null || t.ExternalId is not null))));
         }

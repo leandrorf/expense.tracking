@@ -342,6 +342,21 @@ async function main() {
   const preview = previewRes.status === 200 ? await previewRes.json() : {};
   ok(preview.lines === 1 && preview.totals?.[0]?.expense === 1234.56 && preview.fileName === `contabil-11222333000181-${month}.zip`,
     `GET /api/transactions/accounting-export/preview (status ${previewRes.status}, lancamentos=${preview.lines})`);
+  // 19) Plano de contas (CTB-5): a categoria ganha um codigo, que sai na coluna "Conta contabil".
+  // No MySQL real, "Software" e "software" sao categorias diferentes (collation binaria).
+  const ledgerPut = (category, code) => fetch(`${GATEWAY}/api/transactions/ledger-accounts`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ category, code, name: 'Smoke' }),
+  });
+  const [ledgerUpper, ledgerLower] = [await ledgerPut('Software', '3.1.02'), await ledgerPut('software', '9.9.99')];
+  const ledgerPreview = await (await fetch(`${GATEWAY}/api/transactions/accounting-export/preview?month=${month}&accountId=${pj.id}`, { headers: auth })).json();
+  const ledgerList = await (await fetch(`${GATEWAY}/api/transactions/ledger-accounts`, { headers: auth })).json();
+  ok(ledgerUpper.status === 200 && ledgerLower.status === 200 && ledgerPreview.unmappedLines === 0
+    && ledgerList.find((l) => l.category === 'Software')?.code === '3.1.02'
+    && ledgerList.find((l) => l.category === 'software')?.code === '9.9.99',
+    `PUT /api/transactions/ledger-accounts associa "Software" e "software" separadas (sem conta na previa: ${ledgerPreview.unmappedLines})`);
+  await fetch(`${GATEWAY}/api/transactions/ledger-accounts?category=software`, { method: 'DELETE', headers: auth });
+  await fetch(`${GATEWAY}/api/transactions/ledger-accounts?category=Software`, { method: 'DELETE', headers: auth });
+
   const pfExport = await fetch(`${GATEWAY}/api/transactions/accounting-export?month=${month}&accountId=${account.id}`, { headers: auth });
   ok(pfExport.status === 400, `exportacao contabil de conta PF responde 400 (status ${pfExport.status})`);
 

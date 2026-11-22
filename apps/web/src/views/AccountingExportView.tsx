@@ -3,6 +3,7 @@ import { accountingExportApi, type AccountingExportPreview } from '../api/accoun
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import type { Account } from '../api/types';
+import { LedgerAccountsSection } from './LedgerAccountsSection';
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro inesperado.';
@@ -26,6 +27,8 @@ export function AccountingExportView() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // CTB-5: muda quando o plano de contas muda, para a prévia recontar o que ficou sem conta.
+  const [ledgerVersion, setLedgerVersion] = useState(0);
 
   const business = (accounts ?? []).filter((a) => a.scope === 'Business');
 
@@ -53,7 +56,7 @@ export function AccountingExportView() {
       current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, month, accountId]);
+  }, [accounts, month, accountId, ledgerVersion]);
 
   async function download() {
     if (!preview) return;
@@ -142,6 +145,12 @@ export function AccountingExportView() {
                 <span data-cy="accounting-payments">{preview.payments}</span> pagamento(s) de fatura em{' '}
                 {preview.accounts} conta(s) PJ.
               </p>
+              {preview.unmappedLines > 0 && (
+                <p className="notice" data-cy="accounting-unmapped">
+                  {preview.unmappedLines} lançamento(s) sem conta contábil: a coluna sai vazia. Associe as categorias no
+                  plano de contas abaixo, se o contador pedir.
+                </p>
+              )}
               {preview.totals.length > 0 && (
                 <div className="table-scroll">
                   <table className="data" data-cy="accounting-totals">
@@ -173,6 +182,8 @@ export function AccountingExportView() {
               </button>
             </div>
           )}
+
+          <LedgerAccountsSection onChanged={() => setLedgerVersion((v) => v + 1)} />
         </>
       )}
     </section>
