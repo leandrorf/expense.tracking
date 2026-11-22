@@ -49,6 +49,20 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
         return cards.Where(c => c.IsActive).Select(c => new InvoiceCardHint(c.Id, c.DueDay)).ToList();
     }
 
+    public async Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync("accounts", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<AccountInfo>>(cancellationToken) ?? [];
+    }
+
+    public async Task<IReadOnlyList<CardInfo>> ListCardsAsync(CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync("credit-cards", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<CardInfo>>(cancellationToken) ?? [];
+    }
+
     public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) =>
         ExistsAsync($"credit-cards/{creditCardId}", cancellationToken);
 

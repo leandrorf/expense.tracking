@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (ADR-0006 aceita; próxima: CTB-2)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 e CTB-2 feitas; próxima: CTB-3)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1205,7 +1205,7 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     `accounting_export.account_not_business` (conta de outro usuário = 404 `account.not_found`);
     nome do ZIP sem CNPJ quando há mais de um; registro da CTB-6 com hash SHA-256, nunca o arquivo.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **CTB-2** Lançamentos PJ do mês em CSV.
+- ✅ **CTB-2** Lançamentos PJ do mês em CSV. → `GET /transactions/accounting-export`, `lancamentos.csv` num ZIP.
   - *Dado* lançamentos em contas PJ e PF no mês, *quando* peço a exportação do mês, *então* recebo um
     CSV só com os lançamentos das contas PJ, um por linha, com data, descrição, categoria, tipo,
     valor com sinal, moeda, meio, cartão, parcelas, conta, CNPJ, observações e origem.
@@ -1219,6 +1219,17 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     com uma linha por lançamento (campo entre aspas, aspas dobradas).
   - *Dado* um usuário sem conta PJ, ou um mês inválido, *quando* peço a exportação, *então* recebo 400
     com código estável; sem token, 401; a conta de outro usuário, 404.
+  - Feito assim: `GET /transactions/accounting-export?month=aaaa-mm[&accountId=]` (`expenses.read`)
+    devolve `application/zip` com o `lancamentos.csv` (a CTB-3 junta os outros dois). Contas e
+    cartões vêm do accounts com o token (`GET /accounts` e `GET /credit-cards`, inativos incluídos);
+    os lançamentos, de cada conta PJ, pela data, em ordem de data e de criação. Colunas: Data,
+    Descrição, Categoria, Conta contábil (vazia até a CTB-5), Tipo (Receita/Despesa), Valor (saída
+    negativa), Moeda, Meio (em português), Cartão ("apelido final 1234"), Parcelas, Conta, CNPJ
+    (pontuado), Observações, Origem (digitado/importado). Formatação a mão (`AccountingCsv`), porque o
+    serviço roda com InvariantGlobalization. Erros: `accounting_export.month_invalid`,
+    `accounting_export.no_business_account`, `accounting_export.account_not_business` (400) e
+    `account.not_found` (404). O log registra só mês e quantidades. Smoke passo 18 (baixa o ZIP pelo
+    gateway, abre o CSV e confere; conta PF = 400). Smoke com 37 passos.
   - Estimativa: 5 · **Must** · Dependências: CTB-1
 - 🔵 **CTB-3** Pacote do mês: pagamentos de fatura e resumo por categoria.
   - *Dado* pagamentos de fatura no mês com cartão ou conta de origem PJ, *quando* exporto, *então* o ZIP traz,
