@@ -21,6 +21,9 @@ public interface IProjectionQueries
 
     /// <summary>INV-4: compras e estornos de um cartao do dono.</summary>
     Task<IReadOnlyList<CardTransactionRecord>> GetCardTransactionsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken);
+
+    /// <summary>INV-6: pagamentos das faturas de um cartao do dono.</summary>
+    Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -58,6 +61,13 @@ public interface IProjectionStore
     void Add(ProjectedTransaction transaction);
 
     void Remove(ProjectedTransaction transaction);
+
+    /// <summary>INV-6: pagamento de fatura projetado, inclusive um adicionado no lote atual.</summary>
+    Task<ProjectedCardPayment?> FindPaymentAsync(Guid paymentId, CancellationToken cancellationToken);
+
+    void AddPayment(ProjectedCardPayment payment);
+
+    void RemovePayment(ProjectedCardPayment payment);
 
     void SetCheckpoint(long sequence);
 

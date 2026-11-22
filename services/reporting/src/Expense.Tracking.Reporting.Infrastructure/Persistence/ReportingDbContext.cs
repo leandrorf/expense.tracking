@@ -17,6 +17,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
 
     public DbSet<Budget> Budgets => Set<Budget>();
 
+    public DbSet<ProjectedCardPayment> CardPayments => Set<ProjectedCardPayment>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
@@ -47,6 +49,23 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.HasIndex(t => new { t.OwnerUserId, t.OccurredOn }).HasDatabaseName("ix_projected_transactions_owner_date");
             // Fatura (INV-4): compras de um cartao do dono.
             b.HasIndex(t => new { t.OwnerUserId, t.CreditCardId }).HasDatabaseName("ix_projected_transactions_owner_card");
+        });
+
+        // INV-6 (ADR-0005, decisao 6): pagamentos de fatura, fora dos lancamentos projetados.
+        modelBuilder.Entity<ProjectedCardPayment>(b =>
+        {
+            b.ToTable("projected_card_payments");
+            b.HasKey(p => p.PaymentId);
+            b.Property(p => p.PaymentId).HasColumnName("payment_id").ValueGeneratedNever();
+            b.Property(p => p.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(p => p.CreditCardId).HasColumnName("credit_card_id").IsRequired();
+            b.Property(p => p.InvoiceDueMonth).HasColumnName("invoice_due_month").IsRequired();
+            b.Property(p => p.AccountId).HasColumnName("account_id").IsRequired();
+            b.Property(p => p.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+            b.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
+            b.Property(p => p.PaidOn).HasColumnName("paid_on").IsRequired();
+            b.Property(p => p.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
+            b.HasIndex(p => new { p.OwnerUserId, p.CreditCardId }).HasDatabaseName("ix_projected_card_payments_owner_card");
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

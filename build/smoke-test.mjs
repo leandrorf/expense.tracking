@@ -233,6 +233,37 @@ async function main() {
   const unknownCard = await fetch(`${GATEWAY}/api/reports/cards/${crypto.randomUUID()}/invoices`, { headers: auth });
   ok(unknownCard.status === 404, `fatura de cartao desconhecido responde 404 (status ${unknownCard.status})`);
 
+  // 15) Pagamento de fatura (INV-6): abate a fatura, nao vira gasto, e excluir devolve o saldo.
+  const invoiceOf = async (dueMonth, until) => {
+    let found;
+    const started = Date.now();
+    do {
+      if (found) await new Promise((r) => setTimeout(r, 1000));
+      const res = await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth });
+      found = ((res.status === 200 ? await res.json() : {}).invoices ?? []).find((i) => i.dueMonth === dueMonth) ?? {};
+    } while (!until(found) && Date.now() - started < 30_000);
+    return found;
+  };
+  const payRes = await fetch(`${GATEWAY}/api/transactions/card-payments`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({
+      creditCardId: card.id, invoiceDueMonth: current?.dueMonth, accountId: account.id, amount: 77.7,
+      paidOn: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  const payment = payRes.status === 201 ? await payRes.json() : {};
+  const paidInvoice = await invoiceOf(current?.dueMonth, (i) => i.paid === 77.7);
+  ok(payRes.status === 201 && paidInvoice.paid === 77.7 && paidInvoice.remaining === 0
+      && paidInvoice.payments?.[0]?.paymentId === payment.id,
+    `POST /api/transactions/card-payments abate a fatura ${current?.dueMonth} (status ${payRes.status}, pago=${paidInvoice.paid}, falta=${paidInvoice.remaining})`);
+  const afterPay = await (await fetch(`${GATEWAY}/api/reports/summary?accountId=${account.id}`, { headers: auth })).json();
+  ok(Math.abs(afterPay.totalExpense - 390.2) < 0.001,
+    `pagamento de fatura nao vira gasto no resumo (gastos=${afterPay.totalExpense})`);
+  const unpayRes = await fetch(`${GATEWAY}/api/transactions/card-payments/${payment.id}`, { method: 'DELETE', headers: auth });
+  const unpaid = await invoiceOf(current?.dueMonth, (i) => i.paid === 0);
+  ok(unpayRes.status === 204 && unpaid.paid === 0 && unpaid.remaining === 77.7,
+    `DELETE do pagamento devolve o saldo da fatura (status ${unpayRes.status}, pago=${unpaid.paid}, falta=${unpaid.remaining})`);
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

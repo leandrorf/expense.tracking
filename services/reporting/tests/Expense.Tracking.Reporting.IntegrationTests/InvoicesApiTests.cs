@@ -77,6 +77,78 @@ public sealed class InvoicesApiTests(InvoicesApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task Payments_SettleTheInvoiceTheyName_AndDeletingOneRestoresTheStatus()
+    {
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17);
+        var feed = _factory.EventFeed;
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 100m, "2026-09-05"); // vence 2026-09
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 200m, "2026-10-05"); // vence 2026-10
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 300m, "2026-11-05"); // vence 2026-11 (17/11, ja passou)
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 400m, "2026-11-15"); // vence 2026-12 (aberta)
+        var full = Guid.NewGuid();
+        feed.InvoicePaid(full, owner, card.Id, "2026-09", 100m, "2026-09-17");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-10", 50m, "2026-10-17");
+        var partial = Guid.NewGuid();
+        feed.InvoicePaid(partial, owner, card.Id, "2026-11", 120m, "2026-11-10");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-11", 180m, "2026-11-17");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-12", 400m, "2026-11-20"); // antecipado: segue aberta
+        // Pagamento de outro cartao do mesmo dono nao entra.
+        feed.InvoicePaid(Guid.NewGuid(), owner, Guid.NewGuid(), "2026-10", 999m);
+        await _factory.DrainFeedAsync();
+
+        var invoices = InvoicesOf(await ClientFor(owner).GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices"));
+
+        Assert.Equal(["2026-09", "2026-10", "2026-11", "2026-12"], invoices.Select(i => i.GetProperty("dueMonth").GetString()));
+        Assert.Equal(["Paid", "Overdue", "Paid", "Open"], invoices.Select(i => i.GetProperty("status").GetString()));
+        Assert.Equal([100m, 50m, 300m, 400m], invoices.Select(i => i.GetProperty("paid").GetDecimal()));
+        Assert.Equal([0m, 150m, 0m, 0m], invoices.Select(i => i.GetProperty("remaining").GetDecimal()));
+        var november = invoices[2].GetProperty("payments").EnumerateArray().ToList();
+        Assert.Equal([(partial, 120m, "2026-11-10"), (november[1].GetProperty("paymentId").GetGuid(), 180m, "2026-11-17")],
+            november.Select(p => (p.GetProperty("paymentId").GetGuid(), p.GetProperty("amount").GetDecimal(), p.GetProperty("paidOn").GetString())));
+
+        // Excluido o segundo pagamento de novembro, a fatura vencida fica com saldo de novo.
+        feed.InvoicePaymentDeleted(november[1].GetProperty("paymentId").GetGuid(), owner, card.Id);
+        await _factory.DrainFeedAsync();
+        var after = InvoicesOf(await ClientFor(owner).GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices"));
+        Assert.Equal(("Overdue", 120m, 180m), (after[2].GetProperty("status").GetString(),
+            after[2].GetProperty("paid").GetDecimal(), after[2].GetProperty("remaining").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task PaymentOfAClosedInvoice_MakesItPartiallyPaid()
+    {
+        // Hoje 21/11; cartao fecha dia 20 e vence dia 28: a fatura de 2026-11 fechou ontem e vence dia 28.
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 20, dueDay: 28);
+        _factory.EventFeed.CardPurchase(Guid.NewGuid(), owner, card.Id, 500m, "2026-11-01");
+        _factory.EventFeed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-11", 200m);
+        await _factory.DrainFeedAsync();
+
+        var invoices = InvoicesOf(await ClientFor(owner).GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices"));
+
+        var november = Assert.Single(invoices, i => i.GetProperty("dueMonth").GetString() == "2026-11");
+        Assert.Equal(("PartiallyPaid", 200m, 300m), (november.GetProperty("status").GetString(),
+            november.GetProperty("paid").GetDecimal(), november.GetProperty("remaining").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task Payment_NeverCountsAsSpending_InTheSummaryOrBudgets()
+    {
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17);
+        _factory.EventFeed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-11", 1500m, "2026-11-17");
+        await _factory.DrainFeedAsync();
+        var client = ClientFor(owner);
+
+        var summary = await client.GetFromJsonAsync<JsonElement>("/reports/summary");
+        var budgets = await client.GetFromJsonAsync<JsonElement>("/budgets/status?month=2026-11");
+
+        Assert.Equal((0m, 0), (summary.GetProperty("totalExpense").GetDecimal(), summary.GetProperty("count").GetInt32()));
+        Assert.Empty(budgets.GetProperty("unbudgeted").EnumerateArray());
+    }
+
+    [Fact]
     public async Task CurrentInvoice_IsPresentEvenWithoutPurchases()
     {
         var owner = Guid.NewGuid();

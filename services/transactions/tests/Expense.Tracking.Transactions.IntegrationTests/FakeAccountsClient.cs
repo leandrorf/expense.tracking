@@ -17,6 +17,9 @@ public sealed class FakeAccountsClient : IAccountsClient
 
     public Dictionary<Guid, string> Scopes { get; } = [];
 
+    /// <summary>INV-6: contas que existem, mas foram desativadas.</summary>
+    public HashSet<Guid> InactiveAccounts { get; } = [];
+
     public Task<string?> FindAccountScopeAsync(Guid accountId, CancellationToken cancellationToken) =>
         Task.FromResult(InvalidAccounts.Contains(accountId)
             ? null
@@ -24,4 +27,7 @@ public sealed class FakeAccountsClient : IAccountsClient
 
     public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) =>
         Task.FromResult(!InvalidCards.Contains(creditCardId));
+
+    public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) =>
+        Task.FromResult<bool?>(InvalidAccounts.Contains(accountId) ? null : !InactiveAccounts.Contains(accountId));
 }

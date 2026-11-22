@@ -19,6 +19,54 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.CardPayments.CardPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreditCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("credit_card_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime>("InvoiceDueMonth")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("invoice_due_month");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<DateTime>("PaidOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("paid_on");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "CreditCardId", "InvoiceDueMonth");
+
+                    b.ToTable("card_payments", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Imports.Csv.SavedCsvMapping", b =>
                 {
                     b.Property<Guid>("Id")

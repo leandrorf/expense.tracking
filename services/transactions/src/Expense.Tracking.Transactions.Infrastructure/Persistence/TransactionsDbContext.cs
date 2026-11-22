@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
 using Expense.Tracking.Transactions.Domain.Transactions;
@@ -15,6 +16,8 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
 
     public DbSet<SavedCsvMapping> CsvMappings => Set<SavedCsvMapping>();
+
+    public DbSet<CardPayment> CardPayments => Set<CardPayment>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
