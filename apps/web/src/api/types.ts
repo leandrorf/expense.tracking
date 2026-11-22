@@ -42,4 +42,8 @@ export interface Transaction {
   createdAtUtc: string;
   /** INV-5: parcelas no cartão de crédito (1 = à vista). */
   installments: number;
+  /** LNC-3: versão lida; a edição a devolve e recebe 409 se ela mudou. */
+  version: number;
+  /** LNC-3: veio de uma importação (desfazer a importação ainda o apaga). */
+  imported: boolean;
 }

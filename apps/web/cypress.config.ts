@@ -38,6 +38,8 @@ export default defineConfig({
     env: {
       // Origem do Identity Provider (tela de login hospedada pelo proprio IdP).
       identityUrl: process.env.E2E_IDENTITY_URL ?? 'http://localhost:5080',
+      // Gateway das APIs, para testes que mudam dados por fora da tela (ex.: outra aba, LNC-5).
+      gatewayUrl: process.env.E2E_GATEWAY_URL ?? 'http://localhost:8080',
       // Credenciais do usuario demo semeado pelo identity (IdentitySeeder).
       demoEmail: process.env.E2E_DEMO_EMAIL ?? 'demo@expense.local',
       demoPassword: process.env.E2E_DEMO_PASSWORD ?? 'Password123!',

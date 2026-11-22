@@ -235,6 +235,33 @@ table.data tr.inactive {
   color: #64748b;
 }
 
+/* LNC-5: acao discreta na linha (editar), ao lado de "excluir". */
+.link {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+/* LNC-5: o formulario de lancamento em modo edicao. */
+.editing-banner {
+  border-left: 3px solid #93c5fd;
+  padding: 0.4rem 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
 .link-danger {
   background: transparent;
   color: #f87171;

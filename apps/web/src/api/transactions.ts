@@ -60,5 +60,11 @@ export const transactionsApi = {
   create: (input: CreateTransactionInput) =>
     apiFetch<Transaction>('/api/transactions', { method: 'POST', body: JSON.stringify(input) }),
 
+  get: (id: string) => apiFetch<Transaction>(`/api/transactions/${id}`),
+
+  /** LNC-5 (ADR-0007): o lançamento inteiro mais a versão lida; 409 se outra aba salvou antes. */
+  update: (id: string, input: CreateTransactionInput & { version: number }) =>
+    apiFetch<Transaction>(`/api/transactions/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+
   remove: (id: string) => apiFetch<void>(`/api/transactions/${id}`, { method: 'DELETE' }),
 };
