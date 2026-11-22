@@ -141,6 +141,12 @@ public sealed class Transaction
             return Result.Failure<Transaction>(Error.Validation("transaction.installments_not_allowed", "Parcelamento so e permitido no cartao de credito."));
         }
 
+        // LNC-2 (ADR-0007, decisao 7): receita no cartao e estorno, sempre de uma vez.
+        if (installments > 1 && type == TransactionType.Income)
+        {
+            return Result.Failure<Transaction>(Error.Validation("transaction.installments_not_allowed", "Receita nao e parcelada."));
+        }
+
         var money = moneyResult.Value;
 
         // Resumo e orcamentos contam o valor inteiro na data; so a fatura divide as parcelas.

@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (ADR-0007 aceita; próxima: LNC-2)
+## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 e LNC-2 feitas; próxima: LNC-3)
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1408,13 +1408,20 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     sem subir a versão e sem evento; `PUT` responde 200 com o lançamento atualizado; a sugestão de
     categoria usa `UpdatedAtUtc` (a criação também o preenche).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **LNC-2** Receita e observações no formulário e na lista.
+- ✅ **LNC-2** Receita e observações no formulário e na lista. → tipo e observações no formulário; sinal, cor e observações na lista.
   - *Dado* o formulário de lançamento, *quando* escolho "Receita", preencho e envio, *então* o
     lançamento entra como receita e aparece na lista com sinal + e em verde (gasto: − e vermelho).
   - *Dado* um lançamento com observações, *quando* olho a lista, *então* elas aparecem abaixo da
     descrição; *e* o formulário tem o campo (até 500 caracteres).
   - *Dado* uma receita no cartão, *quando* escolho 2 parcelas ou mais, *então* a API responde 400
     `transaction.installments_not_allowed` (e o formulário nem oferece parcelas para receita).
+  - Feito assim: o domínio recusa `installments > 1` em receita com
+    `transaction.installments_not_allowed` (o mesmo código do meio que não é cartão); receita no cartão
+    à vista segue como estorno. Na SPA, o formulário ganhou o tipo (`tx-type`, Gasto/Receita, padrão
+    Gasto) e as observações (`tx-notes`, até 500, limpas depois de registrar); as parcelas só
+    aparecem para gasto no cartão de crédito. A lista mostra o valor com + e verde (receita) ou − e
+    vermelho (gasto) e as observações abaixo da descrição. Smoke passo 20 (receita com observação;
+    receita em 3x = 400; 41 passos). Cypress `transaction-income.cy.ts` (16 testes na suíte).
   - Estimativa: 3 · **Must** · Dependências: LNC-1
 - 🔵 **LNC-3** Editar lançamento na API.
   - *Dado* um lançamento meu, *quando* envio `PUT /transactions/{id}` com os campos e a `version`

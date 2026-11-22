@@ -362,6 +362,23 @@ async function main() {
   const pfExport = await fetch(`${GATEWAY}/api/transactions/accounting-export?month=${month}&accountId=${account.id}`, { headers: auth });
   ok(pfExport.status === 400, `exportacao contabil de conta PF responde 400 (status ${pfExport.status})`);
 
+  // 20) Receita (LNC-2): entra com observacoes e nunca parcelada.
+  const income = (installments) => fetch(`${GATEWAY}/api/transactions`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({
+      accountId: account.id, type: 'Income', paymentMethod: installments ? 'CreditCard' : 'Pix',
+      creditCardId: installments ? card.id : undefined, installments, description: 'Smoke receita',
+      category: 'Smoke receita', amount: 99, currency: 'BRL', notes: 'NF smoke',
+      occurredOn: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  const incomeRes = await income();
+  const incomeTx = incomeRes.status === 201 ? await incomeRes.json() : {};
+  const splitIncome = await income(3);
+  ok(incomeTx.type === 'Income' && incomeTx.notes === 'NF smoke' && splitIncome.status === 400,
+    `POST /api/transactions com receita (status ${incomeRes.status}); receita em 3x = ${splitIncome.status}`);
+  if (incomeTx.id) await fetch(`${GATEWAY}/api/transactions/${incomeTx.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

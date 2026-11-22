@@ -20,6 +20,8 @@ export function TransactionsView() {
   const [filterAccount, setFilterAccount] = useState('');
 
   const [accountId, setAccountId] = useState('');
+  // LNC-2 (ADR-0007, decisao 7): gasto ou receita; receita nunca e parcelada.
+  const [type, setType] = useState<'Expense' | 'Income'>('Expense');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
   const [description, setDescription] = useState('');
@@ -28,6 +30,7 @@ export function TransactionsView() {
   // INV-5: parcelas so no cartao de credito (o debito tambem exige cartao, mas e sempre a vista).
   const [installments, setInstallments] = useState(1);
   const [occurredOn, setOccurredOn] = useState(today());
+  const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { categories, remember } = useCategorySuggestions();
 
@@ -76,6 +79,8 @@ export function TransactionsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterAccount]);
 
+  const canSplit = paymentMethod === 'CreditCard' && type === 'Expense';
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -83,16 +88,18 @@ export function TransactionsView() {
     try {
       await transactionsApi.create({
         accountId,
-        type: 'Expense',
+        type,
         paymentMethod,
         creditCardId: requiresCard && creditCardId ? creditCardId : undefined,
         description,
         category,
         amount: Number(amount),
         occurredOn,
-        installments: paymentMethod === 'CreditCard' ? installments : undefined,
+        installments: canSplit ? installments : undefined,
+        notes: notes.trim() || undefined,
       });
       setDescription('');
+      setNotes('');
       remember(category);
       setCategory('');
       setAmount('');
@@ -141,6 +148,15 @@ export function TransactionsView() {
               </option>
             ))}
           </select>
+          <select
+            data-cy="tx-type"
+            aria-label="Tipo"
+            value={type}
+            onChange={(e) => setType(e.target.value as 'Expense' | 'Income')}
+          >
+            <option value="Expense">Gasto</option>
+            <option value="Income">Receita</option>
+          </select>
           <select data-cy="tx-payment-method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
             {paymentMethods.map((m) => (
               <option key={m.code} value={m.code}>
@@ -170,7 +186,7 @@ export function TransactionsView() {
           />
           <CategoryDatalist id="tx-category-suggestions" categories={categories} />
           <input data-cy="tx-amount" placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          {paymentMethod === 'CreditCard' && (
+          {canSplit && (
             <select
               data-cy="tx-installments"
               aria-label="Parcelas"
@@ -186,6 +202,13 @@ export function TransactionsView() {
             </select>
           )}
           <input data-cy="tx-date" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
+          <input
+            data-cy="tx-notes"
+            placeholder="Observações (opcional)"
+            maxLength={500}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
           <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>
             {submitting ? 'Salvando…' : 'Registrar'}
           </button>
@@ -222,13 +245,21 @@ export function TransactionsView() {
           </thead>
           <tbody>
             {transactions.map((t) => (
-              <tr key={t.id}>
+              <tr key={t.id} data-cy="tx-row" data-type={t.type}>
                 <td>{t.occurredOn}</td>
-                <td>{t.description}</td>
+                <td>
+                  {t.description}
+                  {t.notes && (
+                    <span className="sub" data-cy="tx-notes-label">
+                      {t.notes}
+                    </span>
+                  )}
+                </td>
                 <td>{t.category}</td>
                 <td>{paymentMethods.find((m) => m.code === t.paymentMethod)?.name ?? t.paymentMethod}</td>
                 <td>{accountName(t.accountId)}</td>
-                <td className="right">
+                <td className={`right ${t.type === 'Income' ? 'positive' : 'negative'}`} data-cy="tx-value">
+                  {t.type === 'Income' ? '+' : '−'}
                   {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: t.currency })}
                   {t.installments > 1 && (
                     <span className="sub" data-cy="tx-installments-label">
