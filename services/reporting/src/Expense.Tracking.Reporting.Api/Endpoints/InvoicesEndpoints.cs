@@ -34,6 +34,14 @@ public static class InvoicesEndpoints
         .WithTags("Reports")
         .RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
+        // INV-10 (ADR-0005, decisao 9): limite disponivel de cada cartao do usuario.
+        app.MapGet("/reports/cards/limits", async (ClaimsPrincipal user, GetCardLimitsHandler handler, CancellationToken ct) =>
+            Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId)
+                ? Results.Ok(await handler.HandleAsync(ownerUserId, ct))
+                : Results.Unauthorized())
+        .WithTags("Reports")
+        .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
         return app;
     }
 

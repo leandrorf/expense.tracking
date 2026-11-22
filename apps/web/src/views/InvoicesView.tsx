@@ -156,6 +156,14 @@ export function InvoicesView({ card, accounts, onBack }: Props) {
         Fecha dia {card.closingDay} e vence dia {card.dueDay}. Compras até o fechamento entram na fatura que vence no
         mesmo ciclo; parcelas caem uma em cada fatura.
       </p>
+      {data && (
+        <p className="limit-line" data-cy="invoice-limit">
+          Limite {money(data.creditLimit, currency)} · em aberto {money(data.outstanding, currency)} (com parcelas futuras) ·{' '}
+          <strong className={data.availableLimit < 0 ? 'negative' : 'positive'} data-cy="invoice-available">
+            disponível {money(data.availableLimit, currency)}
+          </strong>
+        </p>
+      )}
 
       {error && <p className="error">{error}</p>}
       {loading ? (

@@ -756,7 +756,7 @@ contrato da API descrito na história de backend antes da de frontend.
 
 ---
 
-## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress* (Must concluído; faltam INV-10, INV-11 e INV-13)
+## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress* (Must e Should concluídos; falta a INV-13, Could)
 **Problema:** o cartão de crédito é o meio mais usado, mas o produto só enxerga a compra no dia em
 que ela aconteceu. O usuário não sabe quanto vai pagar na próxima fatura, em que dia, nem quanto as
 compras de hoje vão pesar no caixa dos próximos meses. Para piorar, pagar a fatura pela conta e
@@ -1018,9 +1018,21 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     vencimento e não nas saídas do mês atual. O formulário de lançamento só registra gastos, então
     receita futura fica coberta pelos testes de integração da INV-8. Suíte com 10 testes.
   - Estimativa: 3 · **Must** · Dependências: INV-8
-- 🔵 **INV-10** Limite disponível do cartão.
+- ✅ **INV-10** Limite disponível do cartão.
   - *Dado* um cartão com limite de R$ 5.000,00 e R$ 1.200,00 a pagar (incluindo parcelas futuras),
     *quando* olho o cartão, *então* vejo R$ 3.800,00 disponíveis, sem bloquear novos lançamentos.
+  - Feito assim: em aberto = soma do que falta pagar de todas as faturas do cartão (as vencidas, a
+    atual e as das parcelas futuras); pagamento acima do total de uma fatura não abate as outras;
+    estorno abate a fatura em que cai. Disponível = limite − em aberto, negativo quando passou (nada
+    é bloqueado). `GET /reports/cards/limits` devolve `creditLimit`, `outstanding` e
+    `availableLimit` de todos os cartões do usuário numa chamada (cartões lidos do accounts com o
+    token); a resposta da fatura (`/reports/cards/{id}/invoices`) traz os mesmos três campos, sem
+    depender do recorte `from`/`to`. O cálculo de faturas de um cartão virou um ponto só
+    (`CardInvoiceSource`), usado por fatura, previsão e limite. Na SPA, a lista de cartões ganhou a
+    coluna "Disponível" (em vermelho se negativo; o título mostra o em aberto), e a tela de faturas,
+    a linha "Limite · em aberto · disponível". Ao voltar da fatura, a lista recarrega (um pagamento
+    muda o disponível). Cypress `card-invoices.cy.ts` confere 2.530,00 nas duas telas; smoke com o
+    limite (35 passos).
   - Estimativa: 3 · **Should** · Dependências: INV-4
 - ✅ **INV-11** Pagamento de fatura reconhecido na importação do extrato.
   - *Dado* um extrato de conta com a linha "PAG FATURA CARTAO", *quando* vejo a prévia, *então* ela

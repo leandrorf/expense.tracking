@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
+import { invoicesApi, type CardLimit } from '../api/reports';
 import type { Account, CreditCard } from '../api/types';
 import { InvoicesView } from './InvoicesView';
 
 export function CardsView() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
+  // INV-10: limite disponível por cartão (vem do reporting; sem ele, a lista continua funcionando).
+  const [limits, setLimits] = useState<Record<string, CardLimit>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +31,10 @@ export function CardsView() {
       const [accs, crds] = await Promise.all([accountsApi.list(), accountsApi.listCards()]);
       setAccounts(accs);
       setCards(crds);
+      invoicesApi
+        .limits()
+        .then((list) => setLimits(Object.fromEntries(list.map((l) => [l.cardId, l]))))
+        .catch(() => setLimits({}));
       if (!accountId && accs.length > 0) {
         setAccountId(accs[0].id);
       }
@@ -72,7 +79,17 @@ export function CardsView() {
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '—';
 
   if (invoicesOf) {
-    return <InvoicesView card={invoicesOf} accounts={accounts} onBack={() => setInvoicesOf(null)} />;
+    // Ao voltar, recarrega: um pagamento feito na fatura muda o limite disponível.
+    return (
+      <InvoicesView
+        card={invoicesOf}
+        accounts={accounts}
+        onBack={() => {
+          setInvoicesOf(null);
+          void load();
+        }}
+      />
+    );
   }
 
   return (
@@ -122,6 +139,7 @@ export function CardsView() {
               <th>Bandeira</th>
               <th>Final</th>
               <th>Limite</th>
+              <th>Disponível</th>
               <th>Fecha/Vence</th>
               <th>Conta</th>
               <th />
@@ -134,6 +152,13 @@ export function CardsView() {
                 <td>{c.brand}</td>
                 <td>•••• {c.lastFourDigits}</td>
                 <td>{c.creditLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                <td
+                  data-cy="card-available"
+                  className={limits[c.id]?.availableLimit < 0 ? 'negative' : ''}
+                  title={limits[c.id] ? `Falta pagar ${limits[c.id].outstanding.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, com parcelas futuras` : undefined}
+                >
+                  {limits[c.id] ? limits[c.id].availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                </td>
                 <td>
                   {c.closingDay}/{c.dueDay}
                 </td>

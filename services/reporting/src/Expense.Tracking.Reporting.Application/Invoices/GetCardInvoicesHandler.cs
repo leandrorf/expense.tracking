@@ -39,6 +39,8 @@ public sealed record InvoiceDto(
     IReadOnlyList<InvoicePaymentDto> Payments);
 
 /// <param name="CurrentDueMonth">Fatura aberta hoje (<c>yyyy-MM</c>), sempre presente na lista.</param>
+/// <param name="Outstanding">INV-10: falta pagar de todas as faturas (incluindo parcelas futuras), sem o recorte.</param>
+/// <param name="AvailableLimit">INV-10: limite − <paramref name="Outstanding"/>; negativo quando passou do limite.</param>
 public sealed record CardInvoicesDto(
     Guid CardId,
     string Label,
@@ -47,7 +49,10 @@ public sealed record CardInvoicesDto(
     int DueDay,
     string Currency,
     string CurrentDueMonth,
-    IReadOnlyList<InvoiceDto> Invoices);
+    IReadOnlyList<InvoiceDto> Invoices,
+    decimal CreditLimit,
+    decimal Outstanding,
+    decimal AvailableLimit);
 
 /// <summary>Opcoes da leitura das faturas.</summary>
 /// <param name="TimeZone">Fuso do "hoje" que decide se a fatura esta aberta, fechada ou vencida.</param>
@@ -78,14 +83,12 @@ public sealed class GetCardInvoicesHandler(
         }
 
         var cycle = new CardCycle(card.ClosingDay, card.DueDay);
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), options.TimeZone).DateTime);
+        var today = CardInvoiceSource.Today(timeProvider, options);
         var current = cycle.DueMonthOf(today);
 
-        var records = await projection.GetCardTransactionsAsync(ownerUserId, cardId, cancellationToken);
-        var charges = ChargesOf(records);
-
-        var payments = await projection.GetCardPaymentsAsync(ownerUserId, cardId, cancellationToken);
-        var paymentsByMonth = payments
+        var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
+        var records = loaded.Charges;
+        var paymentsByMonth = loaded.Payments
             .GroupBy(p => CardCycle.FirstDayOf(p.InvoiceDueMonth))
             .ToDictionary(
                 g => g.Key,
@@ -94,8 +97,7 @@ public sealed class GetCardInvoicesHandler(
                     .Select(p => new InvoicePaymentDto(p.PaymentId, p.AccountId, p.Amount, p.PaidOn))
                     .ToList());
 
-        var invoices = InvoiceCalculator.Calculate(
-            cycle, charges, payments.Select(p => new InvoicePayment(p.InvoiceDueMonth, p.Amount)), today).ToList();
+        var invoices = loaded.Invoices.ToList();
         if (invoices.All(i => i.Period.DueMonth != current))
         {
             var period = cycle.PeriodOf(current);
@@ -117,7 +119,10 @@ public sealed class GetCardInvoicesHandler(
                 .Where(i => i.Period.DueMonth >= from && i.Period.DueMonth <= to)
                 .OrderBy(i => i.Period.DueMonth)
                 .Select(i => ToDto(i, paymentsByMonth.GetValueOrDefault(i.Period.DueMonth) ?? []))
-                .ToList());
+                .ToList(),
+            card.CreditLimit,
+            loaded.Outstanding,
+            card.CreditLimit - loaded.Outstanding);
     }
 
     /// <summary>Compras e estornos da projecao como a regra da fatura os le (receita no cartao = estorno).</summary>

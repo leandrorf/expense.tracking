@@ -3,7 +3,6 @@ using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Common;
 using Expense.Tracking.Reporting.Domain.Forecast;
-using Expense.Tracking.Reporting.Domain.Invoices;
 
 namespace Expense.Tracking.Reporting.Application.Forecast;
 
@@ -43,7 +42,7 @@ public sealed class GetCashForecastHandler(
             return Result.Failure<CashForecastDto>(MonthsInvalid);
         }
 
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), options.TimeZone).DateTime);
+        var today = CardInvoiceSource.Today(timeProvider, options);
         var first = new DateOnly(today.Year, today.Month, 1);
         var last = first.AddMonths(months).AddDays(-1);
 
@@ -53,14 +52,8 @@ public sealed class GetCashForecastHandler(
         var invoices = new List<ForecastInvoice>();
         foreach (var (card, scope) in await cards.ListWithScopesAsync(cancellationToken))
         {
-            var records = await projection.GetCardTransactionsAsync(ownerUserId, card.Id, cancellationToken);
-            var payments = await projection.GetCardPaymentsAsync(ownerUserId, card.Id, cancellationToken);
-            invoices.AddRange(InvoiceCalculator
-                .Calculate(
-                    new CardCycle(card.ClosingDay, card.DueDay),
-                    GetCardInvoicesHandler.ChargesOf(records),
-                    payments.Select(p => new InvoicePayment(p.InvoiceDueMonth, p.Amount)),
-                    today)
+            var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
+            invoices.AddRange(loaded.Invoices
                 .Where(i => i.Period.DueMonth >= first && i.Period.DueMonth <= last)
                 .Select(i => new ForecastInvoice(scope, i.Period.DueMonth, i.Total, i.Paid, i.Remaining)));
         }

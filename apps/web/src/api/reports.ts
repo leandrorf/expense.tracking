@@ -76,11 +76,25 @@ export interface CardInvoices {
   currency: string;
   currentDueMonth: string;
   invoices: Invoice[];
+  /** INV-10: limite, o que falta pagar de todas as faturas (com parcelas futuras) e o disponível. */
+  creditLimit: number;
+  outstanding: number;
+  availableLimit: number;
+}
+
+/** INV-10: limite disponível de um cartão; negativo quando passou do limite (nada é bloqueado). */
+export interface CardLimit {
+  cardId: string;
+  creditLimit: number;
+  outstanding: number;
+  availableLimit: number;
 }
 
 export const invoicesApi = {
   /** Faturas do cartão: 12 antes da atual até a última parcela (ADR-0005). */
   list: (cardId: string) => apiFetch<CardInvoices>(`/api/reports/cards/${cardId}/invoices`),
+
+  limits: () => apiFetch<CardLimit[]>('/api/reports/cards/limits'),
 };
 
 /** INV-8: fluxo de um mês num escopo. `result` = entradas − saídas − faturas (total). */

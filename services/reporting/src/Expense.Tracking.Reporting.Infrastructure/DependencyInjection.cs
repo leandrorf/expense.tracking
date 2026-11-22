@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<GetBudgetStatusHandler>();
         services.AddScoped<GetCategorySuggestionsHandler>();
         services.AddScoped<GetCardInvoicesHandler>();
+        services.AddScoped<GetCardLimitsHandler>();
         services.AddScoped<GetCashForecastHandler>();
         services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();

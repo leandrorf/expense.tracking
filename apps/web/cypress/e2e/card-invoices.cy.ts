@@ -119,5 +119,11 @@ describe('Faturas do cartao de credito', () => {
     cy.get('[data-cy=invoice-next]').click();
     cy.get('[data-cy=invoice-items]').contains('tr', `Notebook ${stamp}`).should('contain', '3/3');
     cy.get('[data-cy=invoice-next]').should('be.disabled');
+
+    // INV-10: limite 3.000 − em aberto (50 da vencida + 120 + 300 em 3x) = 2.530 disponíveis.
+    cy.get('[data-cy=invoice-limit]').should('contain', '470,00');
+    cy.get('[data-cy=invoice-available]').should('contain', '2.530,00');
+    cy.get('[data-cy=invoices-back]').click();
+    cy.get('[data-cy=cards-table]').contains('tr', cardLabel).find('[data-cy=card-available]').should('contain', '2.530,00');
   });
 });
