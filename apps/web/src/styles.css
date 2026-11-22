@@ -809,6 +809,11 @@ table.data td .sub {
   color: #cbd5e1;
 }
 
+/* Aviso que pede ação (CTB-6: mês mudou depois da exportação). */
+.notice.warning {
+  border-left-color: #f59e0b;
+}
+
 /* ---- Pagamento de fatura na prévia da importação (INV-11) ---- */
 .invoice-choice {
   display: flex;

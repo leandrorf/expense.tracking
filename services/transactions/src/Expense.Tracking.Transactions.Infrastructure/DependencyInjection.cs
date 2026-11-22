@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<DeleteCardPaymentHandler>();
         services.AddScoped<ExportAccountingHandler>();
         services.AddScoped<ILedgerAccountRepository, LedgerAccountRepository>();
+        services.AddScoped<IAccountingExportRepository, AccountingExportRepository>();
         services.AddScoped<ListLedgerAccountsHandler>();
         services.AddScoped<SetLedgerAccountHandler>();
         services.AddScoped<DeleteLedgerAccountHandler>();

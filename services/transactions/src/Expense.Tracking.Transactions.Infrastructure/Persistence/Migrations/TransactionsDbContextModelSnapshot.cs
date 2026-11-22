@@ -19,6 +19,55 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.AccountingExport.AccountingExportRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime>("ExportedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("exported_at_utc");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<int>("Lines")
+                        .HasColumnType("int")
+                        .HasColumnName("lines");
+
+                    b.Property<DateTime>("Month")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("month");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<int>("Payments")
+                        .HasColumnType("int")
+                        .HasColumnName("payments");
+
+                    b.Property<string>("Totals")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("totals");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "Month", "AccountId")
+                        .IsUnique();
+
+                    b.ToTable("accounting_exports", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.AccountingExport.LedgerAccount", b =>
                 {
                     b.Property<Guid>("Id")

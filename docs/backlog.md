@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (Must e Should concluídos; falta a CTB-6, Could)
+## 🟢 EPIC CTB — Exportação contábil PJ  · *Done*
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1282,10 +1282,21 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     lançamento(s) sem conta contábil" na prévia. Smoke passo 19 (40 passos); a jornada Cypress da
     CTB-7 associa a categoria e confere o código no ZIP.
   - Estimativa: 5 · **Should** · Dependências: CTB-2
-- 🔵 **CTB-6** Aviso de mês alterado depois da exportação.
+- ✅ **CTB-6** Aviso de mês alterado depois da exportação. → tabela `accounting_exports`, `lastExport` na prévia.
   - *Dado* um mês já exportado, *quando* um lançamento dele é excluído ou importado depois, *então* a
     tela de exportação mostra "mudou desde a exportação de dd/mm", com a diferença de linhas e de
     totais. O registro guarda só totais e a impressão digital, nunca o conteúdo.
+  - Feito assim: cada download grava (ou substitui) um registro por usuário, mês e conta
+    (`accounting_exports`; "todas as contas PJ" = `Guid.Empty`, porque o índice único do MySQL não
+    compara nulos) com quantidade de lançamentos e pagamentos, totais por moeda (JSON) e o SHA-256 das
+    três planilhas; nunca o conteúdo. Dois downloads simultâneos do mesmo mês não falham (o
+    conflito de chave única é ignorado). A prévia ganhou `lastExport` (`exportedAtUtc`, `lines`,
+    `payments`, `totals` e `changed` = a impressão digital de agora difere). Qualquer mudança no que
+    sairia no arquivo avisa: lançamento novo, excluído ou importado, pagamento de fatura, código
+    contábil trocado. A prévia é só leitura; o registro sai no download (GET), como um log de envio.
+    SPA: aviso "Mudou desde a exportação de dd/mm/aaaa hh:mm: eram N lançamento(s)…" (borda âmbar) ou
+    "Exportado em …, sem mudanças". Smoke passo 18 confere `changed=false` logo depois do download;
+    a jornada Cypress da CTB-7 lança um gasto depois do download e confere o aviso.
   - Estimativa: 3 · **Could** · Dependências: CTB-4
 - ✅ **CTB-7** E2E Cypress: lançar, exportar e conferir (PJ e PF). → `accounting-export-journey.cy.ts`.
   - *Dado* uma conta PJ e uma PF com lançamentos no mês, *quando* exporto pela SPA, *então* o ZIP

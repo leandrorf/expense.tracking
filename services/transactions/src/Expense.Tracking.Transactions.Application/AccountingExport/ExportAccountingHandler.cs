@@ -20,22 +20,40 @@ public sealed record AccountingExportFile(string FileName, byte[] Content, int A
 public sealed record AccountingTotalsDto(string Currency, decimal Income, decimal Expense, decimal Balance);
 
 /// <summary>CTB-4: o que o ZIP vai ter, sem gera-lo, para a tela mostrar antes de baixar.</summary>
+/// <summary>
+/// CTB-6: a ultima exportacao do mesmo mes e conta. <paramref name="Changed"/> = o ZIP de agora
+/// sairia diferente (lancamento excluido ou importado, codigo contabil trocado...).
+/// </summary>
+public sealed record AccountingLastExportDto(
+    DateTimeOffset ExportedAtUtc, int Lines, int Payments, IReadOnlyList<AccountingTotalsDto> Totals, bool Changed);
+
 /// <param name="UnmappedLines">CTB-5: lancamentos cuja categoria nao tem conta contabil (a coluna sai vazia).</param>
+/// <param name="LastExport">CTB-6: nulo quando o mes (com a mesma conta) nunca foi exportado.</param>
 public sealed record AccountingExportPreviewDto(
-    string FileName, int Accounts, int Lines, int Payments, IReadOnlyList<AccountingTotalsDto> Totals, int UnmappedLines);
+    string FileName,
+    int Accounts,
+    int Lines,
+    int Payments,
+    IReadOnlyList<AccountingTotalsDto> Totals,
+    int UnmappedLines,
+    AccountingLastExportDto? LastExport);
 
 /// <summary>
 /// CTB-2 e CTB-3 (ADR-0006): exportacao contabil do mes, so com contas PJ (ativas e inativas), num
 /// ZIP com lancamentos, pagamentos de fatura e resumo. Contas e cartoes vem do accounts com o token
 /// do usuario; os lancamentos, deste servico, pela data do lancamento (competencia), e os
 /// pagamentos, pela data do pagamento. Nada e gravado. A previa (CTB-4) le o mesmo pacote, para os
-/// numeros da tela baterem com o arquivo.
+/// numeros da tela baterem com o arquivo. Cada download grava o registro da CTB-6 (totais e impressao
+/// digital, nunca o arquivo), que a previa compara com o mes de agora.
 /// </summary>
 public sealed class ExportAccountingHandler(
     ITransactionRepository transactions,
     ICardPaymentRepository cardPayments,
     ILedgerAccountRepository ledgerAccounts,
-    IAccountsClient accountsClient)
+    IAccountingExportRepository exportRecords,
+    IAccountsClient accountsClient,
+    IUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
 {
     public static readonly Error NoBusinessAccount = Error.Validation(
         "accounting_export.no_business_account", "A exportacao contabil e so para contas PJ, e o usuario nao tem nenhuma.");
@@ -52,10 +70,32 @@ public sealed class ExportAccountingHandler(
         }
 
         var package = loaded.Value;
-        var content = Zip(
-            (AccountingEntriesSheet.FileName, AccountingEntriesSheet.Write(package.Entries)),
-            (AccountingPaymentsSheet.FileName, AccountingPaymentsSheet.Write(package.Payments)),
-            (AccountingSummarySheet.FileName, AccountingSummarySheet.Write(package.Entries)));
+        var sheets = Sheets(package);
+        var content = Zip(sheets);
+
+        // CTB-6: exportar de novo o mesmo mes (e conta) substitui o registro anterior.
+        var fingerprint = AccountingExportRecord.FingerprintOf(sheets.Select(s => s.Csv).ToArray());
+        var totals = TotalsOf(package).Select(t => new AccountingExportTotal(t.Currency, t.Income, t.Expense)).ToList();
+        var record = await exportRecords.FindAsync(query.OwnerUserId, query.Month, query.AccountId, cancellationToken);
+        if (record is null)
+        {
+            await exportRecords.AddAsync(AccountingExportRecord.Create(query.OwnerUserId, query.Month, query.AccountId,
+                package.Entries.Count, package.Payments.Count, totals, fingerprint, timeProvider.GetUtcNow()), cancellationToken);
+        }
+        else
+        {
+            record.Update(package.Entries.Count, package.Payments.Count, totals, fingerprint, timeProvider.GetUtcNow());
+        }
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            // Dois downloads do mesmo mes ao mesmo tempo: o outro gravou o registro; o arquivo sai igual.
+        }
+
         return new AccountingExportFile(package.FileName, content, package.Accounts, package.Entries.Count, package.Payments.Count);
     }
 
@@ -68,19 +108,36 @@ public sealed class ExportAccountingHandler(
         }
 
         var package = loaded.Value;
-        var totals = package.Entries
-            .GroupBy(e => e.Currency)
-            .OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g =>
-            {
-                var income = g.Where(e => e.Type == TransactionType.Income).Sum(e => e.Amount);
-                var expense = g.Where(e => e.Type == TransactionType.Expense).Sum(e => e.Amount);
-                return new AccountingTotalsDto(g.Key, income, expense, income - expense);
-            })
-            .ToList();
-        return new AccountingExportPreviewDto(package.FileName, package.Accounts, package.Entries.Count, package.Payments.Count, totals,
-            package.Entries.Count(e => e.LedgerAccount is null));
+        var record = await exportRecords.FindAsync(query.OwnerUserId, query.Month, query.AccountId, cancellationToken);
+        var lastExport = record is null
+            ? null
+            : new AccountingLastExportDto(
+                record.ExportedAtUtc,
+                record.Lines,
+                record.Payments,
+                record.Totals.Select(t => new AccountingTotalsDto(t.Currency, t.Income, t.Expense, t.Income - t.Expense)).ToList(),
+                Changed: record.Fingerprint != AccountingExportRecord.FingerprintOf(Sheets(package).Select(s => s.Csv).ToArray()));
+        return new AccountingExportPreviewDto(package.FileName, package.Accounts, package.Entries.Count, package.Payments.Count,
+            TotalsOf(package), package.Entries.Count(e => e.LedgerAccount is null), lastExport);
     }
+
+    private static (string Name, string Csv)[] Sheets(Package package) =>
+    [
+        (AccountingEntriesSheet.FileName, AccountingEntriesSheet.Write(package.Entries)),
+        (AccountingPaymentsSheet.FileName, AccountingPaymentsSheet.Write(package.Payments)),
+        (AccountingSummarySheet.FileName, AccountingSummarySheet.Write(package.Entries)),
+    ];
+
+    private static List<AccountingTotalsDto> TotalsOf(Package package) => package.Entries
+        .GroupBy(e => e.Currency)
+        .OrderBy(g => g.Key, StringComparer.Ordinal)
+        .Select(g =>
+        {
+            var income = g.Where(e => e.Type == TransactionType.Income).Sum(e => e.Amount);
+            var expense = g.Where(e => e.Type == TransactionType.Expense).Sum(e => e.Amount);
+            return new AccountingTotalsDto(g.Key, income, expense, income - expense);
+        })
+        .ToList();
 
     private sealed record Package(string FileName, int Accounts, IReadOnlyList<AccountingEntry> Entries, IReadOnlyList<AccountingPayment> Payments);
 
@@ -162,7 +219,7 @@ public sealed class ExportAccountingHandler(
     private static string? CardName(Guid? cardId, IReadOnlyDictionary<Guid, CardInfo> cards) =>
         cardId is { } id && cards.TryGetValue(id, out var card) ? $"{card.Label} final {card.LastFourDigits}" : null;
 
-    private static byte[] Zip(params (string Name, string Csv)[] files)
+    private static byte[] Zip((string Name, string Csv)[] files)
     {
         using var buffer = new MemoryStream();
         using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
