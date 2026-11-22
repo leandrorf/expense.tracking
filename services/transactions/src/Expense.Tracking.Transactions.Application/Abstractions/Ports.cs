@@ -48,6 +48,14 @@ public interface ITransactionRepository
         Guid ownerUserId, IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken);
 }
 
+/// <summary>CTB-6: ultima exportacao contabil de cada mes e conta (nulo = todas as contas PJ).</summary>
+public interface IAccountingExportRepository
+{
+    Task<AccountingExportRecord?> FindAsync(Guid ownerUserId, DateOnly month, Guid? accountId, CancellationToken cancellationToken);
+
+    Task AddAsync(AccountingExportRecord record, CancellationToken cancellationToken);
+}
+
 /// <summary>CTB-5: plano de contas do usuario (categoria → conta contabil).</summary>
 public interface ILedgerAccountRepository
 {

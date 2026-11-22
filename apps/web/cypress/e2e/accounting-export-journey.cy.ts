@@ -1,7 +1,8 @@
 // CTB-7: jornada da exportacao contabil pela SPA. Lanca numa conta PJ (CNPJ proprio do teste) e numa
 // PF, paga parte da fatura do cartao PJ, exporta a conta PJ na aba Contador e abre o ZIP baixado: so
 // os lancamentos PJ (a compra em 3x uma vez, inteira), o pagamento e o resumo com os totais da previa.
-// A categoria ganha uma conta contabil (CTB-5), que sai nas planilhas. Tudo no mes de hoje; o
+// A categoria ganha uma conta contabil (CTB-5), que sai nas planilhas, e um gasto lancado depois do
+// download faz a tela avisar que o mes mudou (CTB-6). Tudo no mes de hoje; o
 // formulario de lancamento so registra gastos, entao a jornada nao tem receita.
 describe('Exportacao contabil (jornada PJ e PF)', () => {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -72,6 +73,16 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
     });
   };
 
+  const openAccounting = (account: string) => {
+    cy.intercept('GET', '**/api/transactions/accounting-export/preview*').as('preview');
+    cy.get('[data-cy=tab-accounting]').click();
+    cy.get('[data-cy=accounting-month]').clear().type(month);
+    cy.get('[data-cy=accounting-account]').find('option').contains(account).then(($opt) => {
+      cy.get('[data-cy=accounting-account]').select($opt.val() as string);
+    });
+    cy.wait('@preview');
+  };
+
   it('o ZIP baixado tem so o movimento PJ, o pagamento da fatura e o resumo da previa', () => {
     // CNPJ so deste teste (14 digitos a partir do carimbo de tempo), para o nome do arquivo.
     const cnpj = String(stamp).padStart(14, '9').slice(-14);
@@ -100,14 +111,10 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
       cy.wrap(invoice).as('invoice');
     });
 
-    // Aba Contador: so a conta PJ do teste, no mes de hoje.
-    cy.intercept('GET', '**/api/transactions/accounting-export/preview*').as('preview');
-    cy.get('[data-cy=tab-accounting]').click();
-    cy.get('[data-cy=accounting-month]').clear().type(month);
-    cy.get('[data-cy=accounting-account]').find('option').contains(pj).then(($opt) => {
-      cy.get('[data-cy=accounting-account]').select($opt.val() as string);
-    });
-    cy.wait('@preview');
+    // Aba Contador: so a conta PJ do teste, no mes de hoje; nunca exportada.
+    openAccounting(pj);
+    cy.get('[data-cy=accounting-changed]').should('not.exist');
+    cy.get('[data-cy=accounting-unchanged]').should('not.exist');
     cy.get('[data-cy=accounting-lines]').should('have.text', '2');
     cy.get('[data-cy=accounting-payments]').should('have.text', '1');
     cy.get('[data-cy=accounting-total][data-currency=BRL] [data-cy=accounting-expense]').should('contain', '1.020,50');
@@ -152,5 +159,15 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
         'BRL;Total;;0,00;1020,50;-1020,50',
       ]);
     });
+
+    // CTB-6: depois de baixar, a previa diz que o mes nao mudou; um gasto novo no mes faz avisar.
+    cy.get('[data-cy=accounting-unchanged]').should('be.visible');
+    expense(pj, `Esquecido ${stamp}`, '10');
+    openAccounting(pj);
+    cy.get('[data-cy=accounting-lines]').should('have.text', '3');
+    cy.get('[data-cy=accounting-changed]')
+      .should('contain', 'Mudou desde a exportação')
+      .and('contain', 'eram 2 lançamento(s) e 1 pagamento(s)')
+      .and('contain', '1.020,50');
   });
 });

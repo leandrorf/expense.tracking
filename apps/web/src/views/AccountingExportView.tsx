@@ -27,8 +27,8 @@ export function AccountingExportView() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // CTB-5: muda quando o plano de contas muda, para a prévia recontar o que ficou sem conta.
-  const [ledgerVersion, setLedgerVersion] = useState(0);
+  // Muda quando o plano de contas muda (CTB-5) ou depois de baixar (CTB-6), para recarregar a prévia.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const business = (accounts ?? []).filter((a) => a.scope === 'Business');
 
@@ -56,7 +56,7 @@ export function AccountingExportView() {
       current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, month, accountId, ledgerVersion]);
+  }, [accounts, month, accountId, refreshKey]);
 
   async function download() {
     if (!preview) return;
@@ -72,6 +72,7 @@ export function AccountingExportView() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -80,6 +81,8 @@ export function AccountingExportView() {
   }
 
   const money = (value: number, currency: string) => value.toLocaleString('pt-BR', { style: 'currency', currency });
+  const when = (utc: string) =>
+    new Date(utc).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   if (accounts === null) {
     return (
@@ -145,6 +148,19 @@ export function AccountingExportView() {
                 <span data-cy="accounting-payments">{preview.payments}</span> pagamento(s) de fatura em{' '}
                 {preview.accounts} conta(s) PJ.
               </p>
+              {preview.lastExport &&
+                (preview.lastExport.changed ? (
+                  <p className="notice warning" data-cy="accounting-changed">
+                    Mudou desde a exportação de {when(preview.lastExport.exportedAtUtc)}: eram{' '}
+                    {preview.lastExport.lines} lançamento(s) e {preview.lastExport.payments} pagamento(s)
+                    {preview.lastExport.totals.map((t) => `, saídas de ${money(t.expense, t.currency)}`).join('')}. Baixe
+                    de novo e reenvie ao contador.
+                  </p>
+                ) : (
+                  <p className="muted" data-cy="accounting-unchanged">
+                    Exportado em {when(preview.lastExport.exportedAtUtc)}, sem mudanças desde então.
+                  </p>
+                ))}
               {preview.unmappedLines > 0 && (
                 <p className="notice" data-cy="accounting-unmapped">
                   {preview.unmappedLines} lançamento(s) sem conta contábil: a coluna sai vazia. Associe as categorias no
@@ -183,7 +199,7 @@ export function AccountingExportView() {
             </div>
           )}
 
-          <LedgerAccountsSection onChanged={() => setLedgerVersion((v) => v + 1)} />
+          <LedgerAccountsSection onChanged={() => setRefreshKey((k) => k + 1)} />
         </>
       )}
     </section>

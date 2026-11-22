@@ -188,6 +188,41 @@ public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : I
     }
 
     [Fact]
+    public async Task Preview_WarnsWhenTheMonthChangedAfterTheLastDownload()
+    {
+        var owner = Guid.NewGuid();
+        var (business, _) = GivenAccounts();
+        var client = ClientFor(owner);
+        await PostAsync(client, Tx(business.Id, "Licenca", 300m, "2026-10-02"));
+
+        async Task<JsonElement> LastExportAsync(string query = "") =>
+            (await client.GetFromJsonAsync<JsonElement>($"{Route}/preview?month=2026-10{query}")).GetProperty("lastExport");
+
+        // Nunca exportado: sem registro.
+        Assert.Equal(JsonValueKind.Null, (await LastExportAsync()).ValueKind);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"{Route}?month=2026-10")).StatusCode);
+        var fresh = await LastExportAsync();
+        Assert.False(fresh.GetProperty("changed").GetBoolean());
+        Assert.Equal((1, 0), (fresh.GetProperty("lines").GetInt32(), fresh.GetProperty("payments").GetInt32()));
+        Assert.Equal(300m, fresh.GetProperty("totals")[0].GetProperty("expense").GetDecimal());
+
+        // Um lancamento novo no mes: a previa avisa, com os numeros da exportacao anterior.
+        await PostAsync(client, Tx(business.Id, "Nuvem", 50m, "2026-10-09"));
+        var changed = await LastExportAsync();
+        Assert.True(changed.GetProperty("changed").GetBoolean());
+        Assert.Equal(1, changed.GetProperty("lines").GetInt32());
+
+        // Outro mes e a mesma conta escolhida sozinha tem registro proprio.
+        Assert.Equal(JsonValueKind.Null, (await LastExportAsync($"&accountId={business.Id}")).ValueKind);
+
+        // Exportar de novo substitui o registro: deixa de avisar.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"{Route}?month=2026-10")).StatusCode);
+        var again = await LastExportAsync();
+        Assert.Equal((false, 2), (again.GetProperty("changed").GetBoolean(), again.GetProperty("lines").GetInt32()));
+    }
+
+    [Fact]
     public async Task Export_OfOneAccount_RejectsPersonalOrForeignAccounts()
     {
         var owner = Guid.NewGuid();

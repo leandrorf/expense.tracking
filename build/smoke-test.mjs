@@ -340,8 +340,10 @@ async function main() {
   // Previa (CTB-4): as mesmas quantidades e totais, sem o arquivo.
   const previewRes = await fetch(`${GATEWAY}/api/transactions/accounting-export/preview?month=${month}&accountId=${pj.id}`, { headers: auth });
   const preview = previewRes.status === 200 ? await previewRes.json() : {};
-  ok(preview.lines === 1 && preview.totals?.[0]?.expense === 1234.56 && preview.fileName === `contabil-11222333000181-${month}.zip`,
-    `GET /api/transactions/accounting-export/preview (status ${previewRes.status}, lancamentos=${preview.lines})`);
+  // CTB-6: o download acima gravou o registro; a previa diz que o mes nao mudou desde entao.
+  ok(preview.lines === 1 && preview.totals?.[0]?.expense === 1234.56 && preview.fileName === `contabil-11222333000181-${month}.zip`
+    && preview.lastExport?.changed === false && preview.lastExport?.lines === 1,
+    `GET /api/transactions/accounting-export/preview (status ${previewRes.status}, lancamentos=${preview.lines}, mudou=${preview.lastExport?.changed})`);
   // 19) Plano de contas (CTB-5): a categoria ganha um codigo, que sai na coluna "Conta contabil".
   // No MySQL real, "Software" e "software" sao categorias diferentes (collation binaria).
   const ledgerPut = (category, code) => fetch(`${GATEWAY}/api/transactions/ledger-accounts`, {

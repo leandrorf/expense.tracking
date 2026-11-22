@@ -17,6 +17,17 @@ export interface AccountingExportPreview {
   totals: AccountingTotals[];
   /** CTB-5: lançamentos cuja categoria não tem conta contábil. */
   unmappedLines: number;
+  /** CTB-6: última exportação do mesmo mês e conta; nula se nunca exportado. */
+  lastExport: AccountingLastExport | null;
+}
+
+/** CTB-6: o que foi exportado da última vez; `changed` = o ZIP de agora sairia diferente. */
+export interface AccountingLastExport {
+  exportedAtUtc: string;
+  lines: number;
+  payments: number;
+  totals: AccountingTotals[];
+  changed: boolean;
 }
 
 /** CTB-5: categoria usada em conta PJ (ou já associada) e a conta contábil dela. */

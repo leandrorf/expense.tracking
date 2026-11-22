@@ -22,6 +22,8 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
 
     public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
 
+    public DbSet<AccountingExportRecord> AccountingExports => Set<AccountingExportRecord>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateTimeOffset>().HaveConversion<UtcDateTimeOffsetConverter>();
