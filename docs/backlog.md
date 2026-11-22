@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🔵 EPIC CTB — Exportação contábil PJ  · *Refinado* (decisões em aberto para a ADR-0006)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (ADR-0006 aceita; próxima: CTB-2)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1153,7 +1153,7 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
   armazenamento de arquivos (anexo, nota fiscal). Bibliotecas de planilha e PDF têm licença a
   checar: o projeto evita libs que viraram pagas para uso comercial (FluentAssertions, MediatR).
 
-**Decisões em aberto (para a ADR-0006, CTB-1; com a recomendação de cada uma):**
+**Decisões (aceitas na [ADR-0006](adr/0006-exportacao-contabil-pj-no-transactions.md), CTB-1; ficou a recomendação de cada uma, com os refinamentos da CTB-1):**
 1. **Onde o arquivo é gerado.** Opções: (a) no `transactions`, que tem o lançamento completo e é a
    fonte da verdade; (b) no `reporting`, a partir da projeção, como o Resumo. *Recomendação: (a)*.
    O contador precisa de descrição e observações de todos os lançamentos, e do que acabou de ser
@@ -1193,17 +1193,26 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
    nenhum escopo novo. O conteúdo do arquivo nunca vai para log ou trace (mesma regra da importação,
    ADR-0004, decisão 8).
 
-- 🔵 **CTB-1** ADR: exportação contábil PJ.
+- ✅ **CTB-1** ADR: exportação contábil PJ. → [ADR-0006](adr/0006-exportacao-contabil-pj-no-transactions.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0006 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: só **mês** nesta versão (intervalo livre
+    fica fora); valor sem separador de milhar (`-1234,56`), CRLF e cabeçalho; texto que começa com
+    `=`, `+`, `-`, `@` ganha `'` na frente (CSV injection); coluna de **moeda** e resumo somado por
+    moeda; pagamento de fatura entra quando o cartão **ou** a conta de origem é PJ; códigos
+    `accounting_export.month_invalid`, `accounting_export.no_business_account`,
+    `accounting_export.account_not_business` (conta de outro usuário = 404 `account.not_found`);
+    nome do ZIP sem CNPJ quando há mais de um; registro da CTB-6 com hash SHA-256, nunca o arquivo.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **CTB-2** Lançamentos PJ do mês em CSV.
   - *Dado* lançamentos em contas PJ e PF no mês, *quando* peço a exportação do mês, *então* recebo um
     CSV só com os lançamentos das contas PJ, um por linha, com data, descrição, categoria, tipo,
-    valor com sinal, meio, cartão, parcelas, conta, CNPJ, observações e origem.
+    valor com sinal, moeda, meio, cartão, parcelas, conta, CNPJ, observações e origem.
   - *Dado* o arquivo, *quando* o abro no Excel pt-BR, *então* acentos, datas (`dd/MM/aaaa`) e valores
-    (`1.234,56` → número) aparecem certos, sem configurar a importação.
+    (`-1234,56` → número) aparecem certos, sem configurar a importação.
+  - *Dado* uma descrição importada que começa com `=`, `+`, `-` ou `@`, *quando* abro o CSV no Excel,
+    *então* ela aparece como texto, nunca como fórmula.
   - *Dado* uma compra em 3x no mês, *quando* exporto, *então* ela aparece uma vez, com o valor inteiro
     e "3" na coluna de parcelas.
   - *Dado* uma descrição com `;`, aspas ou quebra de linha, *quando* exporto, *então* o CSV continua
@@ -1212,9 +1221,9 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     com código estável; sem token, 401; a conta de outro usuário, 404.
   - Estimativa: 5 · **Must** · Dependências: CTB-1
 - 🔵 **CTB-3** Pacote do mês: pagamentos de fatura e resumo por categoria.
-  - *Dado* pagamentos de fatura de cartões de contas PJ no mês, *quando* exporto, *então* o ZIP traz,
+  - *Dado* pagamentos de fatura no mês com cartão ou conta de origem PJ, *quando* exporto, *então* o ZIP traz,
     além dos lançamentos, um CSV de pagamentos de fatura (data, cartão, fatura paga, conta de origem,
-    valor) e um CSV de resumo por categoria (entradas, saídas, saldo, e a linha de total).
+    valor) e um CSV de resumo por moeda e categoria (entradas, saídas, saldo, e a linha de total).
   - *Dado* o mês exportado, *quando* comparo o resumo com o Resumo PJ da SPA no mesmo mês, *então* os
     totais de entradas e saídas batem.
   - Estimativa: 3 · **Must** · Dependências: CTB-2
