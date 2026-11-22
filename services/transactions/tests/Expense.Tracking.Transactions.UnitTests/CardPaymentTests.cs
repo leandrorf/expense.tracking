@@ -3,6 +3,8 @@ using Expense.Tracking.Transactions.Application.CardPayments;
 using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Domain.CardPayments;
 
+using Expense.Tracking.Transactions.Domain.Imports;
+
 namespace Expense.Tracking.Transactions.UnitTests;
 
 /// <summary>INV-6 (ADR-0005, decisao 6): pagamento de fatura e o evento no mesmo commit.</summary>
@@ -73,7 +75,7 @@ public sealed class CardPaymentTests
         Assert.Null(outbox.EventsAtFirstSave);
     }
 
-    private sealed class InMemoryPayments : ICardPaymentRepository
+    internal sealed class InMemoryPayments : ICardPaymentRepository
     {
         private readonly List<CardPayment> _items = [];
 
@@ -91,6 +93,17 @@ public sealed class CardPaymentTests
         }
 
         public void Remove(CardPayment payment) => _items.Remove(payment);
+
+        public Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+            Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(_items
+                .Where(p => p.OwnerUserId == ownerUserId && p.AccountId == accountId && p.ExternalId is not null
+                    && externalIds.Contains(p.ExternalId))
+                .Select(p => p.ExternalId!)
+                .ToHashSet());
+
+        public Task<IReadOnlyList<CardPayment>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CardPayment>>(_items.Where(p => p.OwnerUserId == ownerUserId && p.ImportBatchId == importBatchId).ToList());
     }
 
     private sealed class RecordingOutbox : IEventOutbox
@@ -122,6 +135,9 @@ public sealed class CardPaymentTests
         public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult<bool?>(accountActive);
+
+        public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<InvoiceCardHint>>([]);
     }
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

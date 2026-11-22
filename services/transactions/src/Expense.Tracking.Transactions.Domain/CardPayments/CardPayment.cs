@@ -45,6 +45,12 @@ public sealed class CardPayment
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
+    /// <summary>INV-11: chave da linha no extrato importado (unica por dono e conta); nula se digitado.</summary>
+    public string? ExternalId { get; private set; }
+
+    /// <summary>INV-11: lote de importacao que criou o pagamento, para desfazer a importacao.</summary>
+    public Guid? ImportBatchId { get; private set; }
+
     public static Result<CardPayment> Create(
         Guid ownerUserId, Guid creditCardId, DateOnly invoiceDueMonth, Guid accountId,
         decimal amount, string? currency, DateOnly paidOn, DateTimeOffset nowUtc)
@@ -64,5 +70,23 @@ public sealed class CardPayment
         return new CardPayment(
             Guid.NewGuid(), ownerUserId, creditCardId, new DateOnly(invoiceDueMonth.Year, invoiceDueMonth.Month, 1),
             accountId, money.Value.Amount, money.Value.Currency, paidOn, nowUtc);
+    }
+
+    /// <summary>
+    /// INV-11: pagamento criado pela confirmacao de um extrato importado, com a chave da linha e o
+    /// lote de origem. Mesmas regras de <see cref="Create"/>.
+    /// </summary>
+    public static Result<CardPayment> CreateImported(
+        Guid ownerUserId, Guid creditCardId, DateOnly invoiceDueMonth, Guid accountId, decimal amount, string currency,
+        DateOnly paidOn, string externalId, Guid importBatchId, DateTimeOffset nowUtc)
+    {
+        var result = Create(ownerUserId, creditCardId, invoiceDueMonth, accountId, amount, currency, paidOn, nowUtc);
+        if (result.IsSuccess)
+        {
+            result.Value.ExternalId = externalId;
+            result.Value.ImportBatchId = importBatchId;
+        }
+
+        return result;
     }
 }

@@ -31,7 +31,7 @@ public sealed class UndoImportHandlerTests
         typeof(ImportBatch).GetProperty(nameof(ImportBatch.Id))!.SetValue(batch, id);
         var created = batch.Confirm(
             batch.Lines.Select(l => new ImportLineDecision(l.Id, null, "Mercado", null)).ToList(),
-            new HashSet<string>(), Now).Value;
+            new HashSet<string>(), Now).Value.Transactions;
         return (batch, created);
     }
 
@@ -101,7 +101,7 @@ public sealed class UndoImportHandlerTests
 
     private static UndoImportHandler Handler(
         IImportBatchRepository batches, FakeTransactions transactions, RecordingOutbox outbox, IUnitOfWork unitOfWork) =>
-        new(batches, transactions, outbox, unitOfWork, new ImportMetrics(new TestMeterFactory()), new FixedTime());
+        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), outbox, unitOfWork, new ImportMetrics(new TestMeterFactory()), new FixedTime());
 
     private sealed class SequenceBatches(params ImportBatch[] sequence) : IImportBatchRepository
     {

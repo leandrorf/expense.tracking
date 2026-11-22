@@ -28,6 +28,7 @@ public sealed class PreviewImportHandler(
     ICsvTableReader csvTableReader,
     IAccountsClient accountsClient,
     ITransactionRepository transactions,
+    ICardPaymentRepository payments,
     IImportBatchRepository batches,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
@@ -77,8 +78,8 @@ public sealed class PreviewImportHandler(
             .Where(l => l.ExternalId is not null)
             .Select(l => l.ExternalId!)
             .ToList();
-        var existing = await transactions.FindExistingExternalIdsAsync(
-            command.OwnerUserId, command.AccountId, keys, cancellationToken);
+        var existing = await ExternalIds.ExistingAsync(
+            transactions, payments, command.OwnerUserId, command.AccountId, keys, cancellationToken);
 
         // IMP-6: ultima categoria usada para a mesma descricao, em qualquer conta do usuario.
         var descriptionKeys = statement.Value.Lines
@@ -88,9 +89,15 @@ public sealed class PreviewImportHandler(
         var categoryHistory = await transactions.FindLatestCategoriesAsync(
             command.OwnerUserId, descriptionKeys, cancellationToken);
 
+        // INV-11: so busca os cartoes da conta se alguma saida do extrato parece pagamento de fatura.
+        var accountCards = statement.Value.Kind == StatementKind.BankAccount
+            && statement.Value.Lines.Any(l => l.IsValid && l.Amount < 0 && InvoicePaymentHints.Matches(l.Description))
+                ? await accountsClient.ListActiveCardsAsync(command.AccountId, cancellationToken)
+                : [];
+
         var batch = ImportBatch.Create(
             command.OwnerUserId, command.AccountId, command.CreditCardId, command.DefaultPaymentMethod,
-            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory);
+            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards);
         if (batch.IsFailure)
         {
             return Result.Failure<ImportBatchDto>(batch.Error);
@@ -162,6 +169,7 @@ public sealed record ConfirmImportCommand(Guid OwnerUserId, Guid BatchId, IReadO
 public sealed class ConfirmImportHandler(
     IImportBatchRepository batches,
     ITransactionRepository transactions,
+    ICardPaymentRepository payments,
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -199,8 +207,8 @@ public sealed class ConfirmImportHandler(
             }
 
             var keys = batch.Lines.Where(l => l.CanBeIncluded && l.ExternalId is not null).Select(l => l.ExternalId!).ToList();
-            var alreadyLaunched = await transactions.FindExistingExternalIdsAsync(
-                batch.OwnerUserId, batch.AccountId, keys, cancellationToken);
+            var alreadyLaunched = await ExternalIds.ExistingAsync(
+                transactions, payments, batch.OwnerUserId, batch.AccountId, keys, cancellationToken);
 
             var created = batch.Confirm(command.Lines, alreadyLaunched, now);
             if (created.IsFailure)
@@ -208,10 +216,25 @@ public sealed class ConfirmImportHandler(
                 return Result.Failure<ImportBatchDto>(created.Error);
             }
 
-            foreach (var transaction in created.Value)
+            // INV-11: o cartao de cada fatura paga tem de ser do usuario (o accounts filtra pelo token).
+            foreach (var invoiceCard in created.Value.Payments.Select(p => p.CreditCardId).Distinct())
+            {
+                if (!await accountsClient.CreditCardExistsAsync(invoiceCard, cancellationToken))
+                {
+                    return Result.Failure<ImportBatchDto>(Error.NotFound("card.not_found", "Cartao nao encontrado para o usuario."));
+                }
+            }
+
+            foreach (var transaction in created.Value.Transactions)
             {
                 await transactions.AddAsync(transaction, cancellationToken);
                 outbox.Add(TransactionRegistered.From(transaction, accountScope));
+            }
+
+            foreach (var payment in created.Value.Payments)
+            {
+                await payments.AddAsync(payment, cancellationToken);
+                outbox.Add(CardInvoicePaid.From(payment));
             }
 
             try
@@ -243,6 +266,7 @@ public sealed record UndoImportCommand(Guid OwnerUserId, Guid BatchId);
 public sealed class UndoImportHandler(
     IImportBatchRepository batches,
     ITransactionRepository transactions,
+    ICardPaymentRepository payments,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
     ImportMetrics metrics,
@@ -279,6 +303,13 @@ public sealed class UndoImportHandler(
                 outbox.Add(new TransactionDeleted(transaction.Id, transaction.OwnerUserId));
             }
 
+            // INV-11: os pagamentos de fatura criados pelo lote tambem saem; a fatura volta a dever.
+            foreach (var payment in await payments.ListByImportBatchAsync(batch.OwnerUserId, batch.Id, cancellationToken))
+            {
+                payments.Remove(payment);
+                outbox.Add(new CardInvoicePaymentDeleted(payment.Id, payment.OwnerUserId, payment.CreditCardId));
+            }
+
             try
             {
                 await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -303,6 +334,22 @@ public sealed class GetImportHandler(IImportBatchRepository batches, TimeProvide
         return batch is null || batch.IsExpired(timeProvider.GetUtcNow())
             ? Result.Failure<ImportBatchDto>(ImportErrors.BatchNotFound)
             : ImportBatchDto.From(batch);
+    }
+}
+
+/// <summary>
+/// INV-11: chaves externas ja usadas na conta, por lancamento ou por pagamento de fatura importado:
+/// reimportar o extrato nao paga a mesma fatura duas vezes.
+/// </summary>
+internal static class ExternalIds
+{
+    public static async Task<IReadOnlySet<string>> ExistingAsync(
+        ITransactionRepository transactions, ICardPaymentRepository payments, Guid ownerUserId, Guid accountId,
+        IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        var launched = await transactions.FindExistingExternalIdsAsync(ownerUserId, accountId, keys, cancellationToken);
+        var paid = await payments.FindExistingExternalIdsAsync(ownerUserId, accountId, keys, cancellationToken);
+        return paid.Count == 0 ? launched : launched.Union(paid).ToHashSet();
     }
 }
 

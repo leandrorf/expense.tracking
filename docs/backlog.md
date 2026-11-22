@@ -1022,12 +1022,28 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
   - *Dado* um cartão com limite de R$ 5.000,00 e R$ 1.200,00 a pagar (incluindo parcelas futuras),
     *quando* olho o cartão, *então* vejo R$ 3.800,00 disponíveis, sem bloquear novos lançamentos.
   - Estimativa: 3 · **Should** · Dependências: INV-4
-- 🔵 **INV-11** Pagamento de fatura reconhecido na importação do extrato.
+- ✅ **INV-11** Pagamento de fatura reconhecido na importação do extrato.
   - *Dado* um extrato de conta com a linha "PAG FATURA CARTAO", *quando* vejo a prévia, *então* ela
     vem sugerida como pagamento de fatura de um cartão da conta, e confirmar cria o pagamento, não
     um gasto.
   - *Dado* a sugestão errada, *quando* troco a linha para lançamento comum, *então* ela entra como
     gasto, como hoje.
+  - Feito assim: na prévia de extrato de conta, a saída cujo memo tem "PAG FATURA", "PAGAMENTO
+    (DE) FATURA", "PAGTO/PGTO FATURA" ou "PAG/PAGTO/PGTO/PAGAMENTO (DE) CARTAO" (palavras inteiras,
+    sem diferença de maiúsculas e acentos; entrada e fatura de cartão nunca) vem com
+    `invoicePayment = true`. Se a conta tem um só cartão ativo, a linha já vem com ele e com a
+    fatura de vencimento mais próximo da data paga (mês anterior, mesmo ou seguinte); com mais de
+    um, o usuário escolhe. Na confirmação, a linha vira `card_payments` com a chave externa e o lote
+    (`CardInvoicePaid` no outbox), sem categoria; faltando cartão ou mês, 400
+    `import.invoice_required` com as linhas; cartão de outro usuário = 404. A decisão aceita
+    `invoicePayment`, `invoiceCardId` e `invoiceDueMonth` (`yyyy-MM`; inválido = 400
+    `import.invoice_month_invalid`); `invoicePayment = false` faz a linha voltar a gasto comum, com
+    categoria. Reimportar o extrato traz a linha paga como duplicada (a dedup olha lançamentos e
+    pagamentos; índice único dono + conta + chave em `card_payments`), e desfazer o lote exclui
+    também os pagamentos (`CardInvoicePaymentDeleted`). Na SPA, o meio da linha ganhou a opção
+    "Pagamento de fatura", que troca a categoria por cartão + mês. Cypress
+    `import-invoice-payment.cy.ts` (sugestão, confirmação, Lançamentos sem o pagamento, pagamento
+    na fatura).
   - Estimativa: 3 · **Should** · Dependências: INV-6, IMP-6
 - ✅ **INV-12** E2E Cypress: fatura e previsão nas jornadas PF e PJ.
   - *Dado* um cartão PF, *quando* lanço uma compra à vista e outra em 3x, *então* a fatura atual e as

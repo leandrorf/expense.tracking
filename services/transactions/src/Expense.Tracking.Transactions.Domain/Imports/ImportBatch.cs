@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
@@ -40,9 +41,15 @@ public enum ImportLineStatus
 
 /// <summary>
 /// IMP-5: o que o usuario decidiu para uma linha na previa. Campo nulo mantem o que a previa ja
-/// tinha (incluida por padrao, meio do lote, categoria sugerida).
+/// tinha (incluida por padrao, meio do lote, categoria sugerida). INV-11: <see cref="InvoicePayment"/>
+/// troca a linha entre pagamento de fatura e lancamento comum; cartao e mes escolhem a fatura.
 /// </summary>
-public sealed record ImportLineDecision(Guid LineId, bool? Included, string? Category, PaymentMethod? PaymentMethod);
+public sealed record ImportLineDecision(
+    Guid LineId, bool? Included, string? Category, PaymentMethod? PaymentMethod,
+    bool? InvoicePayment = null, Guid? InvoiceCardId = null, DateOnly? InvoiceDueMonth = null);
+
+/// <summary>O que a confirmacao criou: lancamentos e (INV-11) pagamentos de fatura.</summary>
+public sealed record ImportConfirmation(IReadOnlyList<Transaction> Transactions, IReadOnlyList<CardPayment> Payments);
 
 /// <summary>
 /// Lote de importacao (IMP-4, ADR-0004 decisao 2): o que foi lido de um arquivo, guardado como
@@ -108,12 +115,14 @@ public sealed class ImportBatch
     /// <paramref name="existingExternalIds"/> sao as chaves ja lancadas na conta, que viram
     /// <see cref="ImportLineStatus.Duplicate"/>. <paramref name="categoryHistory"/> (IMP-6) e a
     /// ultima categoria usada por chave de descricao (<see cref="Transaction.DescriptionKeyOf"/>):
-    /// vira a categoria sugerida das linhas que podem entrar.
+    /// vira a categoria sugerida das linhas que podem entrar. <paramref name="accountCards"/> (INV-11)
+    /// sao os cartoes ativos da conta: com um so, a linha de pagamento de fatura ja vem com ele.
     /// </summary>
     public static Result<ImportBatch> Create(
         Guid ownerUserId, Guid accountId, Guid? creditCardId, PaymentMethod? defaultPaymentMethod,
         ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
-        DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null)
+        DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null,
+        IReadOnlyList<InvoiceCardHint>? accountCards = null)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -139,7 +148,7 @@ public sealed class ImportBatch
         {
             batch._lines.Add(ImportLine.From(
                 batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds,
-                categoryHistory ?? EmptyHistory));
+                categoryHistory ?? EmptyHistory, accountCards is [var onlyCard] ? onlyCard : null));
         }
 
         return batch;
@@ -177,14 +186,15 @@ public sealed class ImportBatch
     /// chave externa e o lote de origem. Toda linha incluida precisa de categoria; se faltar em
     /// alguma, o erro traz os numeros das linhas em <c>Metadata["lines"]</c> e nada e confirmado.
     /// <paramref name="alreadyLaunched"/> sao as chaves lancadas na conta depois da previa (outra
-    /// importacao): essas linhas viram duplicadas em vez de lancamento.
+    /// importacao): essas linhas viram duplicadas em vez de lancamento. INV-11: linha incluida como
+    /// pagamento de fatura vira <see cref="CardPayment"/> (sem categoria; cartao e mes obrigatorios).
     /// </summary>
-    public Result<IReadOnlyList<Transaction>> Confirm(
+    public Result<ImportConfirmation> Confirm(
         IReadOnlyCollection<ImportLineDecision> decisions, IReadOnlySet<string> alreadyLaunched, DateTimeOffset nowUtc)
     {
         if (Status != ImportBatchStatus.Pending)
         {
-            return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.NotPending);
+            return Result.Failure<ImportConfirmation>(ImportErrors.NotPending);
         }
 
         var lines = _lines.ToDictionary(l => l.Id);
@@ -192,13 +202,13 @@ public sealed class ImportBatch
         {
             if (!lines.TryGetValue(decision.LineId, out var line))
             {
-                return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.LineNotFound);
+                return Result.Failure<ImportConfirmation>(ImportErrors.LineNotFound);
             }
 
             var applied = line.Apply(decision, Kind);
             if (applied.IsFailure)
             {
-                return Result.Failure<IReadOnlyList<Transaction>>(applied.Error);
+                return Result.Failure<ImportConfirmation>(applied.Error);
             }
         }
 
@@ -207,14 +217,42 @@ public sealed class ImportBatch
             line.MarkDuplicate();
         }
 
-        var withoutCategory = _lines.Where(l => l.Included && l.Category is null).Select(l => l.Number).Order().ToList();
+        var withoutCategory = _lines
+            .Where(l => l.Included && !l.InvoicePayment && l.Category is null)
+            .Select(l => l.Number).Order().ToList();
         if (withoutCategory.Count > 0)
         {
-            return Result.Failure<IReadOnlyList<Transaction>>(ImportErrors.CategoriesRequired(withoutCategory));
+            return Result.Failure<ImportConfirmation>(ImportErrors.CategoriesRequired(withoutCategory));
+        }
+
+        var withoutInvoice = _lines
+            .Where(l => l.Included && l.InvoicePayment && (l.InvoiceCardId is null || l.InvoiceDueMonth is null))
+            .Select(l => l.Number).Order().ToList();
+        if (withoutInvoice.Count > 0)
+        {
+            return Result.Failure<ImportConfirmation>(ImportErrors.InvoicesRequired(withoutInvoice));
         }
 
         var created = new List<Transaction>();
-        foreach (var line in _lines.Where(l => l.Included).OrderBy(l => l.Number))
+        var payments = new List<CardPayment>();
+        foreach (var line in _lines.Where(l => l.Included && l.InvoicePayment).OrderBy(l => l.Number))
+        {
+            var payment = CardPayment.CreateImported(
+                OwnerUserId, line.InvoiceCardId!.Value, line.InvoiceDueMonth!.Value, AccountId, line.Amount!.Value,
+                Currency, line.OccurredOn!.Value, line.ExternalId!, Id, nowUtc);
+            if (payment.IsFailure)
+            {
+                return Result.Failure<ImportConfirmation>(payment.Error with
+                {
+                    Metadata = new Dictionary<string, object?> { ["lines"] = new[] { line.Number } },
+                });
+            }
+
+            line.MarkImportedAsPayment(payment.Value.Id);
+            payments.Add(payment.Value);
+        }
+
+        foreach (var line in _lines.Where(l => l.Included && !l.InvoicePayment).OrderBy(l => l.Number))
         {
             var transaction = Transaction.CreateImported(
                 OwnerUserId, AccountId, line.Type!.Value, line.PaymentMethod!.Value,
@@ -223,7 +261,7 @@ public sealed class ImportBatch
                 line.ExternalId!, Id, nowUtc);
             if (transaction.IsFailure)
             {
-                return Result.Failure<IReadOnlyList<Transaction>>(transaction.Error with
+                return Result.Failure<ImportConfirmation>(transaction.Error with
                 {
                     Metadata = new Dictionary<string, object?> { ["lines"] = new[] { line.Number } },
                 });
@@ -235,7 +273,7 @@ public sealed class ImportBatch
 
         Status = ImportBatchStatus.Confirmed;
         ConfirmedAtUtc = nowUtc;
-        return created;
+        return new ImportConfirmation(created, payments);
     }
 
     /// <summary>
@@ -304,6 +342,21 @@ public sealed class ImportLine
     /// <summary>Lancamento criado por esta linha na confirmacao (IMP-5).</summary>
     public Guid? TransactionId { get; private set; }
 
+    /// <summary>
+    /// INV-11: a linha e (ou o usuario marcou como) pagamento de fatura: na confirmacao vira
+    /// pagamento, nao gasto. So em extrato de conta e em saida.
+    /// </summary>
+    public bool InvoicePayment { get; private set; }
+
+    /// <summary>INV-11: cartao cuja fatura a linha paga (sugerido quando a conta tem um so).</summary>
+    public Guid? InvoiceCardId { get; private set; }
+
+    /// <summary>INV-11: fatura paga, pelo mes de vencimento (dia 1).</summary>
+    public DateOnly? InvoiceDueMonth { get; private set; }
+
+    /// <summary>INV-11: pagamento de fatura criado por esta linha na confirmacao.</summary>
+    public Guid? CardPaymentId { get; private set; }
+
     /// <summary>So linha nova ou fora por padrao pode entrar; duplicada e invalida, nao.</summary>
     public bool CanBeIncluded => Status is ImportLineStatus.New or ImportLineStatus.ExcludedByDefault;
 
@@ -330,6 +383,27 @@ public sealed class ImportLine
             }
 
             Category = category.Length == 0 ? null : category;
+        }
+
+        if (decision.InvoicePayment is { } invoicePayment)
+        {
+            // Pagamento de fatura so sai de conta: extrato de conta e saida (ADR-0005, decisao 10).
+            if (invoicePayment && (kind != StatementKind.BankAccount || Type != TransactionType.Expense))
+            {
+                return Result.Failure(ImportErrors.LineInvoicePaymentInvalid(Number));
+            }
+
+            InvoicePayment = invoicePayment;
+        }
+
+        if (decision.InvoiceCardId is { } cardId)
+        {
+            InvoiceCardId = cardId;
+        }
+
+        if (decision.InvoiceDueMonth is { } dueMonth)
+        {
+            InvoiceDueMonth = new DateOnly(dueMonth.Year, dueMonth.Month, 1);
         }
 
         if (decision.PaymentMethod is { } method)
@@ -361,9 +435,16 @@ public sealed class ImportLine
         TransactionId = transactionId;
     }
 
+    internal void MarkImportedAsPayment(Guid cardPaymentId)
+    {
+        Status = ImportLineStatus.Imported;
+        CardPaymentId = cardPaymentId;
+    }
+
     internal static ImportLine From(
         Guid batchId, StatementLine source, StatementKind kind, PaymentMethod paymentMethod,
-        IReadOnlySet<string> existingExternalIds, IReadOnlyDictionary<string, string> categoryHistory)
+        IReadOnlySet<string> existingExternalIds, IReadOnlyDictionary<string, string> categoryHistory,
+        InvoiceCardHint? onlyAccountCard = null)
     {
         var line = new ImportLine(Guid.NewGuid(), batchId, source.Number)
         {
@@ -412,6 +493,18 @@ public sealed class ImportLine
             categoryHistory.TryGetValue(Transaction.DescriptionKeyOf(line.Description), out var category))
         {
             line.Category = category;
+        }
+
+        // INV-11: saida de conta com "PAG FATURA" e afins vem sugerida como pagamento de fatura; com
+        // um so cartao na conta, ja vem com ele e com a fatura de vencimento mais proximo.
+        if (kind == StatementKind.BankAccount && line.Type == TransactionType.Expense && InvoicePaymentHints.Matches(source.Description))
+        {
+            line.InvoicePayment = true;
+            if (onlyAccountCard is not null)
+            {
+                line.InvoiceCardId = onlyAccountCard.CardId;
+                line.InvoiceDueMonth = InvoicePaymentHints.SuggestDueMonth(line.OccurredOn!.Value, onlyAccountCard.DueDay);
+            }
         }
 
         return line;

@@ -34,4 +34,26 @@ internal sealed class CardPaymentRepository(TransactionsDbContext dbContext) : I
         await dbContext.CardPayments.AddAsync(payment, cancellationToken);
 
     public void Remove(CardPayment payment) => dbContext.CardPayments.Remove(payment);
+
+    public async Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+        Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
+    {
+        if (externalIds.Count == 0)
+        {
+            return new HashSet<string>();
+        }
+
+        var found = await dbContext.CardPayments
+            .Where(p => p.OwnerUserId == ownerUserId && p.AccountId == accountId
+                && p.ExternalId != null && externalIds.Contains(p.ExternalId))
+            .Select(p => p.ExternalId!)
+            .ToListAsync(cancellationToken);
+        return found.ToHashSet();
+    }
+
+    public async Task<IReadOnlyList<CardPayment>> ListByImportBatchAsync(
+        Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
+        await dbContext.CardPayments
+            .Where(p => p.OwnerUserId == ownerUserId && p.ImportBatchId == importBatchId)
+            .ToListAsync(cancellationToken);
 }

@@ -80,7 +80,7 @@ public sealed class ConfirmImportHandlerTests
 
     private static ConfirmImportHandler Handler(
         IImportBatchRepository batches, RecordingTransactions transactions, RecordingOutbox outbox, IUnitOfWork unitOfWork) =>
-        new(batches, transactions, new AllAccountsExist(), outbox, unitOfWork,
+        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), new AllAccountsExist(), outbox, unitOfWork,
             new ImportMetrics(new TestMeterFactory()), new FixedTime());
 
     private sealed class SequenceBatches(params ImportBatch[] sequence) : IImportBatchRepository
@@ -164,6 +164,9 @@ public sealed class ConfirmImportHandlerTests
         public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult<bool?>(true);
+
+        public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<InvoiceCardHint>>([]);
     }
 
     private sealed class FixedTime : TimeProvider

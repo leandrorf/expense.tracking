@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
+using Expense.Tracking.Transactions.Domain.Imports;
 
 namespace Expense.Tracking.Transactions.IntegrationTests;
 
@@ -27,6 +28,12 @@ public sealed class FakeAccountsClient : IAccountsClient
 
     public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) =>
         Task.FromResult(!InvalidCards.Contains(creditCardId));
+
+    /// <summary>INV-11: cartoes ativos de cada conta (com o dia de vencimento), para a sugestao da importacao.</summary>
+    public Dictionary<Guid, List<InvoiceCardHint>> AccountCards { get; } = [];
+
+    public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<InvoiceCardHint>>(AccountCards.GetValueOrDefault(accountId) ?? []);
 
     public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) =>
         Task.FromResult<bool?>(InvalidAccounts.Contains(accountId) ? null : !InactiveAccounts.Contains(accountId));

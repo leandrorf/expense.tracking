@@ -18,7 +18,9 @@ namespace Expense.Tracking.Transactions.Api.Endpoints;
 /// <summary>IMP-5: decisoes da previa. Linha omitida mantem o que a previa tinha.</summary>
 public sealed record ConfirmImportRequest(IReadOnlyList<ConfirmImportLineRequest>? Lines);
 
-public sealed record ConfirmImportLineRequest(Guid Id, bool? Included, string? Category, string? PaymentMethod);
+public sealed record ConfirmImportLineRequest(
+    Guid Id, bool? Included, string? Category, string? PaymentMethod,
+    bool? InvoicePayment = null, Guid? InvoiceCardId = null, string? InvoiceDueMonth = null);
 
 /// <summary>IMP-11: mapeamento a salvar com um nome; <c>headers</c> e o cabecalho do arquivo (opcional).</summary>
 public sealed record SaveCsvMappingRequest(string? Name, CsvColumnMapping? Mapping, IReadOnlyList<string>? Headers);
@@ -137,7 +139,21 @@ public static class ImportsEndpoints
                     method = parsed;
                 }
 
-                decisions.Add(new ImportLineDecision(line.Id, line.Included, line.Category, method));
+                // INV-11: fatura paga pelo mes de vencimento, "yyyy-MM".
+                DateOnly? dueMonth = null;
+                if (line.InvoiceDueMonth is { Length: > 0 } monthText)
+                {
+                    if (!DateOnly.TryParseExact(monthText, "yyyy-MM", System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out var parsedMonth))
+                    {
+                        return HttpResults.Problem(Error.Validation("import.invoice_month_invalid", "Mes da fatura invalido: use o formato 'yyyy-MM'."));
+                    }
+
+                    dueMonth = parsedMonth;
+                }
+
+                decisions.Add(new ImportLineDecision(
+                    line.Id, line.Included, line.Category, method, line.InvoicePayment, line.InvoiceCardId, dueMonth));
             }
 
             var result = await handler.HandleAsync(new ConfirmImportCommand(owner.Value, id, decisions), ct);

@@ -31,9 +31,43 @@ interface LineDraft {
   included: boolean;
   category: string;
   paymentMethod: string | null;
+  /** INV-11: pagamento de fatura (cartão + mês de vencimento) em vez de gasto. */
+  invoicePayment: boolean;
+  invoiceCardId: string;
+  invoiceDueMonth: string;
 }
 
+/** Valor do select de meio que troca a linha para pagamento de fatura. */
+const INVOICE_PAYMENT = '__invoice';
+
 const canInclude = (line: ImportLine) => line.status === 'New' || line.status === 'ExcludedByDefault';
+
+/** Só saída de extrato de conta pode ser pagamento de fatura (ADR-0005, decisão 10). */
+const canBeInvoicePayment = (batch: ImportBatch, line: ImportLine) =>
+  batch.kind === 'BankAccount' && line.type === 'Expense' && canInclude(line);
+
+const draftOf = (line: ImportLine): LineDraft => ({
+  included: line.included,
+  category: line.category ?? '',
+  paymentMethod: line.paymentMethod,
+  invoicePayment: line.invoicePayment,
+  invoiceCardId: line.invoiceCardId ?? '',
+  invoiceDueMonth: line.invoiceDueMonth ?? '',
+});
+
+/** Mesma regra do servidor: a fatura de vencimento mais próximo da data paga. */
+function suggestDueMonth(paidOn: string | null, dueDay: number): string {
+  if (!paidOn) return '';
+  const [y, m, d] = paidOn.split('-').map(Number);
+  const paid = Date.UTC(y, m - 1, d);
+  const candidates = [-1, 0, 1].map((offset) => {
+    const first = new Date(Date.UTC(y, m - 1 + offset, 1));
+    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    const due = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(dueDay, lastDay));
+    return { month: `${first.getUTCFullYear()}-${String(first.getUTCMonth() + 1).padStart(2, '0')}`, distance: Math.abs(due - paid) };
+  });
+  return candidates.reduce((best, c) => (c.distance < best.distance ? c : best)).month;
+}
 
 /**
  * IMP-7: importar extrato (OFX/CSV) ou fatura de cartão. Envia o arquivo, mostra a prévia com
@@ -156,11 +190,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
       });
       setBatch(preview);
       setCsvProposal(null);
-      setDrafts(
-        Object.fromEntries(
-          preview.lines.map((l) => [l.id, { included: l.included, category: l.category ?? '', paymentMethod: l.paymentMethod }]),
-        ),
-      );
+      setDrafts(Object.fromEntries(preview.lines.map((l) => [l.id, draftOf(l)])));
       setFlaggedLines(new Set());
     } catch (err) {
       setError(messageOf(err));
@@ -183,8 +213,37 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     setDrafts((current) => ({ ...current, [id]: { ...current[id], ...change } }));
 
   const includedLines = batch ? batch.lines.filter((l) => drafts[l.id]?.included) : [];
-  const missingCategory = includedLines.filter((l) => !drafts[l.id]?.category.trim());
-  const canConfirm = includedLines.length > 0 && missingCategory.length === 0 && !busy;
+  const missingCategory = includedLines.filter((l) => !drafts[l.id]?.invoicePayment && !drafts[l.id]?.category.trim());
+  // INV-11: pagamento de fatura precisa do cartão e do mês da fatura.
+  const missingInvoice = includedLines.filter(
+    (l) => drafts[l.id]?.invoicePayment && (!drafts[l.id].invoiceCardId || !drafts[l.id].invoiceDueMonth),
+  );
+  const invoicePayments = includedLines.filter((l) => drafts[l.id]?.invoicePayment).length;
+  const canConfirm = includedLines.length > 0 && missingCategory.length === 0 && missingInvoice.length === 0 && !busy;
+  const activeCards = cards.filter((c) => c.isActive);
+
+  function chooseMethod(line: ImportLine, value: string) {
+    if (value === INVOICE_PAYMENT) {
+      const draft = drafts[line.id];
+      // Com um só cartão na conta, já escolhe ele e a fatura de vencimento mais próximo.
+      const only = draft.invoiceCardId ? null : cards.filter((c) => c.accountId === batch?.accountId && c.isActive);
+      const card = only?.length === 1 ? only[0] : null;
+      updateDraft(line.id, {
+        invoicePayment: true,
+        ...(card ? { invoiceCardId: card.id, invoiceDueMonth: suggestDueMonth(line.occurredOn, card.dueDay) } : {}),
+      });
+      return;
+    }
+    updateDraft(line.id, { invoicePayment: false, paymentMethod: value });
+  }
+
+  function chooseInvoiceCard(line: ImportLine, cardId: string) {
+    const card = cards.find((c) => c.id === cardId);
+    updateDraft(line.id, {
+      invoiceCardId: cardId,
+      invoiceDueMonth: card ? suggestDueMonth(line.occurredOn, card.dueDay) : drafts[line.id].invoiceDueMonth,
+    });
+  }
 
   function applyBulkCategory(onlyEmpty: boolean) {
     const category = bulkCategory.trim();
@@ -212,9 +271,12 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
           included: drafts[l.id].included,
           category: drafts[l.id].category.trim() || null,
           paymentMethod: drafts[l.id].paymentMethod,
+          invoicePayment: canBeInvoicePayment(batch, l) ? drafts[l.id].invoicePayment : undefined,
+          invoiceCardId: drafts[l.id].invoicePayment ? drafts[l.id].invoiceCardId || null : undefined,
+          invoiceDueMonth: drafts[l.id].invoicePayment ? drafts[l.id].invoiceDueMonth || null : undefined,
         })),
       );
-      includedLines.forEach((l) => remember(drafts[l.id].category));
+      includedLines.filter((l) => !drafts[l.id].invoicePayment).forEach((l) => remember(drafts[l.id].category));
       setResult(confirmed);
       setBatch(null);
     } catch (err) {
@@ -256,6 +318,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   if (result) {
     const ignored = result.summary.total - result.summary.imported - result.summary.duplicate;
     const undone = result.status === 'Undone';
+    const paymentsImported = result.lines.filter((l) => l.cardPaymentId).length;
     return (
       <section>
         <h2>Importar</h2>
@@ -279,6 +342,8 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
             {undone
               ? 'Os lançamentos criados por esta importação foram excluídos. O Resumo e os orçamentos deixam de contá-los em alguns segundos.'
               : 'O Resumo e os orçamentos passam a contar os importados em alguns segundos.'}
+            {!undone && paymentsImported > 0 &&
+              ` ${paymentsImported} pagamento(s) de fatura foram registrados na fatura do cartão, sem virar gasto.`}
           </p>
           {error && (
             <p className="error" data-cy="import-error" role="alert">
@@ -288,8 +353,9 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
           {confirmingUndo ? (
             <div className="import-undo-confirm" data-cy="import-undo-confirm" role="alertdialog" aria-label="Desfazer importação">
               <p>
-                Excluir os {result.summary.imported} lançamento(s) criados por esta importação? Os que você já excluiu
-                ficam como estão.
+                Excluir os {result.summary.imported - paymentsImported} lançamento(s)
+                {paymentsImported > 0 && ` e ${paymentsImported} pagamento(s) de fatura`} criados por esta importação? Os que
+                você já excluiu ficam como estão.
               </p>
               <div className="actions">
                 <button data-cy="import-undo-yes" className="danger" onClick={() => void handleUndo()} disabled={busy}>
@@ -389,13 +455,16 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
             {batch.lines.map((line) => {
               const draft = drafts[line.id];
               const includable = canInclude(line);
-              const needsCategory = draft.included && !draft.category.trim();
-              const flagged = flaggedLines.has(line.number) && needsCategory;
+              const asInvoice = draft.invoicePayment;
+              const needsCategory = draft.included && !asInvoice && !draft.category.trim();
+              const needsInvoice = draft.included && asInvoice && (!draft.invoiceCardId || !draft.invoiceDueMonth);
+              const flagged = flaggedLines.has(line.number) && (needsCategory || needsInvoice);
               return (
                 <tr
                   key={line.id}
                   data-cy="import-row"
                   data-status={line.status}
+                  data-invoice-payment={asInvoice ? 'true' : undefined}
                   className={`import-row ${line.status.toLowerCase()}${draft.included ? '' : ' excluded'}${flagged ? ' flagged' : ''}`}
                 >
                   <td>
@@ -421,19 +490,49 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
                       <select
                         data-cy="import-row-method"
                         aria-label={`Meio de pagamento da linha ${line.number}`}
-                        value={draft.paymentMethod ?? ''}
-                        onChange={(e) => updateDraft(line.id, { paymentMethod: e.target.value })}
+                        value={asInvoice ? INVOICE_PAYMENT : draft.paymentMethod ?? ''}
+                        onChange={(e) => chooseMethod(line, e.target.value)}
                       >
                         {statementMethods.map((m) => (
                           <option key={m.code} value={m.code}>
                             {m.name}
                           </option>
                         ))}
+                        {canBeInvoicePayment(batch, line) && activeCards.length > 0 && (
+                          <option value={INVOICE_PAYMENT}>Pagamento de fatura</option>
+                        )}
                       </select>
                     )}
                   </td>
                   <td>
-                    {includable && (
+                    {includable && asInvoice && (
+                      <div className="invoice-choice">
+                        <select
+                          data-cy="import-row-invoice-card"
+                          aria-label={`Cartão da fatura paga na linha ${line.number}`}
+                          aria-invalid={needsInvoice && !draft.invoiceCardId}
+                          value={draft.invoiceCardId}
+                          onChange={(e) => chooseInvoiceCard(line, e.target.value)}
+                        >
+                          <option value="">Qual cartão?</option>
+                          {activeCards.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.label} •••• {c.lastFourDigits}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          data-cy="import-row-invoice-month"
+                          type="month"
+                          aria-label={`Mês de vencimento da fatura paga na linha ${line.number}`}
+                          aria-invalid={needsInvoice && !draft.invoiceDueMonth}
+                          value={draft.invoiceDueMonth}
+                          onChange={(e) => updateDraft(line.id, { invoiceDueMonth: e.target.value })}
+                        />
+                        <span className="hint">Não vira gasto: abate a fatura.</span>
+                      </div>
+                    )}
+                    {includable && !asInvoice && (
                       <input
                         data-cy="import-row-category"
                         aria-label={`Categoria da linha ${line.number}`}
@@ -466,7 +565,9 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
         <div className="actions import-actions">
           <span data-cy="import-pending-count" aria-live="polite">
             {includedLines.length} incluída(s)
+            {invoicePayments > 0 && ` · ${invoicePayments} pagamento(s) de fatura`}
             {missingCategory.length > 0 && ` · ${missingCategory.length} sem categoria`}
+            {missingInvoice.length > 0 && ` · ${missingInvoice.length} sem fatura escolhida`}
           </span>
           <button data-cy="import-confirm" className="primary" onClick={() => void handleConfirm()} disabled={!canConfirm}>
             {busy ? 'Importando…' : `Importar ${includedLines.length} lançamento(s)`}

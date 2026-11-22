@@ -48,6 +48,15 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(3)")
                         .HasColumnName("currency");
 
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid?>("ImportBatchId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("import_batch_id");
+
                     b.Property<DateTime>("InvoiceDueMonth")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("invoice_due_month");
@@ -61,6 +70,11 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnName("paid_on");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("OwnerUserId", "AccountId", "ExternalId")
+                        .IsUnique();
 
                     b.HasIndex("OwnerUserId", "CreditCardId", "InvoiceDueMonth");
 
@@ -199,6 +213,10 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("batch_id");
 
+                    b.Property<Guid?>("CardPaymentId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("card_payment_id");
+
                     b.Property<string>("Category")
                         .HasMaxLength(60)
                         .HasColumnType("varchar(60)")
@@ -218,6 +236,20 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Included")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("included");
+
+                    b.Property<Guid?>("InvoiceCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("invoice_card_id");
+
+                    b.Property<DateTime?>("InvoiceDueMonth")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("invoice_due_month");
+
+                    b.Property<bool>("InvoicePayment")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false)
+                        .HasColumnName("invoice_payment");
 
                     b.Property<int>("Number")
                         .HasColumnType("int")

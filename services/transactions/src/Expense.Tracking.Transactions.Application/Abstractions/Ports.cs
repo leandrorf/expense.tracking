@@ -75,6 +75,13 @@ public interface ICardPaymentRepository
     Task AddAsync(CardPayment payment, CancellationToken cancellationToken);
 
     void Remove(CardPayment payment);
+
+    /// <summary>INV-11: quais das chaves externas ja viraram pagamento de fatura na conta (deduplicacao da importacao).</summary>
+    Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
+        Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);
+
+    /// <summary>INV-11: pagamentos do dono que ainda existem com este lote de origem.</summary>
+    Task<IReadOnlyList<CardPayment>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken);
 }
 
 public interface IUnitOfWork
@@ -119,6 +126,9 @@ public interface IAccountsClient
 
     /// <summary>INV-6: se a conta esta ativa, ou <c>null</c> se ela nao existe ou nao pertence ao usuario.</summary>
     Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken);
+
+    /// <summary>INV-11: cartoes ativos da conta (vazio se nenhum), para sugerir a fatura paga no extrato.</summary>
+    Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken);
 }
 
 /// <summary>
