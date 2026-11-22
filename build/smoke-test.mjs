@@ -295,7 +295,7 @@ async function main() {
     `POST /api/transactions em 3x no cartao (status ${parcelRes.status}, parcelas=${parcel.installments}); Pix parcelado = ${pixParcel.status}`);
   if (parcel.id) await fetch(`${GATEWAY}/api/transactions/${parcel.id}`, { method: 'DELETE', headers: auth });
 
-  // 18) Exportacao contabil PJ (CTB-2): ZIP com o lancamentos.csv do mes, so da conta PJ.
+  // 18) Exportacao contabil PJ (CTB-2/CTB-3): ZIP com lancamentos, pagamentos de fatura e resumo do mes.
   const pjRes = await fetch(`${GATEWAY}/api/accounts`, {
     method: 'POST', headers: auth,
     body: JSON.stringify({ name: `PJ E2E ${Date.now()}`, scope: 'Business', taxId: '11.222.333/0001-81' }),
@@ -311,16 +311,32 @@ async function main() {
   });
   const exportRes = await fetch(`${GATEWAY}/api/transactions/accounting-export?month=${month}&accountId=${pj.id}`, { headers: auth });
   const zip = Buffer.from(await exportRes.arrayBuffer());
-  // Primeiro arquivo do ZIP: cabecalho local de 30 bytes + nome + extra, depois o conteudo (deflate).
-  const [nameLength, extraLength, size] = [zip.readUInt16LE(26), zip.readUInt16LE(28), zip.readUInt32LE(18)];
-  const csvName = zip.subarray(30, 30 + nameLength).toString();
-  const body = zip.subarray(30 + nameLength + extraLength, 30 + nameLength + extraLength + size);
+  // Cada arquivo do ZIP: cabecalho local de 30 bytes + nome + extra, depois o conteudo (deflate).
   const { inflateRawSync } = await import('node:zlib');
-  const csv = zip.readUInt16LE(8) === 8 ? inflateRawSync(body).toString('utf8') : body.toString('utf8');
-  ok(exportRes.status === 200 && csvName === 'lancamentos.csv' && csv.startsWith('﻿Data;Descrição')
+  const files = {};
+  for (let at = 0; exportRes.status === 200 && zip.readUInt32LE(at) === 0x04034b50;) {
+    const [nameLength, extraLength, size] = [zip.readUInt16LE(at + 26), zip.readUInt16LE(at + 28), zip.readUInt32LE(at + 18)];
+    const start = at + 30 + nameLength + extraLength;
+    const body = zip.subarray(start, start + size);
+    files[zip.subarray(at + 30, at + 30 + nameLength).toString()] =
+      (zip.readUInt16LE(at + 8) === 8 ? inflateRawSync(body) : body).toString('utf8');
+    at = start + size;
+  }
+  const csv = files['lancamentos.csv'] ?? '';
+  ok(exportRes.status === 200 && csv.startsWith('﻿Data;Descrição')
     && csv.includes('"Smoke contábil; NF 1";Software;;Despesa;-1234,56;BRL;Boleto;;1;') && csv.includes('11.222.333/0001-81')
+    && files['pagamentos-fatura.csv']?.startsWith('﻿Data;Cartão;Fatura')
+    && files['resumo.csv']?.includes('BRL;Total;;0,00;1234,56;-1234,56')
     && exportRes.headers.get('content-disposition')?.includes(`contabil-11222333000181-${month}.zip`),
-    `GET /api/transactions/accounting-export devolve o ZIP do mes PJ (status ${exportRes.status}, ${csvName})`);
+    `GET /api/transactions/accounting-export devolve o ZIP do mes PJ (status ${exportRes.status}, ${Object.keys(files).join(', ')})`);
+  // O resumo do ZIP bate com o Resumo da conta PJ no reporting (a projecao chega alguns segundos depois).
+  let pjSummary = {};
+  for (let i = 0; i < 30 && pjSummary.totalExpense !== 1234.56; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    pjSummary = await (await fetch(`${GATEWAY}/api/reports/summary?accountId=${pj.id}`, { headers: auth })).json();
+  }
+  ok(pjSummary.totalExpense === 1234.56 && pjSummary.totalIncome === 0,
+    `resumo do ZIP bate com GET /api/reports/summary da conta PJ (saidas ${pjSummary.totalExpense})`);
   const pfExport = await fetch(`${GATEWAY}/api/transactions/accounting-export?month=${month}&accountId=${account.id}`, { headers: auth });
   ok(pfExport.status === 400, `exportacao contabil de conta PF responde 400 (status ${pfExport.status})`);
 

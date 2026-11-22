@@ -8,8 +8,8 @@ using Expense.Tracking.Transactions.Application.Abstractions;
 namespace Expense.Tracking.Transactions.IntegrationTests;
 
 /// <summary>
-/// CTB-2 (ADR-0006): <c>GET /transactions/accounting-export</c> devolve um ZIP com o
-/// <c>lancamentos.csv</c> do mes, so com contas PJ.
+/// CTB-2 e CTB-3 (ADR-0006): <c>GET /transactions/accounting-export</c> devolve um ZIP com
+/// lancamentos, pagamentos de fatura e resumo do mes, so com contas PJ.
 /// </summary>
 public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : IClassFixture<TransactionsApiFactory>
 {
@@ -59,12 +59,12 @@ public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : I
         installments,
     };
 
-    private static async Task<string[]> CsvLinesAsync(HttpResponseMessage response)
+    private static async Task<string[]> CsvLinesAsync(HttpResponseMessage response, string file = "lancamentos.csv")
     {
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var zip = new ZipArchive(await response.Content.ReadAsStreamAsync());
-        var entry = Assert.Single(zip.Entries);
-        Assert.Equal("lancamentos.csv", entry.FullName);
+        Assert.Equal(["lancamentos.csv", "pagamentos-fatura.csv", "resumo.csv"], zip.Entries.Select(e => e.FullName));
+        var entry = zip.GetEntry(file)!;
         using var reader = new StreamReader(entry.Open(), new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false);
         var text = await reader.ReadToEndAsync();
         Assert.StartsWith("﻿", text);
@@ -101,6 +101,61 @@ public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : I
             "05/10/2026;'=cmd|' /C calc'!A0;Geral;;Despesa;-10,00;BRL;Pix;;1;Empresa;12.345.678/0001-95;;digitado",
             "20/10/2026;Cliente A;Geral;;Receita;5000,00;BRL;Pix;;1;Empresa;12.345.678/0001-95;NF 12;digitado",
         ], await CsvLinesAsync(response));
+    }
+
+    [Fact]
+    public async Task Package_HasThePaymentsWithABusinessSide_AndTheSummaryByCurrencyAndCategory()
+    {
+        var owner = Guid.NewGuid();
+        var (business, personal) = GivenAccounts();
+        var (businessCard, personalCard) = (Guid.NewGuid(), Guid.NewGuid());
+        _factory.AccountsClient.Cards.AddRange(
+        [
+            new CardInfo(businessCard, business.Id, "Corporativo", "4321"),
+            new CardInfo(personalCard, personal.Id, "Pessoal", "1111"),
+        ]);
+        var client = ClientFor(owner);
+
+        await PostAsync(client, Tx(business.Id, "Cliente A", 5000m, "2026-10-20", type: "Income"));
+        await PostAsync(client, Tx(business.Id, "Licenca", 300m, "2026-10-02"));
+        await PostAsync(client, new
+        {
+            accountId = business.Id, type = "Expense", paymentMethod = "Pix", description = "Nuvem", category = "Software",
+            amount = 120.5m, currency = "BRL", occurredOn = "2026-10-09",
+        });
+        await PostAsync(client, new
+        {
+            accountId = business.Id, type = "Expense", paymentMethod = "Pix", description = "SaaS", category = "Software",
+            amount = 10m, currency = "USD", occurredOn = "2026-10-10",
+        });
+
+        async Task Pay(Guid card, Guid from, decimal amount, string paidOn) => Assert.Equal(HttpStatusCode.Created,
+            (await client.PostAsJsonAsync("/transactions/card-payments", new
+            {
+                creditCardId = card, invoiceDueMonth = "2026-10", accountId = from, amount, paidOn,
+            })).StatusCode);
+        await Pay(businessCard, personal.Id, 800m, "2026-10-17");   // cartao PJ pago pela conta PF: entra
+        await Pay(personalCard, business.Id, 150m, "2026-10-12");   // cartao PF pago pela conta PJ: entra
+        await Pay(personalCard, personal.Id, 999m, "2026-10-17");   // so PF: fica de fora
+        await Pay(businessCard, business.Id, 70m, "2026-11-01");    // outro mes: fica de fora
+
+        var response = await client.GetAsync($"{Route}?month=2026-10");
+
+        Assert.Equal(
+        [
+            "Data;Cartão;Fatura;Conta de origem;CNPJ;Valor;Moeda",
+            "12/10/2026;Pessoal final 1111;10/2026;Empresa;12.345.678/0001-95;150,00;BRL",
+            "17/10/2026;Corporativo final 4321;10/2026;Pessoal;;800,00;BRL",
+        ], await CsvLinesAsync(response, "pagamentos-fatura.csv"));
+        Assert.Equal(
+        [
+            "Moeda;Categoria;Conta contábil;Entradas;Saídas;Saldo",
+            "BRL;Geral;;5000,00;300,00;4700,00",
+            "BRL;Software;;0,00;120,50;-120,50",
+            "BRL;Total;;5000,00;420,50;4579,50",
+            "USD;Software;;0,00;10,00;-10,00",
+            "USD;Total;;0,00;10,00;-10,00",
+        ], await CsvLinesAsync(await client.GetAsync($"{Route}?month=2026-10"), "resumo.csv"));
     }
 
     [Fact]

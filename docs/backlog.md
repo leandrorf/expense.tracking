@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 e CTB-2 feitas; próxima: CTB-3)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 a CTB-3 feitas; próxima: CTB-4)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1231,12 +1231,20 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     `account.not_found` (404). O log registra só mês e quantidades. Smoke passo 18 (baixa o ZIP pelo
     gateway, abre o CSV e confere; conta PF = 400). Smoke com 37 passos.
   - Estimativa: 5 · **Must** · Dependências: CTB-1
-- 🔵 **CTB-3** Pacote do mês: pagamentos de fatura e resumo por categoria.
+- ✅ **CTB-3** Pacote do mês: pagamentos de fatura e resumo por categoria. → `pagamentos-fatura.csv` e `resumo.csv` no ZIP.
   - *Dado* pagamentos de fatura no mês com cartão ou conta de origem PJ, *quando* exporto, *então* o ZIP traz,
     além dos lançamentos, um CSV de pagamentos de fatura (data, cartão, fatura paga, conta de origem,
     valor) e um CSV de resumo por moeda e categoria (entradas, saídas, saldo, e a linha de total).
   - *Dado* o mês exportado, *quando* comparo o resumo com o Resumo PJ da SPA no mesmo mês, *então* os
     totais de entradas e saídas batem.
+  - Feito assim: o ZIP traz `lancamentos.csv`, `pagamentos-fatura.csv` e `resumo.csv`, nessa ordem.
+    Pagamentos pela data do pagamento (`ICardPaymentRepository.ListPaidBetweenAsync`); entra o que
+    tem o cartão ou a conta de origem entre as contas exportadas (com `accountId`, só aquela). Colunas:
+    Data, Cartão, Fatura (`mm/aaaa` do vencimento), Conta de origem, CNPJ da conta de origem (vazio se
+    PF), Valor e Moeda. Resumo por moeda e categoria (ordem alfabética), com Entradas, Saídas
+    (positivas), Saldo e uma linha "Total" por moeda; a compra parcelada conta inteira. Smoke passo 18
+    lê os três arquivos do ZIP e confere que o resumo bate com `GET /reports/summary` da conta PJ.
+    Smoke com 38 passos.
   - Estimativa: 3 · **Must** · Dependências: CTB-2
 - 🔵 **CTB-4** "Exportar para o contador" na SPA.
   - *Dado* o usuário logado com conta PJ, *quando* abre a exportação, *então* escolhe o mês (padrão: o

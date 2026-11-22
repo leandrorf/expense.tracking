@@ -56,4 +56,12 @@ internal sealed class CardPaymentRepository(TransactionsDbContext dbContext) : I
         await dbContext.CardPayments
             .Where(p => p.OwnerUserId == ownerUserId && p.ImportBatchId == importBatchId)
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<CardPayment>> ListPaidBetweenAsync(
+        Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        await dbContext.CardPayments
+            .Where(p => p.OwnerUserId == ownerUserId && p.PaidOn >= from && p.PaidOn <= to)
+            .OrderBy(p => p.PaidOn)
+            .ThenBy(p => p.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
 }

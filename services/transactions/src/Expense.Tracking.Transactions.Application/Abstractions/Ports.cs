@@ -82,6 +82,9 @@ public interface ICardPaymentRepository
 
     /// <summary>INV-11: pagamentos do dono que ainda existem com este lote de origem.</summary>
     Task<IReadOnlyList<CardPayment>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken);
+
+    /// <summary>CTB-3: pagamentos do dono feitos entre as datas (inclusive), pela data do pagamento.</summary>
+    Task<IReadOnlyList<CardPayment>> ListPaidBetweenAsync(Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
 }
 
 public interface IUnitOfWork
