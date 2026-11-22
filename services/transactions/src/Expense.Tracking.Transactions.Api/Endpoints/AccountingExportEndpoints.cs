@@ -12,7 +12,7 @@ public static class AccountingExportEndpoints
 
     public static IEndpointRouteBuilder MapAccountingExportEndpoints(this IEndpointRouteBuilder app)
     {
-        // CTB-2 (ADR-0006, decisao 9): o movimento PJ do mes num ZIP, para o contador.
+        // CTB-2/CTB-3 (ADR-0006, decisao 9): o movimento PJ do mes num ZIP, para o contador.
         app.MapGet("/transactions/accounting-export", async (
             HttpContext http, ExportAccountingHandler handler, ILoggerFactory loggers, CancellationToken ct,
             string? month, Guid? accountId) =>
@@ -36,8 +36,8 @@ public static class AccountingExportEndpoints
 
             // So o mes e as quantidades: o conteudo do arquivo nunca vai para log ou trace.
             loggers.CreateLogger("AccountingExport").LogInformation(
-                "Exportacao contabil de {Month}: {Accounts} conta(s), {Lines} lancamento(s).",
-                month, result.Value.Accounts, result.Value.Lines);
+                "Exportacao contabil de {Month}: {Accounts} conta(s), {Lines} lancamento(s), {Payments} pagamento(s) de fatura.",
+                month, result.Value.Accounts, result.Value.Lines, result.Value.Payments);
             return Results.File(result.Value.Content, "application/zip", result.Value.FileName);
         })
         .WithTags("AccountingExport")

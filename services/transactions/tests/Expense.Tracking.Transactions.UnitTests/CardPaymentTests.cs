@@ -104,6 +104,10 @@ public sealed class CardPaymentTests
 
         public Task<IReadOnlyList<CardPayment>> ListByImportBatchAsync(Guid ownerUserId, Guid importBatchId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CardPayment>>(_items.Where(p => p.OwnerUserId == ownerUserId && p.ImportBatchId == importBatchId).ToList());
+
+        public Task<IReadOnlyList<CardPayment>> ListPaidBetweenAsync(Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CardPayment>>(
+                _items.Where(p => p.OwnerUserId == ownerUserId && p.PaidOn >= from && p.PaidOn <= to).ToList());
     }
 
     private sealed class RecordingOutbox : IEventOutbox

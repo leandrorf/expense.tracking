@@ -9,15 +9,20 @@ namespace Expense.Tracking.Transactions.Application.AccountingExport;
 /// <param name="AccountId">Uma conta PJ so; nulo = todas as contas PJ do usuario.</param>
 public sealed record ExportAccountingQuery(Guid OwnerUserId, DateOnly Month, Guid? AccountId);
 
-/// <summary>O ZIP pronto para download. <c>Accounts</c> e <c>Lines</c> vao para o log, o conteudo nunca.</summary>
-public sealed record AccountingExportFile(string FileName, byte[] Content, int Accounts, int Lines);
+/// <summary>
+/// O ZIP pronto para download. <c>Accounts</c>, <c>Lines</c> e <c>Payments</c> vao para o log, o
+/// conteudo nunca.
+/// </summary>
+public sealed record AccountingExportFile(string FileName, byte[] Content, int Accounts, int Lines, int Payments);
 
 /// <summary>
-/// CTB-2 (ADR-0006): exportacao contabil do mes, so com contas PJ (ativas e inativas). Contas e
-/// cartoes vem do accounts com o token do usuario; os lancamentos, deste servico, pela data do
-/// lancamento (competencia). Nada e gravado.
+/// CTB-2 e CTB-3 (ADR-0006): exportacao contabil do mes, so com contas PJ (ativas e inativas), num
+/// ZIP com lancamentos, pagamentos de fatura e resumo. Contas e cartoes vem do accounts com o token
+/// do usuario; os lancamentos, deste servico, pela data do lancamento (competencia), e os
+/// pagamentos, pela data do pagamento. Nada e gravado.
 /// </summary>
-public sealed class ExportAccountingHandler(ITransactionRepository transactions, IAccountsClient accountsClient)
+public sealed class ExportAccountingHandler(
+    ITransactionRepository transactions, ICardPaymentRepository cardPayments, IAccountsClient accountsClient)
 {
     public static readonly Error NoBusinessAccount = Error.Validation(
         "accounting_export.no_business_account", "A exportacao contabil e so para contas PJ, e o usuario nao tem nenhuma.");
@@ -67,9 +72,29 @@ public sealed class ExportAccountingHandler(ITransactionRepository transactions,
                 Imported: t.ImportBatchId is not null || t.ExternalId is not null))));
         }
 
-        var sheet = AccountingEntriesSheet.Write(entries.OrderBy(e => e.Date).ThenBy(e => e.CreatedAt).Select(e => e.Entry));
-        return new AccountingExportFile(
-            FileName(selected, query.Month), Zip((AccountingEntriesSheet.FileName, sheet)), selected.Count, entries.Count);
+        var ordered = entries.OrderBy(e => e.Date).ThenBy(e => e.CreatedAt).Select(e => e.Entry).ToList();
+
+        // Pagamento entra quando o cartao ou a conta de origem e uma das contas exportadas (decisao 5).
+        var exported = selected.Select(a => a.Id).ToHashSet();
+        var accountsById = accounts.ToDictionary(a => a.Id);
+        var payments = (await cardPayments.ListPaidBetweenAsync(query.OwnerUserId, from, to, cancellationToken))
+            .Where(p => exported.Contains(p.AccountId)
+                || (cards.TryGetValue(p.CreditCardId, out var card) && exported.Contains(card.AccountId)))
+            .Select(p => new AccountingPayment(
+                p.PaidOn,
+                CardName(p.CreditCardId, cards) ?? string.Empty,
+                p.InvoiceDueMonth,
+                accountsById.TryGetValue(p.AccountId, out var origin) ? origin.Name : string.Empty,
+                origin?.TaxId,
+                p.Amount,
+                p.Currency))
+            .ToList();
+
+        var content = Zip(
+            (AccountingEntriesSheet.FileName, AccountingEntriesSheet.Write(ordered)),
+            (AccountingPaymentsSheet.FileName, AccountingPaymentsSheet.Write(payments)),
+            (AccountingSummarySheet.FileName, AccountingSummarySheet.Write(ordered)));
+        return new AccountingExportFile(FileName(selected, query.Month), content, selected.Count, ordered.Count, payments.Count);
     }
 
     /// <summary><c>contabil-&lt;CNPJ&gt;-&lt;aaaa-mm&gt;.zip</c>; sem o CNPJ quando as contas tem mais de um.</summary>
