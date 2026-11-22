@@ -36,6 +36,12 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
         return await q.OrderByDescending(t => t.OccurredOn).ThenByDescending(t => t.CreatedAtUtc).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Transaction>> ListByIdsAsync(
+        Guid ownerUserId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+        await dbContext.Transactions
+            .Where(t => t.OwnerUserId == ownerUserId && ids.Contains(t.Id))
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(Transaction transaction, CancellationToken cancellationToken) =>
         await dbContext.Transactions.AddAsync(transaction, cancellationToken);
 

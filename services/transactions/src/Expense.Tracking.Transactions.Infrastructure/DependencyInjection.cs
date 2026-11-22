@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<GetTransactionHandler>();
         services.AddScoped<DeleteTransactionHandler>();
         services.AddScoped<UpdateTransactionHandler>();
+        services.AddScoped<RecategorizeTransactionsHandler>();
 
         // INV-6: pagamentos de fatura (ADR-0005, decisao 6).
         services.AddScoped<ICardPaymentRepository, CardPaymentRepository>();

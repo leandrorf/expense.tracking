@@ -22,6 +22,9 @@ public interface ITransactionRepository
 
     Task<IReadOnlyList<Transaction>> ListAsync(TransactionQuery query, CancellationToken cancellationToken);
 
+    /// <summary>LNC-7: os lancamentos do dono com estes ids (id de outro dono ou inexistente fica de fora).</summary>
+    Task<IReadOnlyList<Transaction>> ListByIdsAsync(Guid ownerUserId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+
     Task AddAsync(Transaction transaction, CancellationToken cancellationToken);
 
     void Remove(Transaction transaction);

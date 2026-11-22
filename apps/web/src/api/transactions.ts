@@ -67,4 +67,24 @@ export const transactionsApi = {
     apiFetch<Transaction>(`/api/transactions/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
 
   remove: (id: string) => apiFetch<void>(`/api/transactions/${id}`, { method: 'DELETE' }),
+
+  /** LNC-7: troca a categoria dos selecionados, cada um com a versão que a lista leu. */
+  recategorize: (category: string, items: { id: string; version: number }[]) =>
+    apiFetch<RecategorizeResult>('/api/transactions/recategorize', {
+      method: 'POST',
+      body: JSON.stringify({ category, items }),
+    }),
 };
+
+/** LNC-7: o que aconteceu com cada lançamento do lote. */
+export interface RecategorizeResult {
+  updated: Transaction[];
+  /** Já estavam na categoria escolhida. */
+  unchanged: Transaction[];
+  /** Mudaram em outra aba depois da leitura: vêm como estão gravados, sem sobrescrever. */
+  conflicts: Transaction[];
+  /** Não existem mais (excluídos em outra aba). */
+  notFound: string[];
+  /** A regra de hoje recusa o lançamento (dado antigo). */
+  rejected: { id: string; code: string }[];
+}

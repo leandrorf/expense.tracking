@@ -143,6 +143,10 @@ public sealed class EventHandlersTests
         public Task<IReadOnlyList<Transaction>> ListAsync(TransactionQuery query, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Transaction>>(_items.Where(t => t.OwnerUserId == query.OwnerUserId).ToList());
 
+        public Task<IReadOnlyList<Transaction>> ListByIdsAsync(
+            Guid ownerUserId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Transaction>>(_items.Where(t => t.OwnerUserId == ownerUserId && ids.Contains(t.Id)).ToList());
+
         public Task AddAsync(Transaction transaction, CancellationToken cancellationToken)
         {
             _items.Add(transaction);
