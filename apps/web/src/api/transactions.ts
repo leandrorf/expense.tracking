@@ -21,6 +21,29 @@ export interface TransactionFilters {
   to?: string;
 }
 
+/** INV-6: pagamento de fatura; nunca vira lançamento. */
+export interface RegisterCardPaymentInput {
+  creditCardId: string;
+  /** Mês de vencimento da fatura paga, `yyyy-MM`. */
+  invoiceDueMonth: string;
+  accountId: string;
+  amount: number;
+  paidOn: string;
+}
+
+export interface CardPayment extends RegisterCardPaymentInput {
+  id: string;
+  currency: string;
+  createdAtUtc: string;
+}
+
+export const cardPaymentsApi = {
+  register: (input: RegisterCardPaymentInput) =>
+    apiFetch<CardPayment>('/api/transactions/card-payments', { method: 'POST', body: JSON.stringify(input) }),
+
+  remove: (id: string) => apiFetch<void>(`/api/transactions/card-payments/${id}`, { method: 'DELETE' }),
+};
+
 export const transactionsApi = {
   list: (filters: TransactionFilters = {}) => {
     const params = new URLSearchParams();

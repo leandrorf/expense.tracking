@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import type { Account, CreditCard } from '../api/types';
+import { InvoicesView } from './InvoicesView';
 
 export function CardsView() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -17,6 +18,8 @@ export function CardsView() {
   const [closingDay, setClosingDay] = useState('10');
   const [dueDay, setDueDay] = useState('17');
   const [submitting, setSubmitting] = useState(false);
+  // INV-7: cartão cujas faturas estão abertas (a aba mostra a lista ou as faturas).
+  const [invoicesOf, setInvoicesOf] = useState<CreditCard | null>(null);
 
   async function load() {
     setLoading(true);
@@ -67,6 +70,10 @@ export function CardsView() {
   }
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '—';
+
+  if (invoicesOf) {
+    return <InvoicesView card={invoicesOf} accounts={accounts} onBack={() => setInvoicesOf(null)} />;
+  }
 
   return (
     <section>
@@ -132,6 +139,9 @@ export function CardsView() {
                 </td>
                 <td>{accountName(c.accountId)}</td>
                 <td>
+                  <button className="ghost small" data-cy="card-invoices" onClick={() => setInvoicesOf(c)}>
+                    Faturas
+                  </button>
                   {c.isActive && (
                     <button className="link-danger" onClick={() => void removeCard(c.id, load, setError)}>
                       desativar
