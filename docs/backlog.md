@@ -1324,6 +1324,142 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
+## 🔵 EPIC LNC — Receita e edição de lançamentos  · *Refinado* (decisões em aberto para a ADR-0007)
+**Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
+registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
+extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
+parcelas obriga a excluir e lançar de novo, o que perde a origem de um lançamento importado e
+confunde quem já exportou o mês para o contador. Na lista, receita e gasto aparecem iguais, e as
+observações não aparecem nem podem ser digitadas.
+**Objetivo (outcome):** o usuário lança receita e gasto pelo mesmo formulário, com observações, vê na
+lista o que é entrada e o que é saída, e corrige qualquer campo de um lançamento (inclusive
+importado) sem excluí-lo. Resumo, orçamentos, fatura, previsão e exportação contábil acompanham a
+correção.
+**Métricas de sucesso:** (1) nenhuma receita precisa de importação ou API para entrar; (2) corrigir
+um lançamento não muda o id nem a origem dele (reimportar o extrato continua achando a duplicata);
+(3) depois de editar, Resumo, orçamento e fatura refletem o novo valor no mesmo tempo da projeção
+que o lançamento novo leva; (4) a jornada "lançar receita, editar gasto, conferir" passa no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → "registrar gastos e receitas pessoais e da empresa"; lacunas
+achadas nos épicos INV e CTB (o Cypress da previsão e o da exportação não conseguiram lançar receita
+pela tela). Promovido a pedido do dono do produto (2026-11-22).
+
+**Achados no código que moldam o épico:**
+- **A API já aceita receita** (`type: "Income"` em `POST /transactions`); só a SPA fixa
+  `type: 'Expense'` no envio. Receita no cartão é estorno e abate a fatura (ADR-0005, decisão 7).
+  O domínio aceita receita parcelada no cartão, o que não tem sentido para estorno.
+- **As observações existem** (`notes`, até 500 caracteres) na API e saem na exportação contábil,
+  mas o formulário e a lista da SPA não têm o campo.
+- **A lista não mostra o tipo**: receita e gasto aparecem com o mesmo valor positivo, sem cor nem
+  sinal.
+- **Não há edição.** `Transaction` tem `UpdatedAtUtc`, mas nenhum método muda o lançamento e não
+  existe `PUT`/`PATCH`. Também não há token de concorrência (só o lote de importação tem).
+- **O evento é de criação.** `TransactionRegistered` (v2) leva o estado completo e o escopo da conta;
+  na projeção do `reporting`, aplicá-lo já é um *upsert* por id. Exclusão é o `TransactionDeleted`.
+  Fatura, previsão, Resumo e orçamentos leem a projeção.
+- **O escopo PF/PJ vem da conta** e é copiado no evento. A chave externa da importação é única por
+  dono **e conta**, e o lote de importação aponta para os lançamentos que criou (desfazer apaga).
+- **A sugestão de categoria da importação** (IMP-6) usa a categoria do lançamento **criado** por
+  último com a mesma descrição (`CreatedAtUtc`), então recategorizar não ensina a importação.
+- **A exportação contábil** lê o `transactions` direto e já avisa mês alterado (CTB-6): editar um
+  lançamento de um mês exportado faz o aviso aparecer sem trabalho extra.
+
+**Decisões em aberto (para a ADR-0007, LNC-1; com a recomendação de cada uma):**
+1. **Contrato do evento de edição.** Opções: (a) evento novo `TransactionUpdated` (v1) com o estado
+   completo depois da edição, aplicado na projeção **só em linha que já existe** (como o
+   `TransactionCardDetailsResolved`); (b) reemitir `TransactionRegistered`, que a projeção já aplica
+   como *upsert*. *Recomendação: (a).* "Registrado" e "alterado" são fatos diferentes para quem lê o
+   feed, e com (b) uma edição que chegue depois da exclusão recriaria a linha na projeção.
+2. **O que pode mudar.** *Recomendação:* tipo, meio, cartão (da mesma conta), parcelas, descrição,
+   categoria, valor, moeda, data e observações, com as mesmas regras da criação. **A conta não
+   muda** (400 `transaction.account_immutable`): trocar de conta pode trocar o escopo PF/PJ, e a
+   chave da importação é por conta; quem errou a conta exclui e lança de novo. Por isso o evento não
+   precisa levar o escopo.
+3. **Lançamento importado.** *Recomendação:* editável como os outros; a chave externa e o lote são
+   preservados. Reimportar o mesmo extrato continua acusando duplicata, e desfazer a importação
+   apaga o lançamento mesmo editado (a tela avisa ao editar um importado).
+4. **Concorrência.** Opções: (a) a última gravação vence; (b) concorrência otimista: o lançamento
+   ganha `version` (inteiro), a edição manda a versão que leu e recebe 409
+   `transaction.concurrency_conflict` se ela mudou; a SPA recarrega e mostra o valor atual.
+   *Recomendação: (b)*, com o mesmo padrão do lote de importação. Duas abas, ou celular e
+   computador, editando o mesmo lançamento não devem sobrescrever uma à outra em silêncio.
+5. **Forma da rota.** Opções: (a) `PUT /transactions/{id}` com o lançamento inteiro (mesmo corpo da
+   criação, sem a conta, mais `version`); (b) `PATCH` com só o que mudou. *Recomendação: (a).* Reusa
+   a validação da criação e o formulário da SPA; `PATCH` com regras cruzadas (meio × cartão ×
+   parcelas) fica ambíguo. `expenses.write`, pela rota existente do gateway.
+6. **Receita na SPA.** *Recomendação:* o formulário ganha o tipo (Gasto/Receita, padrão Gasto). A
+   lista mostra o tipo pelo sinal e pela cor do valor (+ verde, − vermelho) e as observações abaixo
+   da descrição. Receita **não** é parcelada: o domínio passa a recusar `installments > 1` em
+   receita (400 `transaction.installments_not_allowed`, o mesmo código de hoje para meio que não é
+   cartão). Receita no cartão continua sendo estorno.
+7. **Sugestão de categoria.** *Recomendação:* a sugestão da importação passa a considerar a última
+   **alteração** (`UpdatedAtUtc`), não só a criação: recategorizar um lançamento ensina a próxima
+   importação.
+8. **Histórico e lote.** *Recomendação:* sem trilha de auditoria por lançamento nesta versão (o feed
+   de eventos guarda a sequência de estados para quem precisar). Recategorizar vários lançamentos
+   de uma vez (útil depois de importar) fica como **Could**.
+
+- 🔵 **LNC-1** ADR: edição de lançamentos e receita na SPA.
+  - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0007 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **LNC-2** Receita e observações no formulário e na lista.
+  - *Dado* o formulário de lançamento, *quando* escolho "Receita", preencho e envio, *então* o
+    lançamento entra como receita e aparece na lista com sinal + e em verde (gasto: − e vermelho).
+  - *Dado* um lançamento com observações, *quando* olho a lista, *então* elas aparecem abaixo da
+    descrição; *e* o formulário tem o campo (até 500 caracteres).
+  - *Dado* uma receita no cartão, *quando* escolho 2 parcelas ou mais, *então* a API responde 400
+    `transaction.installments_not_allowed` (e o formulário nem oferece parcelas para receita).
+  - Estimativa: 3 · **Must** · Dependências: LNC-1
+- 🔵 **LNC-3** Editar lançamento na API.
+  - *Dado* um lançamento meu, *quando* envio `PUT /transactions/{id}` com os campos e a `version`
+    que li, *então* ele muda com as regras da criação, a `version` sobe, o id e a origem
+    (chave externa e lote) ficam, e um `TransactionUpdated` sai no outbox no mesmo commit.
+  - *Dado* uma `version` antiga, *quando* edito, *então* recebo 409
+    `transaction.concurrency_conflict` e nada muda.
+  - *Dado* uma troca de conta, *quando* edito, *então* recebo 400 `transaction.account_immutable`;
+    lançamento de outro usuário, 404; sem `expenses.write`, 403.
+  - *Dado* que recategorizei um lançamento, *quando* importo um extrato com a mesma descrição,
+    *então* a sugestão é a categoria nova.
+  - Estimativa: 5 · **Must** · Dependências: LNC-1
+- 🔵 **LNC-4** Projeção aplica a edição.
+  - *Dado* um `TransactionUpdated`, *quando* o `reporting` o lê, *então* a linha da projeção fica
+    com o estado novo (tipo, meio, cartão, parcelas, categoria, valor, data, descrição) e Resumo,
+    orçamentos, fatura e previsão refletem a mudança; *dado* que o lançamento já foi excluído,
+    *então* o evento é ignorado (não recria a linha).
+  - *Dado* uma compra em 3x editada para 6x, *quando* abro a fatura, *então* as parcelas se
+    redistribuem nas faturas certas.
+  - Estimativa: 3 · **Must** · Dependências: LNC-3
+- 🔵 **LNC-5** Editar na SPA.
+  - *Dado* a lista de lançamentos, *quando* clico em "editar", *então* o formulário abre preenchido
+    (sem trocar a conta), salvo e a lista mostra o lançamento alterado; "cancelar" volta sem mudar.
+  - *Dado* um lançamento importado, *quando* abro a edição, *então* vejo o aviso de que desfazer a
+    importação ainda o apaga.
+  - *Dado* que o lançamento mudou em outra aba, *quando* salvo, *então* vejo "Este lançamento mudou
+    enquanto você editava" com os valores atuais, sem sobrescrever.
+  - Estimativa: 3 · **Must** · Dependências: LNC-3
+- 🔵 **LNC-6** E2E Cypress: receita, edição e reflexo nos relatórios.
+  - *Dado* uma conta com orçamento e um cartão, *quando* lanço uma receita e edito um gasto (valor,
+    categoria e parcelas) pela SPA, *então* Resumo, orçamento e fatura mostram os valores novos.
+  - Estimativa: 3 · **Must** · Dependências: LNC-2, LNC-4, LNC-5
+- 🔵 **LNC-7** Recategorizar em lote.
+  - *Dado* vários lançamentos selecionados na lista, *quando* escolho uma categoria e confirmo,
+    *então* todos mudam de categoria de uma vez (um `TransactionUpdated` por lançamento), e os que
+    mudaram em outra aba são informados, sem sobrescrever.
+  - Estimativa: 3 · **Could** · Dependências: LNC-5
+
+**Fora do escopo (Won't, nesta versão):** trocar a conta de um lançamento; histórico/auditoria de
+alterações na tela; editar pagamento de fatura (continua excluir e registrar de novo); desfazer
+exclusão; lançamentos recorrentes (candidato a épico próprio); edição offline.
+
+**Priorização (MoSCoW):** Must = LNC-1 a LNC-6 (19 pts): receita pela tela e edição que os
+relatórios acompanham, provada ponta a ponta. Could = LNC-7 (3 pts). Total: 22 pts.
+
+**Ordem sugerida:** LNC-1 → LNC-2 → LNC-3 → LNC-4 → LNC-5 → LNC-6 (fecha o Must) → LNC-7.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
+- (Receita e edição de lançamentos viraram o épico LNC, em 2026-11-22.)
+- Lançamentos recorrentes (salário, aluguel, assinaturas): a previsão de caixa subestima o futuro
+  sem eles (ADR-0005, consequências).
