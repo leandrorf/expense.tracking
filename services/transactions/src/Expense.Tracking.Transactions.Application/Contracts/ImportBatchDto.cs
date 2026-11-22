@@ -55,10 +55,16 @@ public sealed record ImportLineDto(
     string? PaymentMethod,
     string? Category,
     string? Problem,
-    Guid? TransactionId)
+    Guid? TransactionId,
+    bool InvoicePayment,
+    Guid? InvoiceCardId,
+    string? InvoiceDueMonth,
+    Guid? CardPaymentId)
 {
     public static ImportLineDto From(ImportLine line) =>
         new(line.Id, line.Number, line.Status.ToString(), line.Included, line.OccurredOn, line.Type?.ToString(),
             line.Amount, line.Description, line.PaymentMethod?.ToString(), line.Category, line.Problem,
-            line.TransactionId);
+            line.TransactionId, line.InvoicePayment, line.InvoiceCardId,
+            line.InvoiceDueMonth?.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture),
+            line.CardPaymentId);
 }

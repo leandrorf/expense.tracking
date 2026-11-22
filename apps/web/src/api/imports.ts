@@ -16,6 +16,12 @@ export interface ImportLine {
   category: string | null;
   problem: string | null;
   transactionId: string | null;
+  /** INV-11: saída de extrato sugerida (ou marcada) como pagamento de fatura; não vira gasto. */
+  invoicePayment: boolean;
+  invoiceCardId: string | null;
+  /** Fatura paga, pelo mês de vencimento (`yyyy-MM`). */
+  invoiceDueMonth: string | null;
+  cardPaymentId: string | null;
 }
 
 export interface ImportSummary {
@@ -91,6 +97,9 @@ export interface ImportLineDecision {
   included: boolean;
   category: string | null;
   paymentMethod: string | null;
+  invoicePayment?: boolean;
+  invoiceCardId?: string | null;
+  invoiceDueMonth?: string | null;
 }
 
 /** Mesmo limite do servidor e do gateway: recusar antes de enviar poupa o upload inteiro. */

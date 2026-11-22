@@ -59,6 +59,10 @@ internal sealed class ImportLineConfiguration : IEntityTypeConfiguration<ImportL
         builder.Property(l => l.Included).HasColumnName("included").IsRequired();
         builder.Property(l => l.Problem).HasColumnName("problem").HasMaxLength(200);
         builder.Property(l => l.TransactionId).HasColumnName("transaction_id");
+        builder.Property(l => l.InvoicePayment).HasColumnName("invoice_payment").IsRequired().HasDefaultValue(false);
+        builder.Property(l => l.InvoiceCardId).HasColumnName("invoice_card_id");
+        builder.Property(l => l.InvoiceDueMonth).HasColumnName("invoice_due_month");
+        builder.Property(l => l.CardPaymentId).HasColumnName("card_payment_id");
 
         builder.HasIndex(l => new { l.BatchId, l.Number }).IsUnique();
     }

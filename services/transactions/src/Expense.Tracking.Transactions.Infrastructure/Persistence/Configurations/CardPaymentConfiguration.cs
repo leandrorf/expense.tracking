@@ -1,4 +1,5 @@
 using Expense.Tracking.Transactions.Domain.CardPayments;
+using Expense.Tracking.Transactions.Domain.Imports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,7 +22,12 @@ internal sealed class CardPaymentConfiguration : IEntityTypeConfiguration<CardPa
         builder.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         builder.Property(p => p.PaidOn).HasColumnName("paid_on").IsRequired();
         builder.Property(p => p.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(p => p.ExternalId).HasColumnName("external_id").HasMaxLength(ImportLine.ExternalIdMaxLength);
+        builder.Property(p => p.ImportBatchId).HasColumnName("import_batch_id");
 
         builder.HasIndex(p => new { p.OwnerUserId, p.CreditCardId, p.InvoiceDueMonth });
+        // INV-11: a mesma linha do extrato nao vira dois pagamentos (duas confirmacoes em paralelo).
+        builder.HasIndex(p => new { p.OwnerUserId, p.AccountId, p.ExternalId }).IsUnique();
+        builder.HasIndex(p => p.ImportBatchId);
     }
 }

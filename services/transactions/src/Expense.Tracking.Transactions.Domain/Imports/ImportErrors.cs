@@ -83,6 +83,17 @@ public static class ImportErrors
         $"Toda linha incluida precisa de categoria. Faltam {lines.Count}.")
         with { Metadata = new Dictionary<string, object?> { ["lines"] = lines } };
 
+    /// <summary>INV-11: linha incluida como pagamento de fatura sem cartao ou sem mes; numeros em <c>Metadata["lines"]</c>.</summary>
+    public static Error InvoicesRequired(IReadOnlyList<int> lines) => Error.Validation(
+        "import.invoice_required",
+        $"Todo pagamento de fatura precisa do cartao e do mes da fatura. Faltam {lines.Count}.")
+        with { Metadata = new Dictionary<string, object?> { ["lines"] = lines } };
+
+    /// <summary>INV-11: pagamento de fatura so em saida de extrato de conta.</summary>
+    public static Error LineInvoicePaymentInvalid(int number) => Error.Validation(
+        "import.invoice_payment_invalid",
+        $"A linha {number} nao pode ser pagamento de fatura: so saidas de extrato de conta.");
+
     public static readonly Error MultipleStatements = Error.Validation(
         "import.multiple_statements",
         "O arquivo tem mais de uma conta ou cartao. Exporte um extrato ou fatura por vez.");

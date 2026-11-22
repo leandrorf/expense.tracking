@@ -3,6 +3,8 @@ using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Transactions;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
+using Expense.Tracking.Transactions.Domain.Imports;
+
 namespace Expense.Tracking.Transactions.UnitTests;
 
 /// <summary>EVT-1: os casos de uso gravam os eventos certos no outbox, no mesmo commit da mudanca.</summary>
@@ -197,6 +199,9 @@ public sealed class EventHandlersTests
         public Task<bool> CreditCardExistsAsync(Guid creditCardId, CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) => Task.FromResult<bool?>(true);
+
+        public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<InvoiceCardHint>>([]);
     }
 
     private sealed class StubFeed(params FeedEvent[] events) : IEventFeed

@@ -808,3 +808,16 @@ table.data td .sub {
   font-size: 0.85rem;
   color: #cbd5e1;
 }
+
+/* ---- Pagamento de fatura na prévia da importação (INV-11) ---- */
+.invoice-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.invoice-choice select,
+.invoice-choice input {
+  min-width: 0;
+}

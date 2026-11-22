@@ -193,7 +193,7 @@ public sealed class ImportBatchTests
         Assert.Equal(ImportBatchStatus.Confirmed, batch.Status);
         Assert.Equal(Now, batch.ConfirmedAtUtc);
 
-        var (expense, income) = (result.Value[0], result.Value[1]);
+        var (expense, income) = (result.Value.Transactions[0], result.Value.Transactions[1]);
         Assert.Equal((TransactionType.Expense, 18.50m, "Alimentacao", PaymentMethod.Pix), (expense.Type, expense.Amount, expense.Category, expense.PaymentMethod));
         Assert.Equal((TransactionType.Income, PaymentMethod.BankTransfer), (income.Type, income.PaymentMethod));
         Assert.Equal(("A", batch.Id, Account, Owner), (expense.ExternalId, expense.ImportBatchId, expense.AccountId, expense.OwnerUserId));
@@ -214,7 +214,7 @@ public sealed class ImportBatchTests
 
         var created = batch.Confirm(
             [Category(batch.Lines[0], "Software"), Category(batch.Lines[1], "Software", included: true)],
-            new HashSet<string>(), Now).Value;
+            new HashSet<string>(), Now).Value.Transactions;
 
         Assert.Equal(2, created.Count);
         Assert.All(created, t => Assert.Equal((PaymentMethod.CreditCard, card), (t.PaymentMethod, t.CreditCardId!.Value)));
@@ -247,7 +247,7 @@ public sealed class ImportBatchTests
 
         var created = batch.Confirm(
             [Category(batch.Lines[0], "Mercado"), new ImportLineDecision(batch.Lines[1].Id, false, null, null)],
-            new HashSet<string>(), Now).Value;
+            new HashSet<string>(), Now).Value.Transactions;
 
         Assert.Single(created);
         Assert.Equal(ImportLineStatus.New, batch.Lines[1].Status);
@@ -262,7 +262,7 @@ public sealed class ImportBatchTests
             StatementLine.Valid(2, Day, -1m, "B", "B")));
 
         var created = batch.Confirm(
-            [Category(batch.Lines[0], "X"), Category(batch.Lines[1], "X")], new HashSet<string> { "B" }, Now).Value;
+            [Category(batch.Lines[0], "X"), Category(batch.Lines[1], "X")], new HashSet<string> { "B" }, Now).Value.Transactions;
 
         Assert.Single(created);
         Assert.Equal(ImportLineStatus.Duplicate, batch.Lines[1].Status);
