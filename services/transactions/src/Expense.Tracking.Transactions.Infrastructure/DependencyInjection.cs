@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Application.AccountingExport;
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.CardPayments;
 using Expense.Tracking.Transactions.Application.Events;
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<RegisterCardPaymentHandler>();
         services.AddScoped<ListCardPaymentsHandler>();
         services.AddScoped<DeleteCardPaymentHandler>();
+        services.AddScoped<ExportAccountingHandler>();
 
         // IMP-3/IMP-4: leitura de CSV, lotes e previa da importacao (ADR-0004).
         services.AddSingleton<ICsvTableReader, CsvHelperTableReader>();

@@ -202,6 +202,12 @@ public sealed class EventHandlersTests
 
         public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<InvoiceCardHint>>([]);
+
+        public Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AccountInfo>>([]);
+
+        public Task<IReadOnlyList<CardInfo>> ListCardsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CardInfo>>([]);
     }
 
     private sealed class StubFeed(params FeedEvent[] events) : IEventFeed

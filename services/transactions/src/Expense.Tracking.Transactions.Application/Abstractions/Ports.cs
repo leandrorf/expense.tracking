@@ -129,7 +129,24 @@ public interface IAccountsClient
 
     /// <summary>INV-11: cartoes ativos da conta (vazio se nenhum), para sugerir a fatura paga no extrato.</summary>
     Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken);
+
+    /// <summary>CTB-2: todas as contas do usuario, ativas e inativas (exportacao contabil).</summary>
+    Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken);
+
+    /// <summary>CTB-2: todos os cartoes do usuario, ativos e inativos (exportacao contabil).</summary>
+    Task<IReadOnlyList<CardInfo>> ListCardsAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>CTB-2: o que a exportacao contabil usa da conta. <c>Scope</c> e "Personal" ou "Business".</summary>
+public sealed record AccountInfo(Guid Id, string Name, string Scope, string? TaxId, string Currency, bool IsActive)
+{
+    public const string BusinessScope = "Business";
+
+    public bool IsBusiness => string.Equals(Scope, BusinessScope, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>CTB-2: o que a exportacao contabil usa do cartao.</summary>
+public sealed record CardInfo(Guid Id, Guid AccountId, string Label, string LastFourDigits);
 
 /// <summary>
 /// IMP-3: separa os bytes de um CSV em celulas (codificacao, separador, aspas). Sem I/O: o arquivo

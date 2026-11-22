@@ -35,6 +35,17 @@ public sealed class FakeAccountsClient : IAccountsClient
     public Task<IReadOnlyList<InvoiceCardHint>> ListActiveCardsAsync(Guid accountId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<InvoiceCardHint>>(AccountCards.GetValueOrDefault(accountId) ?? []);
 
+    /// <summary>CTB-2: contas e cartoes devolvidos nas listagens (a exportacao contabil le daqui).</summary>
+    public List<AccountInfo> Accounts { get; } = [];
+
+    public List<CardInfo> Cards { get; } = [];
+
+    public Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AccountInfo>>([.. Accounts]);
+
+    public Task<IReadOnlyList<CardInfo>> ListCardsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<CardInfo>>([.. Cards]);
+
     public Task<bool?> IsAccountActiveAsync(Guid accountId, CancellationToken cancellationToken) =>
         Task.FromResult<bool?>(InvalidAccounts.Contains(accountId) ? null : !InactiveAccounts.Contains(accountId));
 }
