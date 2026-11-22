@@ -70,8 +70,7 @@ própria API usando todo padrão de mercado. Criar **agents** para orquestrarem 
 Concluídos depois do briefing: **IDX** (identity em repositório próprio, ADR-0003), **IMP**
 (importação de extrato e fatura, ADR-0004) e **INV** (fatura de cartão e previsão de caixa,
 ADR-0005; só a INV-13, Could, ficou de fora) e **CTB** (exportação contábil PJ, ADR-0006). Em
-refinamento em `docs/backlog.md`, com decisões em aberto para a ADR-0007: **LNC — receita e edição de
-lançamentos**.
+andamento em `docs/backlog.md`: **LNC — receita e edição de lançamentos** (ADR-0007).
 
 ---
 
