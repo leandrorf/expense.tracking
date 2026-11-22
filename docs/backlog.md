@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🔵 EPIC LNC — Receita e edição de lançamentos  · *Refinado* (decisões em aberto para a ADR-0007)
+## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (ADR-0007 aceita; próxima: LNC-2)
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1363,7 +1363,7 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
 - **A exportação contábil** lê o `transactions` direto e já avisa mês alterado (CTB-6): editar um
   lançamento de um mês exportado faz o aviso aparecer sem trabalho extra.
 
-**Decisões em aberto (para a ADR-0007, LNC-1; com a recomendação de cada uma):**
+**Decisões (aceitas na [ADR-0007](adr/0007-edicao-de-lancamentos-e-receita-na-spa.md), LNC-1; ficou a recomendação de cada uma, com os refinamentos da LNC-1):**
 1. **Contrato do evento de edição.** Opções: (a) evento novo `TransactionUpdated` (v1) com o estado
    completo depois da edição, aplicado na projeção **só em linha que já existe** (como o
    `TransactionCardDetailsResolved`); (b) reemitir `TransactionRegistered`, que a projeção já aplica
@@ -1398,10 +1398,15 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
    de eventos guarda a sequência de estados para quem precisar). Recategorizar vários lançamentos
    de uma vez (útil depois de importar) fica como **Could**.
 
-- 🔵 **LNC-1** ADR: edição de lançamentos e receita na SPA.
+- ✅ **LNC-1** ADR: edição de lançamentos e receita na SPA. → [ADR-0007](adr/0007-edicao-de-lancamentos-e-receita-na-spa.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0007 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: payload do `TransactionUpdated` (estado
+    completo mais `version`, sem escopo); `version` começa em 1 e os lançamentos existentes recebem 1
+    na migração, é token de concorrência do EF e vem em toda leitura; edição sem mudança responde 200
+    sem subir a versão e sem evento; `PUT` responde 200 com o lançamento atualizado; a sugestão de
+    categoria usa `UpdatedAtUtc` (a criação também o preenche).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **LNC-2** Receita e observações no formulário e na lista.
   - *Dado* o formulário de lançamento, *quando* escolho "Receita", preencho e envio, *então* o
@@ -1415,6 +1420,8 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
   - *Dado* um lançamento meu, *quando* envio `PUT /transactions/{id}` com os campos e a `version`
     que li, *então* ele muda com as regras da criação, a `version` sobe, o id e a origem
     (chave externa e lote) ficam, e um `TransactionUpdated` sai no outbox no mesmo commit.
+  - *Dado* uma edição que não muda nenhum campo, *quando* envio, *então* recebo 200 sem a `version`
+    subir e sem evento.
   - *Dado* uma `version` antiga, *quando* edito, *então* recebo 409
     `transaction.concurrency_conflict` e nada muda.
   - *Dado* uma troca de conta, *quando* edito, *então* recebo 400 `transaction.account_immutable`;
