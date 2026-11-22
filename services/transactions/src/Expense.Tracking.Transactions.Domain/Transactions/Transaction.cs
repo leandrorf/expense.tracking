@@ -13,6 +13,9 @@ public sealed class Transaction
     public const int CategoryMaxLength = 60;
     public const int NotesMaxLength = 500;
 
+    /// <summary>INV-5 (ADR-0005, decisao 5): parcelas de 1 a 24; acima de 1 so no cartao de credito.</summary>
+    public const int MaxInstallments = 24;
+
     private Transaction(
         Guid id, Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string description, string category, decimal amount, string currency,
@@ -87,7 +90,7 @@ public sealed class Transaction
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,
-        DateOnly occurredOn, string? notes, DateTimeOffset nowUtc)
+        DateOnly occurredOn, string? notes, DateTimeOffset nowUtc, int installments = 1)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -128,13 +131,27 @@ public sealed class Transaction
             return Result.Failure<Transaction>(Error.Validation("transaction.card_not_allowed", "creditCardId so e permitido quando o meio de pagamento e cartao de credito."));
         }
 
+        if (installments is < 1 or > MaxInstallments)
+        {
+            return Result.Failure<Transaction>(Error.Validation("transaction.installments_invalid", $"Parcelas devem ser de 1 a {MaxInstallments}."));
+        }
+
+        if (installments > 1 && paymentMethod != PaymentMethod.CreditCard)
+        {
+            return Result.Failure<Transaction>(Error.Validation("transaction.installments_not_allowed", "Parcelamento so e permitido no cartao de credito."));
+        }
+
         var money = moneyResult.Value;
 
+        // Resumo e orcamentos contam o valor inteiro na data; so a fatura divide as parcelas.
         return new Transaction(
             Guid.NewGuid(), ownerUserId, accountId, type, paymentMethod, creditCardId,
             descriptionResult.Value, categoryResult.Value, money.Amount, money.Currency,
             occurredOn, string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
-            nowUtc, nowUtc);
+            nowUtc, nowUtc)
+        {
+            Installments = installments,
+        };
     }
 
     /// <summary>

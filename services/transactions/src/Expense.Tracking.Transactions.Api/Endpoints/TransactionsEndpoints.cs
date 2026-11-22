@@ -15,7 +15,8 @@ public sealed record CreateTransactionRequest(
     decimal Amount,
     string? Currency,
     DateOnly OccurredOn,
-    string? Notes);
+    string? Notes,
+    int? Installments = null);
 
 public static class TransactionsEndpoints
 {
@@ -78,7 +79,7 @@ public static class TransactionsEndpoints
                 new CreateTransactionCommand(
                     owner.Value, request.AccountId, type, paymentMethod, request.CreditCardId,
                     request.Description, request.Category, request.Amount, request.Currency,
-                    request.OccurredOn, request.Notes),
+                    request.OccurredOn, request.Notes, request.Installments ?? 1),
                 ct);
 
             return result.IsSuccess

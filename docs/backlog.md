@@ -932,13 +932,21 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     vencidas. Compose: `reporting` ganhou `Services__AccountsBaseUrl` e passa a depender do
     `accounts`. Smoke com fatura e 404 (28 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-2, INV-3
-- 🔵 **INV-5** Compra parcelada.
+- ✅ **INV-5** Compra parcelada.
   - *Dado* o formulário de lançamento com meio cartão de crédito, *quando* informo 10 parcelas,
     *então* o lançamento é criado com `installments = 10` e o valor total.
   - *Dado* parcelas fora de 1 a 24, ou parcelas num meio que não é cartão de crédito, *quando* envio,
     *então* recebo 400 com código estável.
   - *Dado* uma compra parcelada, *quando* olho o Resumo e os orçamentos, *então* ela conta inteira no
     mês da compra (sem mudança de comportamento).
+  - Feito assim: `POST /transactions` aceita `installments` (opcional, padrão 1) e a resposta o
+    devolve. Fora de 1 a 24 = 400 `transaction.installments_invalid`; acima de 1 num meio que não é
+    `CreditCard` (inclusive débito, que também pede cartão) = 400
+    `transaction.installments_not_allowed`. O valor lançado é o total; o evento v2 já levava as
+    parcelas (INV-2), então fatura e previsão passam a dividi-las sem mudança no reporting. Na SPA,
+    o seletor "À vista, 2x … 24x" aparece só com cartão de crédito, e a lista de lançamentos mostra
+    "em 3x" abaixo do valor. Cypress `card-invoices.cy.ts` ganhou a compra em 3x (1/3 na fatura
+    atual, 2/3 e 3/3 nas seguintes); smoke com 3x e Pix parcelado recusado (34 passos).
   - Estimativa: 5 · **Should** · Dependências: INV-2
 - ✅ **INV-6** Registrar e excluir o pagamento de uma fatura.
   - *Dado* uma fatura de um cartão do usuário, *quando* registro um pagamento (conta de origem,

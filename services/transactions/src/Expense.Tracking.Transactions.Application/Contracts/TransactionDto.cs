@@ -14,9 +14,10 @@ public sealed record TransactionDto(
     string Currency,
     DateOnly OccurredOn,
     string? Notes,
-    DateTimeOffset CreatedAtUtc)
+    DateTimeOffset CreatedAtUtc,
+    int Installments)
 {
     public static TransactionDto From(Transaction t) =>
         new(t.Id, t.AccountId, t.Type.ToString(), t.PaymentMethod.ToString(), t.CreditCardId,
-            t.Description, t.Category, t.Amount, t.Currency, t.OccurredOn, t.Notes, t.CreatedAtUtc);
+            t.Description, t.Category, t.Amount, t.Currency, t.OccurredOn, t.Notes, t.CreatedAtUtc, t.Installments);
 }

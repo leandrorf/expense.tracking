@@ -136,4 +136,52 @@ public sealed class TransactionsApiTests(TransactionsApiFactory factory) : IClas
         Assert.Single(filtered.EnumerateArray());
         Assert.Equal("Transporte", filtered.EnumerateArray().First().GetProperty("category").GetString());
     }
+
+    [Fact]
+    public async Task Create_CreditCardInInstallments_ReturnsTheInstallments_AndKeepsTheTotal()
+    {
+        var client = ClientFor(Guid.NewGuid());
+
+        var response = await client.PostAsJsonAsync("/transactions", Purchase("CreditCard", Guid.NewGuid(), installments: 10));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var dto = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal((10, 1000m), (dto.GetProperty("installments").GetInt32(), dto.GetProperty("amount").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task Create_WithoutInstallments_IsInFull()
+    {
+        var response = await ClientFor(Guid.NewGuid()).PostAsJsonAsync("/transactions", Purchase("CreditCard", Guid.NewGuid()));
+
+        Assert.Equal(1, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("installments").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("CreditCard", 25, "transaction.installments_invalid")]
+    [InlineData("CreditCard", 0, "transaction.installments_invalid")]
+    [InlineData("Pix", 3, "transaction.installments_not_allowed")]
+    public async Task Create_WithInvalidInstallments_ReturnsBadRequest(string method, int installments, string code)
+    {
+        var card = method == "CreditCard" ? Guid.NewGuid() : (Guid?)null;
+
+        var response = await ClientFor(Guid.NewGuid()).PostAsJsonAsync("/transactions", Purchase(method, card, installments));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+    }
+
+    private static object Purchase(string paymentMethod, Guid? creditCardId, int? installments = null) => new
+    {
+        accountId = Guid.NewGuid(),
+        type = "Expense",
+        paymentMethod,
+        creditCardId,
+        description = "Notebook",
+        category = "Eletronicos",
+        amount = 1000m,
+        currency = "BRL",
+        occurredOn = "2026-11-15",
+        installments,
+    };
 }

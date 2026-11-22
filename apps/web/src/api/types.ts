@@ -40,4 +40,6 @@ export interface Transaction {
   occurredOn: string;
   notes: string | null;
   createdAtUtc: string;
+  /** INV-5: parcelas no cartão de crédito (1 = à vista). */
+  installments: number;
 }
