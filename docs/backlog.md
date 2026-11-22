@@ -1324,7 +1324,7 @@ reclassificar. Could = CTB-6 (3 pts). Total: 24 pts.
 
 **Ordem sugerida:** CTB-1 → CTB-2 → CTB-3 → CTB-4 → CTB-7 (fecha o Must) → CTB-5 → CTB-6.
 
-## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 a LNC-4 feitas; próxima: LNC-5)
+## 🟡 EPIC LNC — Receita e edição de lançamentos  · *In Progress* (LNC-1 a LNC-5 feitas; próxima: LNC-6)
 **Problema:** o lançamento é o dado mais usado do produto, mas só nasce e morre. O formulário da SPA
 registra apenas gastos: salário, pró-labore e recebimento de cliente só entram por importação de
 extrato ou direto pela API. E não há edição: errar a categoria, o valor, a data ou o número de
@@ -1465,13 +1465,22 @@ pela tela). Promovido a pedido do dono do produto (2026-11-22).
     checkpoint avança; para recuperar edições feitas nessa janela, zerar o checkpoint (reconstrução,
     EVT-2). Smoke passo 21 confere o Resumo da conta depois da edição (43 passos).
   - Estimativa: 3 · **Must** · Dependências: LNC-3
-- 🔵 **LNC-5** Editar na SPA.
+- ✅ **LNC-5** Editar na SPA. → "editar" na lista, formulário em modo edição, conflito tratado.
   - *Dado* a lista de lançamentos, *quando* clico em "editar", *então* o formulário abre preenchido
     (sem trocar a conta), salvo e a lista mostra o lançamento alterado; "cancelar" volta sem mudar.
   - *Dado* um lançamento importado, *quando* abro a edição, *então* vejo o aviso de que desfazer a
     importação ainda o apaga.
   - *Dado* que o lançamento mudou em outra aba, *quando* salvo, *então* vejo "Este lançamento mudou
     enquanto você editava" com os valores atuais, sem sobrescrever.
+  - Feito assim: o mesmo formulário da criação entra em modo edição (`tx-editing` com "Editando:
+    <descrição>", conta travada, botão "Salvar alteração" e "Cancelar"); o cartão do lançamento
+    aparece mesmo se foi desativado depois. O envio manda a `version` lida (`transactionsApi.update`).
+    No 409 `transaction.concurrency_conflict`, a tela relê o lançamento (`GET /transactions/{id}`),
+    recarrega o formulário com o que está gravado e mostra o aviso `tx-conflict`, sem sobrescrever.
+    Importado mostra `tx-imported-notice`. Excluir o lançamento em edição cancela a edição. Cypress
+    `transaction-edit.cy.ts` (edita valor, categoria e observações; cancela; simula a outra aba com
+    um `PUT` direto no gateway e confere o 409 tratado); `import.cy.ts` confere o aviso do
+    importado. Config do Cypress ganhou `gatewayUrl`. Suíte com 17 testes.
   - Estimativa: 3 · **Must** · Dependências: LNC-3
 - 🔵 **LNC-6** E2E Cypress: receita, edição e reflexo nos relatórios.
   - *Dado* uma conta com orçamento e um cartão, *quando* lanço uma receita e edito um gasto (valor,

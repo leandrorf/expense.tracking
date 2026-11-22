@@ -32,6 +32,9 @@ export function TransactionsView() {
   const [occurredOn, setOccurredOn] = useState(today());
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // LNC-5 (ADR-0007): lancamento em edicao (o formulario e o mesmo da criacao) e o aviso de conflito.
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [conflict, setConflict] = useState(false);
   const { categories, remember } = useCategorySuggestions();
 
   const requiresCard = useMemo(
@@ -81,32 +84,78 @@ export function TransactionsView() {
 
   const canSplit = paymentMethod === 'CreditCard' && type === 'Expense';
 
-  async function handleCreate(e: React.FormEvent) {
+  function resetForm() {
+    setEditing(null);
+    setType('Expense');
+    setDescription('');
+    setNotes('');
+    setCategory('');
+    setAmount('');
+    setInstallments(1);
+    setCreditCardId('');
+    setOccurredOn(today());
+  }
+
+  /** Abre o formulario com o lancamento (a conta fica travada: ela nao muda). */
+  function startEdit(t: Transaction) {
+    setEditing(t);
+    setAccountId(t.accountId);
+    setType(t.type);
+    setPaymentMethod(t.paymentMethod);
+    setCreditCardId(t.creditCardId ?? '');
+    setDescription(t.description);
+    setCategory(t.category);
+    setAmount(String(t.amount));
+    setInstallments(t.installments);
+    setOccurredOn(t.occurredOn);
+    setNotes(t.notes ?? '');
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelEdit() {
+    setConflict(false);
+    resetForm();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setConflict(false);
+    const input = {
+      accountId,
+      type,
+      paymentMethod,
+      creditCardId: requiresCard && creditCardId ? creditCardId : undefined,
+      description,
+      category,
+      amount: Number(amount),
+      occurredOn,
+      installments: canSplit ? installments : undefined,
+      notes: notes.trim() || undefined,
+    };
     try {
-      await transactionsApi.create({
-        accountId,
-        type,
-        paymentMethod,
-        creditCardId: requiresCard && creditCardId ? creditCardId : undefined,
-        description,
-        category,
-        amount: Number(amount),
-        occurredOn,
-        installments: canSplit ? installments : undefined,
-        notes: notes.trim() || undefined,
-      });
-      setDescription('');
-      setNotes('');
+      if (editing) {
+        await transactionsApi.update(editing.id, { ...input, version: editing.version });
+      } else {
+        await transactionsApi.create(input);
+      }
       remember(category);
-      setCategory('');
-      setAmount('');
-      setInstallments(1);
+      resetForm();
       await loadTransactions();
     } catch (err) {
-      setError(messageOf(err));
+      if (editing && err instanceof ApiError && err.code === 'transaction.concurrency_conflict') {
+        // Outra aba salvou antes: mostra o que esta gravado agora, sem sobrescrever.
+        try {
+          startEdit(await transactionsApi.get(editing.id));
+          setConflict(true);
+        } catch (reloadErr) {
+          setError(messageOf(reloadErr));
+        }
+      } else {
+        setError(messageOf(err));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -115,6 +164,7 @@ export function TransactionsView() {
   async function handleRemove(id: string) {
     try {
       await transactionsApi.remove(id);
+      if (editing?.id === id) cancelEdit();
       await loadTransactions();
     } catch (err) {
       setError(messageOf(err));
@@ -122,7 +172,8 @@ export function TransactionsView() {
   }
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '—';
-  const accountCards = cards.filter((c) => c.accountId === accountId && c.isActive);
+  // O cartao do lancamento em edicao aparece mesmo se foi desativado depois.
+  const accountCards = cards.filter((c) => c.accountId === accountId && (c.isActive || c.id === editing?.creditCardId));
 
   if (loading) {
     return (
@@ -140,8 +191,31 @@ export function TransactionsView() {
       {accounts.length === 0 ? (
         <p className="muted">Crie uma conta antes de registrar lançamentos.</p>
       ) : (
-        <form className="row-form wrap" onSubmit={handleCreate} data-cy="tx-form">
-          <select data-cy="tx-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <>
+        {editing && (
+          <div className="editing-banner" data-cy="tx-editing">
+            <strong>Editando: {editing.description}</strong>
+            {editing.imported && (
+              <p className="muted" data-cy="tx-imported-notice">
+                Este lançamento veio de uma importação; desfazer a importação ainda o apaga.
+              </p>
+            )}
+            {conflict && (
+              <p className="notice warning" data-cy="tx-conflict">
+                Este lançamento mudou enquanto você editava. O formulário mostra agora o que está gravado; refaça a
+                alteração e salve de novo.
+              </p>
+            )}
+          </div>
+        )}
+        <form className="row-form wrap" onSubmit={handleSubmit} data-cy="tx-form">
+          <select
+            data-cy="tx-account"
+            value={accountId}
+            disabled={editing !== null}
+            title={editing ? 'A conta de um lançamento não muda: exclua e lance de novo na outra conta.' : undefined}
+            onChange={(e) => setAccountId(e.target.value)}
+          >
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -210,9 +284,15 @@ export function TransactionsView() {
             onChange={(e) => setNotes(e.target.value)}
           />
           <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>
-            {submitting ? 'Salvando…' : 'Registrar'}
+            {submitting ? 'Salvando…' : editing ? 'Salvar alteração' : 'Registrar'}
           </button>
+          {editing && (
+            <button data-cy="tx-cancel" className="ghost" type="button" onClick={cancelEdit}>
+              Cancelar
+            </button>
+          )}
         </form>
+        </>
       )}
 
       <div className="filters">
@@ -267,7 +347,10 @@ export function TransactionsView() {
                     </span>
                   )}
                 </td>
-                <td>
+                <td className="row-actions">
+                  <button className="link" data-cy="tx-edit" onClick={() => startEdit(t)}>
+                    editar
+                  </button>
                   <button className="link-danger" onClick={() => void handleRemove(t.id)}>
                     excluir
                   </button>

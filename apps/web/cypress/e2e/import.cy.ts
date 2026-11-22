@@ -64,6 +64,10 @@ describe('Importar extrato e fatura', () => {
     cy.get('[data-cy=import-go-transactions]').click();
     cy.get('[data-cy=tx-table]').contains('tr', `PADARIA E2E ${stamp}`).should('contain', category).and('contain', '18,50');
     cy.get('[data-cy=tx-table]').contains('tr', `SALARIO E2E ${stamp}`).should('contain', incomeCategory);
+    // LNC-5: editar um importado avisa que desfazer a importacao ainda o apaga.
+    cy.get('[data-cy=tx-table]').contains('tr', `PADARIA E2E ${stamp}`).find('[data-cy=tx-edit]').click();
+    cy.get('[data-cy=tx-imported-notice]').should('contain', 'veio de uma importação');
+    cy.get('[data-cy=tx-cancel]').click();
 
     // 6) O Resumo reflete o que foi importado: os dois gastos somados na categoria do lote (os
     //    blocos do Resumo só somam gastos; a receita não entra em "Por categoria").
