@@ -65,4 +65,38 @@ public sealed class AccountTests
         Assert.Equal("Novo", account.Name);
         Assert.Equal(later, account.UpdatedAtUtc);
     }
+
+    // ---------- INV-13: saldo inicial ----------
+
+    private static readonly DateOnly Today = new(2026, 1, 1);
+
+    [Fact]
+    public void SetOpeningBalance_KeepsAmountAndDate_AcceptsNegative_AndClearRemovesIt()
+    {
+        var account = Account.Create(Owner, "Conta", AccountScope.Personal, null, null, Now).Value;
+        var later = Now.AddHours(2);
+
+        var set = account.SetOpeningBalance(-150.25m, Today.AddDays(-3), Today, later);
+
+        Assert.True(set.IsSuccess);
+        Assert.Equal((-150.25m, Today.AddDays(-3), later), (account.OpeningBalance, account.OpeningBalanceOn, account.UpdatedAtUtc));
+
+        account.ClearOpeningBalance(later.AddHours(1));
+        Assert.Equal(((decimal?)null, (DateOnly?)null), (account.OpeningBalance, account.OpeningBalanceOn));
+    }
+
+    [Theory]
+    [InlineData("10.555", 0, "account.opening_balance_invalid")]
+    [InlineData("1000000000000", 0, "account.opening_balance_invalid")]
+    [InlineData("10", 1, "account.opening_balance_date_future")]
+    public void SetOpeningBalance_RejectsMoreThanTwoDecimals_HugeValues_AndFutureDates(string amount, int daysAhead, string code)
+    {
+        var account = Account.Create(Owner, "Conta", AccountScope.Personal, null, null, Now).Value;
+
+        var set = account.SetOpeningBalance(decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture),
+            Today.AddDays(daysAhead), Today, Now);
+
+        Assert.Equal(code, set.Error.Code);
+        Assert.Null(account.OpeningBalance);
+    }
 }

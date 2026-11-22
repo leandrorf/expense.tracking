@@ -6,6 +6,9 @@ export interface Account {
   currency: string;
   isActive: boolean;
   createdAtUtc: string;
+  /** INV-13: saldo informado no fim do dia `openingBalanceOn` (`yyyy-MM-dd`); nulo = sem saldo. */
+  openingBalance: number | null;
+  openingBalanceOn: string | null;
 }
 
 export interface CreditCard {

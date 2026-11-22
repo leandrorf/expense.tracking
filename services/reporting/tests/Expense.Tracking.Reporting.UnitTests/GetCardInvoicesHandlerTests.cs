@@ -53,6 +53,9 @@ public sealed class GetCardInvoicesHandlerTests
 
         public Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ScopedCard>>([new ScopedCard(Card, "Personal")]);
+
+        public Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AccountInfo>>([]);
     }
 
     /// <summary>Uma compra em 01/12, na fatura que fecha em 10/12 e vence em 17/12.</summary>

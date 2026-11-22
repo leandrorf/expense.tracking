@@ -27,6 +27,8 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         builder.Property(a => a.IsActive).HasColumnName("is_active").IsRequired();
         builder.Property(a => a.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(a => a.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        builder.Property(a => a.OpeningBalance).HasColumnName("opening_balance").HasPrecision(18, 2);
+        builder.Property(a => a.OpeningBalanceOn).HasColumnName("opening_balance_on").HasColumnType("date");
 
         builder.HasIndex(a => a.OwnerUserId);
     }

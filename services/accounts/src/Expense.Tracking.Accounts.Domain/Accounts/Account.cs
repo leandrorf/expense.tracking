@@ -45,6 +45,18 @@ public sealed class Account
 
     public DateTimeOffset UpdatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// INV-13: saldo informado pelo usuario no fim do dia <see cref="OpeningBalanceOn"/> (pode ser
+    /// negativo: cheque especial). Nulo = a conta fica fora do saldo projetado da previsao.
+    /// </summary>
+    public decimal? OpeningBalance { get; private set; }
+
+    /// <summary>INV-13: dia a que o <see cref="OpeningBalance"/> se refere; o que vem depois dele soma.</summary>
+    public DateOnly? OpeningBalanceOn { get; private set; }
+
+    /// <summary>Maior saldo aceito, em modulo (cabe com folga no decimal(18,2) da coluna).</summary>
+    public const decimal OpeningBalanceMaxAbs = 1_000_000_000_000m;
+
     public static Result<Account> Create(
         Guid ownerUserId, string? name, AccountScope scope, string? taxId,
         string? currency, DateTimeOffset nowUtc)
@@ -89,6 +101,38 @@ public sealed class Account
         Name = nameResult.Value;
         UpdatedAtUtc = nowUtc;
         return Result.Success();
+    }
+
+    /// <summary>
+    /// INV-13: informa (ou corrige) o saldo da conta no fim de um dia que ja passou ou e hoje. Valor
+    /// com ate 2 casas decimais.
+    /// </summary>
+    public Result SetOpeningBalance(decimal amount, DateOnly on, DateOnly today, DateTimeOffset nowUtc)
+    {
+        if (decimal.Round(amount, 2) != amount || Math.Abs(amount) >= OpeningBalanceMaxAbs)
+        {
+            return Result.Failure(Error.Validation(
+                "account.opening_balance_invalid", "Informe o saldo em reais, com ate 2 casas decimais."));
+        }
+
+        if (on > today)
+        {
+            return Result.Failure(Error.Validation(
+                "account.opening_balance_date_future", "A data do saldo nao pode ser futura: informe o saldo de hoje ou de um dia que ja passou."));
+        }
+
+        OpeningBalance = amount;
+        OpeningBalanceOn = on;
+        UpdatedAtUtc = nowUtc;
+        return Result.Success();
+    }
+
+    /// <summary>INV-13: tira o saldo; a conta sai do saldo projetado.</summary>
+    public void ClearOpeningBalance(DateTimeOffset nowUtc)
+    {
+        OpeningBalance = null;
+        OpeningBalanceOn = null;
+        UpdatedAtUtc = nowUtc;
     }
 
     public void Deactivate(DateTimeOffset nowUtc)

@@ -756,7 +756,7 @@ contrato da API descrito na história de backend antes da de frontend.
 
 ---
 
-## 🟡 EPIC INV — Fatura de cartão e previsão de caixa  · *In Progress* (Must e Should concluídos; falta a INV-13, Could)
+## 🟢 EPIC INV — Fatura de cartão e previsão de caixa  · *Done*
 **Problema:** o cartão de crédito é o meio mais usado, mas o produto só enxerga a compra no dia em
 que ela aconteceu. O usuário não sabe quanto vai pagar na próxima fatura, em que dia, nem quanto as
 compras de hoje vão pesar no caixa dos próximos meses. Para piorar, pagar a fatura pela conta e
@@ -1072,9 +1072,25 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     mantém o total da fatura no mês e tira 456,78 do "falta pagar", e o Resumo PJ fica só com a
     compra. Suíte com 12 testes, sem retry.
   - Estimativa: 5 · **Must** · Dependências: INV-7, INV-9
-- 🔵 **INV-13** Saldo inicial por conta na previsão.
+- ✅ **INV-13** Saldo inicial por conta na previsão. → saldo na conta (`accounts`), saldo projetado na previsão.
   - *Dado* uma conta com saldo informado pelo usuário numa data, *quando* olho a previsão, *então*
     vejo também o saldo projetado no fim de cada mês, por escopo.
+  - Feito assim (decisões no refinamento da [ADR-0005](adr/0005-fatura-de-cartao-e-previsao-de-caixa.md)):
+    a conta ganhou `openingBalance` e `openingBalanceOn` (saldo no fim do dia; colunas na migração
+    `AccountOpeningBalance`), com `PUT /accounts/{id}/opening-balance` (data futura = 400
+    `account.opening_balance_date_future`; mais de 2 casas = 400 `account.opening_balance_invalid`;
+    faltando campo = 400 `account.opening_balance_required`) e `DELETE` para tirar. O reporting lê as
+    contas na hora (`ICardDirectory.ListAccountsAsync`) e calcula, numa regra pura
+    (`ProjectedBalanceCalculator`), o saldo de cada conta com saldo: o informado, mais entradas e menos
+    saídas fora do cartão depois do dia, menos os pagamentos de fatura feitos dela depois do dia,
+    menos o que falta pagar das faturas dos cartões dela que vencem do mês atual até o mês. Cada
+    escopo da previsão ganhou `balance` (nulo sem conta com saldo) e a resposta, `accountsWithoutBalance`.
+    Na SPA, a aba Contas tem a coluna "Saldo" (`account-balance`, informar/alterar/remover na própria
+    linha) e a Previsão, a coluna "Saldo no fim do mês" (`forecast-balance`) e o aviso das contas sem
+    saldo (`forecast-balance-notice`). **Lição:** o provider Oracle MySQL não lê `DateOnly` (devolve
+    `DateTime` e o EF falha no cast); o accounts ganhou o mesmo `DateOnlyConverter` do transactions, e
+    os testes de integração (sem MySQL) não pegam isso: o smoke pega. Smoke passo 23 (45 passos).
+    Cypress `forecast-balance.cy.ts` (20 testes na suíte).
   - Estimativa: 3 · **Could** · Dependências: INV-8
 
 **Fora do escopo (Won't, nesta versão):** editar o ciclo do cartão (continua sendo criar outro

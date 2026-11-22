@@ -13,6 +13,7 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateTimeOffset>().HaveConversion<UtcDateTimeOffsetConverter>();
+        configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
         base.ConfigureConventions(configurationBuilder);
     }
 

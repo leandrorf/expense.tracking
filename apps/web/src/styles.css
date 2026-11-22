@@ -262,6 +262,17 @@ table.data tr.inactive {
   margin-bottom: 0.5rem;
 }
 
+/* INV-13: saldo da conta editado na propria linha. */
+.row-form.inline {
+  display: inline-flex;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.row-form.inline input {
+  width: 8rem;
+}
+
 /* LNC-7: recategorizar em lote. */
 .bulk-bar {
   border-left: 3px solid #93c5fd;

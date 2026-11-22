@@ -164,3 +164,28 @@ abaixo valem para as histórias INV-2 a INV-13.
     conciliar os dois fica fora do épico.
   - Um pagamento informa o mês da fatura que paga; se o usuário pagar a fatura errada, exclui e
     registra de novo.
+
+## Refinamento: saldo projetado (INV-13, 2026-11-22)
+
+A decisão 8 deixou o saldo projetado para a INV-13, com saldo inicial informado pelo usuário. Ao
+implementá-la, ficou assim:
+
+1. **Onde mora o saldo:** no `accounts`, como dado opcional da conta: valor (pode ser negativo) e a
+   data a que ele se refere. Vale como **saldo no fim daquele dia**: o que é lançado no dia ou antes
+   já está nele. A data não pode ser futura (400 `account.opening_balance_date_future`); o valor tem
+   até 2 casas (400 `account.opening_balance_invalid`). `PUT /accounts/{id}/opening-balance`
+   informa ou corrige e `DELETE` tira (`expenses.write`); toda leitura da conta traz
+   `openingBalance` e `openingBalanceOn`. Sem evento: o `reporting` lê as contas na hora, como já faz
+   com os cartões (decisão 3).
+2. **Cálculo, por conta com saldo:** saldo informado, mais entradas e menos saídas fora do cartão
+   **depois** do dia informado, menos os pagamentos de fatura feitos **dessa conta** depois desse dia
+   (o dinheiro sai na data do pagamento), menos o que ainda falta pagar das faturas dos cartões
+   **dessa conta** que vencem do mês atual até o mês. Pagamento e "falta pagar" não se sobrepõem.
+   Fatura vencida antes do mês atual não entra (decisão 7: sem rotativo).
+3. **Escopo e total:** soma das contas com saldo do escopo; escopo sem nenhuma conta com saldo fica
+   sem saldo (`balance: null`), e não zero. Conta sem saldo informado fica fora do saldo projetado,
+   mas continua no fluxo do mês. A previsão diz quantas contas ativas estão sem saldo
+   (`accountsWithoutBalance`) para a tela avisar.
+4. **Limitação:** a fatura de um cartão sai da conta do cartão; se o usuário costuma pagá-la por outra
+   conta, o saldo de cada conta só fica certo depois do pagamento registrado (o total do escopo fica
+   certo quando as duas contas são do mesmo escopo).

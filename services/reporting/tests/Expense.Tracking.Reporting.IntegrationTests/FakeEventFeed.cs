@@ -89,14 +89,15 @@ public sealed class FakeEventFeed : IEventFeedClient
 
     /// <summary>INV-6: pagamento de fatura (<c>CardInvoicePaid</c> v1).</summary>
     public FeedEvent InvoicePaid(
-        Guid paymentId, Guid ownerUserId, Guid cardId, string invoiceDueMonth, decimal amount, string paidOn = "2026-11-20") =>
+        Guid paymentId, Guid ownerUserId, Guid cardId, string invoiceDueMonth, decimal amount, string paidOn = "2026-11-20",
+        Guid? accountId = null) =>
         Append(FeedEventTypes.CardInvoicePaid, paymentId, ownerUserId, new
         {
             paymentId,
             ownerUserId,
             creditCardId = cardId,
             invoiceDueMonth,
-            accountId = Guid.NewGuid(),
+            accountId = accountId ?? Guid.NewGuid(),
             amount,
             currency = "BRL",
             paidOn,

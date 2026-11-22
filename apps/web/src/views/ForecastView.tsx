@@ -92,6 +92,14 @@ export function ForecastView() {
           {forecast.notice} Compras no cartão entram pela fatura, no mês do vencimento.
         </p>
       )}
+      {forecast && forecast.accountsWithoutBalance > 0 && (
+        <p className="notice" data-cy="forecast-balance-notice">
+          {forecast.accountsWithoutBalance === 1
+            ? '1 conta ativa está sem saldo informado e fica fora do saldo projetado.'
+            : `${forecast.accountsWithoutBalance} contas ativas estão sem saldo informado e ficam fora do saldo projetado.`}{' '}
+          Informe o saldo na aba Contas.
+        </p>
+      )}
 
       {error && <p className="error">{error}</p>}
       {loading && !forecast ? (
@@ -106,6 +114,9 @@ export function ForecastView() {
                 <th className="right">Saídas</th>
                 <th className="right">Faturas</th>
                 <th className="right">Resultado</th>
+                <th className="right" title="Saldo das contas com saldo informado, no fim do mês">
+                  Saldo no fim do mês
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -125,6 +136,12 @@ export function ForecastView() {
                   <td className={`right ${flow.result < 0 ? 'negative' : flow.result > 0 ? 'positive' : ''}`} data-cy="forecast-result">
                     {money(flow.result)}
                   </td>
+                  <td
+                    className={`right ${flow.balance !== null && flow.balance < 0 ? 'negative' : ''}`}
+                    data-cy="forecast-balance"
+                  >
+                    {flow.balance === null ? <span className="muted">sem saldo</span> : money(flow.balance)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -135,6 +152,7 @@ export function ForecastView() {
                 <th className="right">{money(sum((f) => f.expense))}</th>
                 <th className="right">{money(sum((f) => f.invoices))}</th>
                 <th className="right">{money(sum((f) => f.result))}</th>
+                <th />
               </tr>
             </tfoot>
           </table>

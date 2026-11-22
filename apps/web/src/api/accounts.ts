@@ -26,6 +26,13 @@ export const accountsApi = {
 
   remove: (id: string) => apiFetch<void>(`/api/accounts/${id}`, { method: 'DELETE' }),
 
+  /** INV-13: saldo da conta no fim do dia `date` (`yyyy-MM-dd`, hoje ou antes). */
+  setOpeningBalance: (id: string, amount: number, date: string) =>
+    apiFetch<Account>(`/api/accounts/${id}/opening-balance`, { method: 'PUT', body: JSON.stringify({ amount, date }) }),
+
+  clearOpeningBalance: (id: string) =>
+    apiFetch<Account>(`/api/accounts/${id}/opening-balance`, { method: 'DELETE' }),
+
   listCards: (accountId?: string) =>
     apiFetch<CreditCard[]>(`/api/credit-cards${accountId ? `?accountId=${accountId}` : ''}`),
 

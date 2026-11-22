@@ -45,6 +45,15 @@ namespace Expense.Tracking.Accounts.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(120)")
                         .HasColumnName("name");
 
+                    b.Property<decimal?>("OpeningBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("opening_balance");
+
+                    b.Property<DateOnly?>("OpeningBalanceOn")
+                        .HasColumnType("date")
+                        .HasColumnName("opening_balance_on");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("char(36)")
                         .HasColumnName("owner_user_id");

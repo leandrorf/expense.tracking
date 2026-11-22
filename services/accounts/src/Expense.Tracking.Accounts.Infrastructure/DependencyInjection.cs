@@ -26,6 +26,8 @@ public static class DependencyInjection
         services.AddScoped<ListAccountsHandler>();
         services.AddScoped<GetAccountHandler>();
         services.AddScoped<RenameAccountHandler>();
+        services.AddScoped<SetOpeningBalanceHandler>();
+        services.AddScoped<ClearOpeningBalanceHandler>();
         services.AddScoped<DeactivateAccountHandler>();
         services.AddScoped<IAccountScopeLookup, AccountScopeLookup>();
         services.AddScoped<GetAccountScopesHandler>();
