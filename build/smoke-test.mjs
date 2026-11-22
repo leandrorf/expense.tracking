@@ -273,6 +273,12 @@ async function main() {
   const badForecast = await fetch(`${GATEWAY}/api/reports/cash-forecast?months=13`, { headers: auth });
   ok(badForecast.status === 400, `previsao com 13 meses responde 400 (status ${badForecast.status})`);
 
+  // 16b) Limite disponivel (INV-10): limite do cartao menos o que falta pagar (a compra de 77,70).
+  const limitsRes = await fetch(`${GATEWAY}/api/reports/cards/limits`, { headers: auth });
+  const cardLimit = ((limitsRes.status === 200 ? await limitsRes.json() : []).find((l) => l.cardId === card.id)) ?? {};
+  ok(cardLimit.outstanding === 77.7 && Math.abs(cardLimit.availableLimit - 4922.3) < 0.001,
+    `GET /api/reports/cards/limits: em aberto ${cardLimit.outstanding}, disponivel ${cardLimit.availableLimit} (status ${limitsRes.status})`);
+
   // 17) Compra parcelada (INV-5): so no cartao de credito, de 1 a 24; o valor e o total.
   const installmentPurchase = (paymentMethod, creditCardId, installments) => fetch(`${GATEWAY}/api/transactions`, {
     method: 'POST', headers: auth,

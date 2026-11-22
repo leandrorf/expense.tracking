@@ -257,3 +257,66 @@ public sealed class AccountsCardDirectoryTests
         }
     }
 }
+
+/// <summary>
+/// INV-10 (ADR-0005, decisao 9): limite disponivel = limite − o que falta pagar de todas as faturas,
+/// incluindo as parcelas futuras. Hoje = 2026-11-21; cartao fecha dia 10 e vence dia 17.
+/// </summary>
+public sealed class CardLimitsApiTests(InvoicesApiFactory factory) : IClassFixture<InvoicesApiFactory>
+{
+    private readonly InvoicesApiFactory _factory = factory;
+
+    private HttpClient ClientFor(Guid owner)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.SubHeader, owner.ToString());
+        return client;
+    }
+
+    [Fact]
+    public async Task AvailableLimit_SubtractsWhatIsStillUnpaid_IncludingFutureInstallments()
+    {
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17, limit: 5000m);
+        var other = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17, limit: 300m);
+        var feed = _factory.EventFeed;
+        // Fatura de 2026-10 (vencida): 1000, com 400 pagos → faltam 600.
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 1000m, "2026-10-05");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-10", 400m);
+        // Fatura de 2026-09: 100, com 300 pagos → falta 0 (o que passou nao abate as outras).
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 100m, "2026-09-05");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-09", 300m);
+        // 12x de 100 a partir de 2026-12, e um estorno de 50 na fatura de 2026-12 → 1150.
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 1200m, "2026-11-15", installments: 12);
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 50m, "2026-11-20", transactionType: "Income");
+        // Outro cartao, acima do limite: disponivel negativo, nada e bloqueado.
+        feed.CardPurchase(Guid.NewGuid(), owner, other.Id, 450m, "2026-11-15");
+        await _factory.DrainFeedAsync();
+        var client = ClientFor(owner);
+
+        var limits = await client.GetFromJsonAsync<JsonElement[]>("/reports/cards/limits");
+        var invoices = await client.GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices?from=2026-12&to=2026-12");
+
+        Assert.Equal(2, limits!.Length);
+        var main = Assert.Single(limits, l => l.GetProperty("cardId").GetGuid() == card.Id);
+        Assert.Equal((5000m, 1750m, 3250m), (main.GetProperty("creditLimit").GetDecimal(),
+            main.GetProperty("outstanding").GetDecimal(), main.GetProperty("availableLimit").GetDecimal()));
+        var over = Assert.Single(limits, l => l.GetProperty("cardId").GetGuid() == other.Id);
+        Assert.Equal(-150m, over.GetProperty("availableLimit").GetDecimal());
+        // A fatura traz o mesmo limite, sem depender do recorte from/to.
+        Assert.Equal((5000m, 1750m, 3250m), (invoices.GetProperty("creditLimit").GetDecimal(),
+            invoices.GetProperty("outstanding").GetDecimal(), invoices.GetProperty("availableLimit").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task Limits_AreOnlyTheUsersCards_AndNeedAToken()
+    {
+        _factory.Cards.Add(Guid.NewGuid(), closingDay: 10, dueDay: 17);
+
+        var mine = await ClientFor(Guid.NewGuid()).GetFromJsonAsync<JsonElement[]>("/reports/cards/limits");
+        var anonymous = await _factory.CreateClient().GetAsync("/reports/cards/limits");
+
+        Assert.Empty(mine!);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+}
