@@ -1,3 +1,4 @@
+using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Domain.Budgets;
@@ -24,6 +25,10 @@ public interface IProjectionQueries
 
     /// <summary>INV-6: pagamentos das faturas de um cartao do dono.</summary>
     Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken);
+
+    /// <summary>INV-8: lancamentos do dono fora do cartao, entre as datas (inclusive).</summary>
+    Task<IReadOnlyList<CashMovementRecord>> GetCashMovementsAsync(
+        Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -33,6 +38,9 @@ public interface IProjectionQueries
 public interface ICardDirectory
 {
     Task<CardInfo?> FindAsync(Guid cardId, CancellationToken cancellationToken);
+
+    /// <summary>INV-8: todos os cartoes do usuario (ativos ou nao), com o escopo da conta de cada um.</summary>
+    Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Access token do usuario do request atual, para encaminhar ao accounts.</summary>

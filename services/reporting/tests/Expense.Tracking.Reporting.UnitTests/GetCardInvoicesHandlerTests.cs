@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Reports;
@@ -49,6 +50,9 @@ public sealed class GetCardInvoicesHandlerTests
     {
         public Task<CardInfo?> FindAsync(Guid cardId, CancellationToken cancellationToken) =>
             Task.FromResult(cardId == Card.Id ? Card : null);
+
+        public Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ScopedCard>>([new ScopedCard(Card, "Personal")]);
     }
 
     /// <summary>Uma compra em 01/12, na fatura que fecha em 10/12 e vence em 17/12.</summary>
@@ -60,6 +64,10 @@ public sealed class GetCardInvoicesHandlerTests
 
         public Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CardPaymentRecord>>([]);
+
+        public Task<IReadOnlyList<CashMovementRecord>> GetCashMovementsAsync(
+            Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<CashMovementRecord>>([]);
 
         public Task<IReadOnlyList<TransactionRecord>> GetTransactionsAsync(Guid ownerUserId, ReportFilter filter, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TransactionRecord>>([]);

@@ -15,14 +15,7 @@ public sealed class AccountsCardDirectory(HttpClient httpClient, IUserTokenAcces
 {
     public async Task<CardInfo?> FindAsync(Guid cardId, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"credit-cards/{cardId}");
-        var token = tokenAccessor.GetAccessToken();
-        if (!string.IsNullOrEmpty(token))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
+        using var response = await SendAsync($"credit-cards/{cardId}", cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
@@ -32,4 +25,38 @@ public sealed class AccountsCardDirectory(HttpClient httpClient, IUserTokenAcces
         return await response.Content.ReadFromJsonAsync<CardInfo>(cancellationToken)
             ?? throw new InvalidOperationException("O accounts respondeu o cartao vazio.");
     }
+
+    /// <summary>
+    /// INV-8: cartoes e contas do usuario, juntados pelo id da conta (a lista de contas traz o escopo).
+    /// As duas listas ja vem filtradas pelo dono do token.
+    /// </summary>
+    public async Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken)
+    {
+        var cardsTask = GetListAsync<CardInfo>("credit-cards", cancellationToken);
+        var accountsTask = GetListAsync<AccountResponse>("accounts", cancellationToken);
+        var scopes = (await accountsTask).ToDictionary(a => a.Id, a => a.Scope);
+        return (await cardsTask).Select(c => new ScopedCard(c, scopes.GetValueOrDefault(c.AccountId))).ToList();
+    }
+
+    private async Task<IReadOnlyList<T>> GetListAsync<T>(string path, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(path, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<List<T>>(cancellationToken) ?? [];
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(string path, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        var token = tokenAccessor.GetAccessToken();
+        if (!string.IsNullOrEmpty(token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>So o que a previsao usa da conta devolvida pelo accounts.</summary>
+    private sealed record AccountResponse(Guid Id, string? Scope);
 }

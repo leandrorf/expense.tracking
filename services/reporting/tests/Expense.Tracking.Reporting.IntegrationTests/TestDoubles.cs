@@ -37,17 +37,20 @@ public sealed class TestAuthHandler(
 /// <summary>INV-4: cartoes cadastrados no "accounts" dos testes, cada um com seu dono.</summary>
 public sealed class CardRegistry
 {
-    private readonly ConcurrentDictionary<Guid, (Guid Owner, CardInfo Card)> _cards = new();
+    private readonly ConcurrentDictionary<Guid, (Guid Owner, CardInfo Card, string Scope)> _cards = new();
 
-    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m)
+    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m, string scope = "Personal")
     {
         var card = new CardInfo(Guid.NewGuid(), Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true);
-        _cards[card.Id] = (owner, card);
+        _cards[card.Id] = (owner, card, scope);
         return card;
     }
 
     public CardInfo? Find(Guid cardId, Guid owner) =>
         _cards.TryGetValue(cardId, out var entry) && entry.Owner == owner ? entry.Card : null;
+
+    public IReadOnlyList<ScopedCard> ListOf(Guid owner) =>
+        _cards.Values.Where(e => e.Owner == owner).Select(e => new ScopedCard(e.Card, e.Scope)).ToList();
 }
 
 /// <summary>Faz o papel do accounts: so devolve o cartao ao dono (o accounts filtra pelo token).</summary>
@@ -57,6 +60,12 @@ public sealed class FakeCardDirectory(CardRegistry registry, IHttpContextAccesso
     {
         var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
         return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.Find(cardId, owner) : null);
+    }
+
+    public Task<IReadOnlyList<ScopedCard>> ListWithScopesAsync(CancellationToken cancellationToken)
+    {
+        var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
+        return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.ListOf(owner) : []);
     }
 }
 

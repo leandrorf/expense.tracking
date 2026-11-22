@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Reports;
@@ -51,6 +52,15 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
         await dbContext.CardPayments.AsNoTracking()
             .Where(p => p.OwnerUserId == ownerUserId && p.CreditCardId == cardId)
             .Select(p => new CardPaymentRecord(p.PaymentId, p.InvoiceDueMonth, p.AccountId, p.Amount, p.PaidOn))
+            .ToListAsync(cancellationToken);
+
+    // Fora do cartao: sem cartao e com outro meio (uma compra legada no cartao ainda sem o backfill fica de fora).
+    public async Task<IReadOnlyList<CashMovementRecord>> GetCashMovementsAsync(
+        Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        await dbContext.Transactions.AsNoTracking()
+            .Where(t => t.OwnerUserId == ownerUserId && t.CreditCardId == null && t.PaymentMethod != "CreditCard"
+                && t.OccurredOn >= from && t.OccurredOn <= to)
+            .Select(t => new CashMovementRecord(t.TransactionType, t.Amount, t.OccurredOn, t.AccountScope))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<CategoryUsage>> GetCategoryUsageAsync(Guid ownerUserId, CancellationToken cancellationToken)
