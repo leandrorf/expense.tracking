@@ -89,6 +89,11 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
                 await ApplyRegisteredAsync(feedEvent, ReadRegistered(feedEvent), cancellationToken);
                 return true;
 
+            case FeedEventTypes.TransactionUpdated:
+                EnsureSupported(feedEvent);
+                await ApplyUpdatedAsync(feedEvent, Read<TransactionUpdatedV1>(feedEvent), cancellationToken);
+                return true;
+
             case FeedEventTypes.TransactionDeleted:
                 EnsureSupported(feedEvent);
                 await ApplyDeletedAsync(Read<TransactionDeletedV1>(feedEvent), cancellationToken);
@@ -146,6 +151,28 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         row.OwnerUserId = e.OwnerUserId;
         row.AccountId = e.AccountId;
         row.AccountScope = e.AccountScope;
+        row.TransactionType = e.TransactionType;
+        row.PaymentMethod = e.PaymentMethod;
+        row.Category = e.Category;
+        row.Amount = e.Amount;
+        row.Currency = e.Currency;
+        row.OccurredOn = e.OccurredOn;
+        row.Description = e.Description;
+        row.CreditCardId = e.CreditCardId;
+        row.Installments = e.Installments;
+        row.LastEventSequence = feedEvent.Sequence;
+    }
+
+    // LNC-4 (ADR-0007, decisao 1): so corrige uma linha existente. Uma edicao lida depois da exclusao
+    // nao recria o lancamento. O escopo fica o que a linha ja tem: a conta nao muda.
+    private async Task ApplyUpdatedAsync(FeedEvent feedEvent, TransactionUpdatedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindAsync(e.TransactionId, cancellationToken);
+        if (row is null)
+        {
+            return;
+        }
+
         row.TransactionType = e.TransactionType;
         row.PaymentMethod = e.PaymentMethod;
         row.Category = e.Category;

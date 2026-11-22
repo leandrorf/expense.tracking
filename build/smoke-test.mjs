@@ -380,18 +380,27 @@ async function main() {
   if (incomeTx.id) await fetch(`${GATEWAY}/api/transactions/${incomeTx.id}`, { method: 'DELETE', headers: auth });
 
   // 21) Edicao (LNC-3): PUT com a versao lida; versao antiga = 409; a conta nao muda.
-  const editBody = (version, category, accountId = account.id) => JSON.stringify({
+  const editBody = (version, category, accountId = account.id, amount = 10) => JSON.stringify({
     accountId, type: 'Expense', paymentMethod: 'Pix', description: 'Smoke edicao', category,
-    amount: 10, currency: 'BRL', occurredOn: new Date().toISOString().slice(0, 10), version,
+    amount, currency: 'BRL', occurredOn: new Date().toISOString().slice(0, 10), version,
   });
   const toEdit = await (await fetch(`${GATEWAY}/api/transactions`, { method: 'POST', headers: auth, body: editBody(undefined, 'Antes') })).json();
   const putTx = (body) => fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'PUT', headers: auth, body });
-  const edited = await putTx(editBody(toEdit.version, 'Depois'));
+  const edited = await putTx(editBody(toEdit.version, 'Depois', account.id, 35));
   const editedTx = edited.status === 200 ? await edited.json() : {};
   const [staleEdit, movedEdit] = [await putTx(editBody(toEdit.version, 'Outra aba')), await putTx(editBody(2, 'Depois', pj.id))];
   ok(toEdit.version === 1 && editedTx.version === 2 && editedTx.category === 'Depois'
     && staleEdit.status === 409 && movedEdit.status === 400,
     `PUT /api/transactions/{id} edita (versao ${editedTx.version}); versao antiga = ${staleEdit.status}; outra conta = ${movedEdit.status}`);
+
+  // LNC-4: o Resumo (projecao do reporting) acompanha a edicao: categoria e valor novos.
+  let editedTotal;
+  for (let i = 0; i < 30 && editedTotal !== 35; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    const s = await (await fetch(`${GATEWAY}/api/reports/summary?accountId=${account.id}`, { headers: auth })).json();
+    editedTotal = s.byCategory?.find((c) => c.key === 'Depois')?.total;
+  }
+  ok(editedTotal === 35, `GET /api/reports/summary reflete a edicao (categoria "Depois" = ${editedTotal})`);
   if (toEdit.id) await fetch(`${GATEWAY}/api/transactions/${toEdit.id}`, { method: 'DELETE', headers: auth });
 
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as

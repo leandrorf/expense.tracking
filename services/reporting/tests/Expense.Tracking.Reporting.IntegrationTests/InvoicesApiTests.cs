@@ -77,6 +77,27 @@ public sealed class InvoicesApiTests(InvoicesApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task EditingAPurchaseFrom3To6Installments_RedistributesTheParcels()
+    {
+        // LNC-4 (ADR-0007): a fatura le a projecao, que aplica o TransactionUpdated.
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17);
+        var notebook = Guid.NewGuid();
+        _factory.EventFeed.CardPurchase(notebook, owner, card.Id, 300m, "2026-11-15", installments: 3, description: "Notebook");
+        _factory.EventFeed.Updated(notebook, owner, 600m, "2026-11-15", cardId: card.Id, installments: 6, description: "Notebook 16GB");
+        await _factory.DrainFeedAsync();
+
+        var invoices = InvoicesOf(await ClientFor(owner).GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices"));
+
+        Assert.Equal(["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05"],
+            invoices.Select(i => i.GetProperty("dueMonth").GetString()));
+        Assert.All(invoices, i => Assert.Equal(100m, i.GetProperty("total").GetDecimal()));
+        var last = Assert.Single(invoices[^1].GetProperty("items").EnumerateArray());
+        Assert.Equal(("Notebook 16GB", 6, 6), (last.GetProperty("description").GetString(),
+            last.GetProperty("installment").GetInt32(), last.GetProperty("installments").GetInt32()));
+    }
+
+    [Fact]
     public async Task Payments_SettleTheInvoiceTheyName_AndDeletingOneRestoresTheStatus()
     {
         var owner = Guid.NewGuid();

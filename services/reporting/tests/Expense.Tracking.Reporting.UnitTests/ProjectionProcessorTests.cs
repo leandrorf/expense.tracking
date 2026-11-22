@@ -252,6 +252,91 @@ public sealed class ProjectionProcessorTests
             paidOn = "2026-12-15",
         });
 
+    // ---------- LNC-4 (ADR-0007): TransactionUpdated ----------
+
+    private static FeedEvent Updated(Feed feed, Guid tx, decimal amount, string category = "Feira", Guid? card = null, int installments = 1,
+        string type = "Expense", string occurredOn = "2026-11-20") =>
+        feed.Raw(FeedEventTypes.TransactionUpdated, 1, new
+        {
+            transactionId = tx,
+            ownerUserId = Guid.Empty,
+            accountId = Guid.Empty,
+            transactionType = type,
+            paymentMethod = card is null ? "Pix" : "CreditCard",
+            category,
+            amount,
+            currency = "BRL",
+            occurredOn,
+            description = "Corrigido",
+            creditCardId = card,
+            installments,
+            transactionVersion = 2,
+        });
+
+    [Fact]
+    public async Task Updated_CorrectsTheRow_AndKeepsTheScope()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (tx, card) = (Guid.NewGuid(), Guid.NewGuid());
+        feed.Registered(tx, scope: "Business", amount: 100m);
+        Updated(feed, tx, 3000m, category: "Eletronicos", card: card, installments: 6, type: "Income", occurredOn: "2026-10-31");
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal((2, 0), (result.Applied, result.Skipped));
+        var row = Assert.Single(store.Rows.Values);
+        Assert.Equal(("Business", "Income", "CreditCard", "Eletronicos", 3000m, new DateOnly(2026, 10, 31), "Corrigido", card, 6, 2L),
+            (row.AccountScope, row.TransactionType, row.PaymentMethod, row.Category, row.Amount, row.OccurredOn, row.Description,
+                row.CreditCardId, row.Installments, row.LastEventSequence));
+    }
+
+    [Fact]
+    public async Task Updated_AfterTheDeletion_DoesNotBringTheTransactionBack()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var tx = Guid.NewGuid();
+        feed.Registered(tx);
+        feed.Deleted(tx);
+        Updated(feed, tx, 50m);
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(3, result.Applied);
+        Assert.Empty(store.Rows);
+    }
+
+    [Fact]
+    public async Task RebuildFromZero_WithEdits_ReachesTheLastState()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var tx = Guid.NewGuid();
+        feed.Registered(tx, amount: 100m);
+        Updated(feed, tx, 150m);
+        Updated(feed, tx, 175m, category: "Padaria");
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        store.Checkpoint = 0;
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        var row = Assert.Single(store.Rows.Values);
+        Assert.Equal((175m, "Padaria"), (row.Amount, row.Category));
+    }
+
+    [Fact]
+    public async Task Updated_InAnUnknownVersion_StopsTheBatch()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        feed.Raw(FeedEventTypes.TransactionUpdated, 2, new { transactionId = Guid.NewGuid() });
+
+        await Assert.ThrowsAsync<UnsupportedEventVersionException>(
+            () => Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None));
+        Assert.Equal(0, store.Saves);
+    }
+
     private static FeedEvent CardDetails(Feed feed, Guid tx, Guid card, string description) =>
         feed.Raw(FeedEventTypes.TransactionCardDetailsResolved, 1, new
         {

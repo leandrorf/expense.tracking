@@ -63,6 +63,27 @@ public sealed class FakeEventFeed : IEventFeedClient
             accountScope,
         });
 
+    /// <summary>LNC-4: edicao (<c>TransactionUpdated</c> v1), com o estado completo depois dela.</summary>
+    public FeedEvent Updated(
+        Guid transactionId, Guid ownerUserId, decimal amount, string occurredOn, string category = "Compras",
+        Guid? cardId = null, int installments = 1, string description = "Corrigido", string transactionType = "Expense") =>
+        Append(FeedEventTypes.TransactionUpdated, transactionId, ownerUserId, new
+        {
+            transactionId,
+            ownerUserId,
+            accountId = Guid.NewGuid(),
+            transactionType,
+            paymentMethod = cardId is null ? "Pix" : "CreditCard",
+            category,
+            amount,
+            currency = "BRL",
+            occurredOn,
+            description,
+            creditCardId = cardId,
+            installments,
+            transactionVersion = 2,
+        });
+
     public FeedEvent Deleted(Guid transactionId, Guid ownerUserId) =>
         Append(FeedEventTypes.TransactionDeleted, transactionId, ownerUserId, new { transactionId, ownerUserId });
 
