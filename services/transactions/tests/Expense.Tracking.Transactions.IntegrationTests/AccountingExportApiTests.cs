@@ -159,6 +159,34 @@ public sealed class AccountingExportApiTests(TransactionsApiFactory factory) : I
     }
 
     [Fact]
+    public async Task Preview_CountsAndTotalsTheSamePackage_WithoutTheFile()
+    {
+        var owner = Guid.NewGuid();
+        var (business, personal) = GivenAccounts();
+        var client = ClientFor(owner, scope: "expenses.read expenses.write");
+        await PostAsync(client, Tx(business.Id, "Cliente A", 5000m, "2026-10-20", type: "Income"));
+        await PostAsync(client, Tx(business.Id, "Licenca", 300.25m, "2026-10-02"));
+        await PostAsync(client, Tx(personal.Id, "Mercado pessoal", 200m, "2026-10-04"));
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/transactions/card-payments", new
+        {
+            creditCardId = Guid.NewGuid(), invoiceDueMonth = "2026-10", accountId = business.Id, amount = 80m, paidOn = "2026-10-15",
+        })).StatusCode);
+
+        var preview = await client.GetFromJsonAsync<JsonElement>($"{Route}/preview?month=2026-10");
+
+        Assert.Equal(($"contabil-{Cnpj}-2026-10.zip", 1, 2, 1), (preview.GetProperty("fileName").GetString(),
+            preview.GetProperty("accounts").GetInt32(), preview.GetProperty("lines").GetInt32(), preview.GetProperty("payments").GetInt32()));
+        var brl = Assert.Single(preview.GetProperty("totals").EnumerateArray());
+        Assert.Equal(("BRL", 5000m, 300.25m, 4699.75m), (brl.GetProperty("currency").GetString(),
+            brl.GetProperty("income").GetDecimal(), brl.GetProperty("expense").GetDecimal(), brl.GetProperty("balance").GetDecimal()));
+
+        var pf = await client.GetAsync($"{Route}/preview?month=2026-10&accountId={personal.Id}");
+        Assert.Equal((HttpStatusCode.BadRequest, "accounting_export.account_not_business"), (pf.StatusCode, await TitleAsync(pf)));
+        var bad = await client.GetAsync($"{Route}/preview?month=10-2026");
+        Assert.Equal("accounting_export.month_invalid", await TitleAsync(bad));
+    }
+
+    [Fact]
     public async Task Export_OfOneAccount_RejectsPersonalOrForeignAccounts()
     {
         var owner = Guid.NewGuid();

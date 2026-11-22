@@ -7,6 +7,7 @@ import {
   logout,
   type UserInfo,
 } from './auth/oauth';
+import { AccountingExportView } from './views/AccountingExportView';
 import { AccountsView } from './views/AccountsView';
 import { BudgetsView } from './views/BudgetsView';
 import { CardsView } from './views/CardsView';
@@ -16,7 +17,7 @@ import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'summary' | 'forecast' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'import';
+type Tab = 'summary' | 'forecast' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'import' | 'accounting';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
@@ -99,6 +100,9 @@ export function App() {
           <button data-cy="tab-cards" className={tab === 'cards' ? 'active' : ''} onClick={() => setTab('cards')}>
             Cartões
           </button>
+          <button data-cy="tab-accounting" className={tab === 'accounting' ? 'active' : ''} onClick={() => setTab('accounting')}>
+            Contador
+          </button>
         </nav>
         <div className="user">
           <span data-cy="session-active" title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
@@ -116,6 +120,7 @@ export function App() {
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
         {tab === 'cards' && <CardsView />}
+        {tab === 'accounting' && <AccountingExportView />}
       </main>
     </div>
   );

@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 a CTB-3 feitas; próxima: CTB-4)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 a CTB-4 feitas; próxima: CTB-7)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1246,12 +1246,22 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     lê os três arquivos do ZIP e confere que o resumo bate com `GET /reports/summary` da conta PJ.
     Smoke com 38 passos.
   - Estimativa: 3 · **Must** · Dependências: CTB-2
-- 🔵 **CTB-4** "Exportar para o contador" na SPA.
+- ✅ **CTB-4** "Exportar para o contador" na SPA. → aba "Contador" e `GET /transactions/accounting-export/preview`.
   - *Dado* o usuário logado com conta PJ, *quando* abre a exportação, *então* escolhe o mês (padrão: o
     anterior) e, se tiver mais de uma conta PJ, todas ou uma; vê quantos lançamentos e os totais
     antes de baixar; e baixa o ZIP com um clique.
   - *Dado* um usuário sem conta PJ, *quando* abre a exportação, *então* vê o aviso de que ela é só
     para contas PJ, sem botão de baixar.
+  - Feito assim: a prévia é a rota irmã `GET /transactions/accounting-export/preview?month=&accountId=`
+    (`expenses.read`), que monta o mesmo pacote do ZIP sem gerar o arquivo e devolve `fileName`,
+    `accounts`, `lines`, `payments` e `totals` por moeda (entradas, saídas e saldo, os mesmos da
+    linha "Total" do `resumo.csv`); mesmos erros da exportação. Na SPA, a aba "Contador"
+    (`AccountingExportView`) tem o mês (anterior por padrão), a conta (só com mais de uma PJ; as
+    inativas aparecem marcadas), a prévia e o botão "Baixar <arquivo>". O download usa o novo
+    `apiDownload` (mesmo token e renovação do `apiFetch`) e o nome da prévia, sem depender do
+    `Content-Disposition` pelo CORS. Smoke passo 18 confere a prévia (39 passos). Cypress
+    `accounting-export.cy.ts`: mês anterior por padrão, mês sem movimento e o ZIP baixado começa com
+    `PK` (o demo sempre tem conta PJ; o aviso sem PJ não tem E2E). Suíte com 14 testes.
   - Estimativa: 3 · **Must** · Dependências: CTB-3
 - 🔵 **CTB-5** Plano de contas: categoria → conta contábil.
   - *Dado* as categorias usadas em contas PJ, *quando* associo uma delas a um código e nome de conta
