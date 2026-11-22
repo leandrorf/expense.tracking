@@ -1,4 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
 import { defineConfig } from 'cypress';
+
+/**
+ * CTB-7: abre um ZIP baixado e devolve cada arquivo como texto, sem biblioteca: cabecalho local de
+ * 30 bytes + nome + extra, depois o conteudo (deflate ou guardado). O mesmo leitor do smoke test.
+ */
+function unzip(path: string): Record<string, string> {
+  const zip = readFileSync(path);
+  const files: Record<string, string> = {};
+  for (let at = 0; zip.readUInt32LE(at) === 0x04034b50; ) {
+    const [nameLength, extraLength, size] = [zip.readUInt16LE(at + 26), zip.readUInt16LE(at + 28), zip.readUInt32LE(at + 18)];
+    const start = at + 30 + nameLength + extraLength;
+    const body = zip.subarray(start, start + size);
+    files[zip.subarray(at + 30, at + 30 + nameLength).toString()] =
+      (zip.readUInt16LE(at + 8) === 8 ? inflateRawSync(body) : body).toString('utf8');
+    at = start + size;
+  }
+  return files;
+}
 
 // Testes EndToEnd da SPA contra o stack real (docker compose up).
 // Portas default: web 5173, identity 5080, gateway 8080 — sobrescreva por env se mudar.
@@ -11,6 +31,9 @@ export default defineConfig({
     requestTimeout: 15_000,
     responseTimeout: 15_000,
     video: false,
+    setupNodeEvents(on) {
+      on('task', { unzip });
+    },
     retries: { runMode: 1, openMode: 0 },
     env: {
       // Origem do Identity Provider (tela de login hospedada pelo proprio IdP).

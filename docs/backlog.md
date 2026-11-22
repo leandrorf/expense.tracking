@@ -1111,7 +1111,7 @@ frontend.
 
 ---
 
-## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (CTB-1 a CTB-4 feitas; próxima: CTB-7)
+## 🟡 EPIC CTB — Exportação contábil PJ  · *In Progress* (Must concluído; faltam CTB-5, Should, e CTB-6, Could)
 **Problema:** todo mês, o PJ manda ao contador o movimento da empresa: o que entrou, o que saiu, em
 que categoria e por qual conta. Hoje o produto só mostra isso na tela (Lançamentos e Resumo), sem
 um arquivo para enviar. O usuário acaba copiando valores à mão ou reexportando o extrato do banco,
@@ -1275,9 +1275,18 @@ empresa e gastos pessoais") e Próximos passos ("exportação contábil PJ"). Id
     tela de exportação mostra "mudou desde a exportação de dd/mm", com a diferença de linhas e de
     totais. O registro guarda só totais e a impressão digital, nunca o conteúdo.
   - Estimativa: 3 · **Could** · Dependências: CTB-4
-- 🔵 **CTB-7** E2E Cypress: lançar, exportar e conferir (PJ e PF).
+- ✅ **CTB-7** E2E Cypress: lançar, exportar e conferir (PJ e PF). → `accounting-export-journey.cy.ts`.
   - *Dado* uma conta PJ e uma PF com lançamentos no mês, *quando* exporto pela SPA, *então* o ZIP
     baixado tem só os lançamentos PJ, o pagamento de fatura PJ e o resumo com os totais da tela.
+  - Feito assim: tudo pela SPA, no mês de hoje: conta PJ com CNPJ próprio do teste (14 dígitos do
+    carimbo de tempo), conta PF e cartão PJ; gasto Pix e compra em 3x na PJ, gasto na PF; pagamento
+    parcial da fatura atual do cartão PJ pela conta PJ (reabre a fatura até a projeção trazer a
+    compra). Na aba Contador, escolhe a conta PJ, confere a prévia (2 lançamentos, 1 pagamento,
+    saídas R$ 1.020,50), baixa o ZIP e o abre com a task `unzip` do `cypress.config.ts` (`zlib`
+    nativo, o mesmo leitor do smoke): `lancamentos.csv` só com os dois PJ (a compra em 3x uma vez,
+    inteira, com "3"), sem o gasto PF; `pagamentos-fatura.csv` com o pagamento e a fatura paga;
+    `resumo.csv` com os totais da prévia. O formulário de lançamento só registra gastos, então a
+    jornada não tem receita (coberta pelos testes de integração). Suíte com 15 testes.
   - Estimativa: 3 · **Must** · Dependências: CTB-4
 
 **Fora do escopo (Won't, nesta versão):** exportação PF (para imposto de renda); XLSX e PDF;
