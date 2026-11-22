@@ -998,9 +998,17 @@ ciclo de cobrança). Ideia promovida de "Ideias de produto" a pedido do dono do 
     a tela da INV-9. Regra pura em `CashForecastCalculator` (Domain/Forecast). Smoke com previsão e
     400 (33 passos).
   - Estimativa: 5 · **Must** · Dependências: INV-4, INV-6
-- 🔵 **INV-9** Previsão de caixa na SPA.
+- ✅ **INV-9** Previsão de caixa na SPA.
   - *Dado* o usuário logado, *quando* abre a previsão, *então* vê os próximos 6 meses com entradas,
     saídas, faturas e resultado, com filtro PF/PJ, e um aviso de que só entra o que já está lançado.
+  - Feito assim: aba "Previsão" (depois do Resumo) com tabela por mês (entradas, saídas, faturas
+    com "falta pagar"/"paga" e resultado em verde ou vermelho) e linha de soma do período;
+    filtro de escopo (Total, PF, PJ) e horizonte (3, 6 ou 12 meses); o aviso vem da API, com a nota
+    de que o cartão entra pela fatura. A tabela rola na horizontal em tela estreita. Cypress
+    `cash-forecast.cy.ts` compara antes e depois (o usuário demo acumula dados): gasto Pix com data
+    daqui a 3 meses entra nas saídas daquele mês; compra no cartão hoje entra nas faturas do mês de
+    vencimento e não nas saídas do mês atual. O formulário de lançamento só registra gastos, então
+    receita futura fica coberta pelos testes de integração da INV-8. Suíte com 10 testes.
   - Estimativa: 3 · **Must** · Dependências: INV-8
 - 🔵 **INV-10** Limite disponível do cartão.
   - *Dado* um cartão com limite de R$ 5.000,00 e R$ 1.200,00 a pagar (incluindo parcelas futuras),

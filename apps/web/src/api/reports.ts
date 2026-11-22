@@ -82,3 +82,32 @@ export const invoicesApi = {
   /** Faturas do cartão: 12 antes da atual até a última parcela (ADR-0005). */
   list: (cardId: string) => apiFetch<CardInvoices>(`/api/reports/cards/${cardId}/invoices`),
 };
+
+/** INV-8: fluxo de um mês num escopo. `result` = entradas − saídas − faturas (total). */
+export interface MonthFlow {
+  income: number;
+  expense: number;
+  invoices: number;
+  invoicesPaid: number;
+  invoicesRemaining: number;
+  result: number;
+}
+
+export interface ForecastMonth {
+  /** `yyyy-MM`. */
+  month: string;
+  personal: MonthFlow;
+  business: MonthFlow;
+  total: MonthFlow;
+}
+
+export interface CashForecast {
+  currency: string;
+  notice: string;
+  months: ForecastMonth[];
+}
+
+export const forecastApi = {
+  /** Do mês atual até `months` meses (1 a 12). */
+  get: (months: number) => apiFetch<CashForecast>(`/api/reports/cash-forecast?months=${months}`),
+};
