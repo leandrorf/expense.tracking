@@ -1810,8 +1810,153 @@ REC-10 (2 pts). Total: 36 pts.
 **Ordem sugerida:** REC-1 → REC-2 → REC-3 → REC-4 (com o `reporting` implantado antes do `transactions`
 que publica os eventos novos) → REC-5 → REC-6 → REC-7 (fecha o Must) → REC-8 → REC-9 → REC-10.
 
+## 🔵 EPIC NTF — Lembretes de vencimento  · *To Do*
+**Problema:** o produto já sabe o que vai vencer (a fatura de cada cartão com a situação dela, as
+ocorrências recorrentes e o que está "a lançar"), mas só mostra isso a quem abre a aba certa e procura. Fatura
+fechada que ninguém olha vira fatura vencida, com juros no banco; boleto do aluguel cadastrado como
+recorrência passa do dia sem ser pago nem lançado. Os orçamentos (BDG) e a fatura (INV) recusaram
+"notificação ativa" justamente porque não havia infraestrutura para isso.
+**Objetivo (outcome):** ao abrir o app, o usuário vê na hora o que vence nos próximos dias e o que já
+venceu sem pagamento, e chega com um clique onde resolve (pagar a fatura, lançar ou pular a ocorrência).
+Num segundo passo, quem quiser recebe um resumo por e-mail no dia, sem precisar abrir o app.
+**Métricas de sucesso:** (1) toda fatura fechada ou vencida sem pagamento total e toda saída recorrente que
+vence em até 3 dias aparece no aviso, sem o usuário abrir Cartões ou Recorrências; (2) pagar a fatura ou
+lançar/pular a ocorrência tira o aviso na próxima leitura; (3) nenhum aviso de coisa já resolvida; (4) a
+jornada "aviso → resolver → aviso some" passa no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → controle de gastos com cartão e boleto; recusas anteriores
+("notificação ativa fica fora: não há infraestrutura", BDG; "notificação de vencimento por e-mail ou push",
+Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-23).
+
+**Achados no código que moldam o épico:**
+- **O reporting já tem o que vence.** A fatura de cada cartão (`InvoiceCalculator`, com situação Aberta,
+  Fechada, Paga, Parcialmente paga, Vencida, data de vencimento e quanto falta) e as recorrências com os
+  períodos fechados (projeção da REC-4) moram nele. O "a lançar" é calculado no `transactions`, mas o
+  reporting tem a mesma agenda (`RecurrenceSchedule`) e os mesmos períodos fechados.
+- **A fatura depende do ciclo do cartão, que vem do `accounts` com o token do usuário** (ADR-0005,
+  decisão 3). Na consulta isso é de graça; um job em segundo plano (e-mail diário) não tem token de
+  usuário e hoje não conseguiria calcular faturas.
+- **Existe precedente para serviço consultar o `accounts`:** `/internal/**` (bloqueado no gateway) com um
+  escopo de serviço (`accounts.scopes.read`, usado pelo `transactions` no backfill de escopo, EVT-4).
+- **Nenhum serviço conhece o e-mail do usuário.** A SPA não pede o escopo `email`, nenhum serviço lê o
+  claim, e o `identity` vive em repositório próprio (ADR-0003): mudar o que ele emite é trabalho fora deste
+  repositório. Também não há SMTP, biblioteca de e-mail nem servidor de e-mail de desenvolvimento.
+- **Já existe worker no reporting** (`ProjectionWorker`) e "hoje" no fuso configurado (`Reports:TimeZone`).
+- **Os orçamentos já calculam Atenção e Estourado** (BDG-4) no reporting, mas não avisam.
+
+**Decisões em aberto (para a ADR-0009, NTF-1; recomendação do PO em cada uma):**
+1. **Canal.** Opções: (a) **avisos no app**: um sino no topo com o número de avisos e um painel, calculados
+   na consulta com o token do usuário; (b) **e-mail diário**, enviado por um job; (c) **push do navegador**.
+   *Recomendação:* (a) no Must, porque resolve a maior parte do problema sem infraestrutura nova; (b) no
+   Should, com as dependências abaixo; (c) fora, porque exige service worker, chaves VAPID e permissão do
+   navegador, com pouco ganho sobre o e-mail para um app que se abre todo dia.
+2. **Onde moram.** *Recomendação:* no `reporting`, ao lado da fatura, da previsão e dos orçamentos, que
+   são a fonte dos avisos; sem serviço novo. Rota `GET /reports/reminders`, pela rota do gateway que já
+   existe, com `expenses.read`. Os avisos são **calculados na consulta e nunca guardados**; só a
+   dispensa (decisão 5) e as preferências (decisão 4) são gravadas.
+3. **Do que avisar.** *Recomendação:*
+   - **Fatura:** não paga por inteiro, com vencimento de hoje até N dias (situação Fechada ou Parcialmente
+     paga), ou já Vencida (até 30 dias atrás). Mostra cartão, vencimento e quanto falta.
+   - **Saída recorrente** (gasto ou compra no cartão de uma regra REC) com ocorrência em aberto de hoje até
+     N dias. Receita recorrente não gera aviso.
+   - **"A lançar"** (REC-3): um aviso só, com a quantidade, levando à aba Recorrências.
+   - **Orçamento** em Atenção ou Estourado no mês corrente: Could.
+4. **Antecedência e preferências.** *Recomendação:* N = **3 dias** por padrão, configurável de 0 a 15 por
+   usuário, e cada tipo de aviso pode ser desligado. As preferências ficam no reporting (dado do usuário,
+   como os orçamentos, ADR-0002). As preferências entram no Should; o Must usa o padrão.
+5. **Dispensar.** *Recomendação:* "dispensar" esconde o aviso **até ele mudar de estado**. Uma fatura
+   dispensada como "vence em 3 dias" volta quando vence sem pagamento; uma ocorrência dispensada não volta.
+   A chave de dispensa é estável por item (cartão + mês de vencimento + estado; regra + período), guardada
+   no reporting. Resolver (pagar, lançar, pular) tira o aviso sem precisar dispensar.
+6. **E-mail diário** (Should). *Recomendação:*
+   - Opt-in nas preferências, um resumo por dia no horário configurado (padrão 8h no fuso do app), só quando
+     há aviso novo desde o último envio.
+   - **Endereço:** o usuário informa e **confirma por um link** com token de uso único e validade de 24h
+     (sem confirmação, um erro de digitação manda dados financeiros a terceiros). Pré-preenchido com o
+     claim `email` se um dia o `identity` passar a emiti-lo, sem depender disso agora.
+   - **Ciclo do cartão para o job:** endpoint interno no `accounts` (`/internal/credit-cards`, por dono)
+     com um escopo de serviço novo (`accounts.cards.read`), no padrão do EVT-4.
+   - **Envio:** SMTP configurável (`Smtp:*`), com MailKit (licença MIT) e o Mailpit no compose para
+     desenvolvimento e E2E. O conteúdo traz só descrição, valor e data. O link leva ao app, que pede login:
+     nada de link mágico.
+7. **Atalhos.** *Recomendação:* cada aviso leva aonde se resolve: fatura → aba Cartões com aquela fatura
+   aberta; ocorrência ou "a lançar" → aba Recorrências; orçamento → aba Orçamentos.
+
+- 🔵 **NTF-1** ADR: lembretes de vencimento.
+  - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0009 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **NTF-2** API de avisos.
+  - *Dado* um cartão com fatura Fechada de R$ 800 que vence em 2 dias, *quando* consulto
+    `GET /reports/reminders`, *então* recebo um aviso de fatura com cartão, vencimento e R$ 800 a pagar;
+    *e* com pagamento parcial de R$ 300, o aviso mostra R$ 500.
+  - *Dado* uma fatura Vencida sem pagamento total, *quando* consulto, *então* o aviso vem como vencida
+    (mais urgente) até 30 dias depois do vencimento.
+  - *Dado* um aluguel recorrente (gasto) com ocorrência em aberto daqui a 3 dias, *quando* consulto,
+    *então* recebo o aviso; *dado* um salário (receita), *então* não.
+  - *Dado* ocorrências "a lançar", *quando* consulto, *então* recebo um aviso só, com a quantidade.
+  - *Dado* uma fatura paga ou uma ocorrência lançada ou pulada, *quando* consulto, *então* o aviso sumiu.
+  - Estimativa: 5 · **Must** · Dependências: NTF-1
+- 🔵 **NTF-3** Sino e painel de avisos na SPA.
+  - *Dado* avisos pendentes, *quando* abro o app, *então* o topo mostra um sino com o número de avisos
+    (vencidos em destaque) e, ao clicar, um painel do mais urgente para o menos urgente.
+  - *Dado* um aviso de fatura, *quando* clico nele, *então* vou para Cartões com aquela fatura aberta; *e*
+    um aviso de ocorrência ou "a lançar" leva a Recorrências.
+  - *Dado* que resolvi um aviso em outra aba do app, *quando* volto ao painel, *então* ele está
+    atualizado (o painel relê ao abrir e quando a janela volta ao foco).
+  - Estimativa: 5 · **Must** · Dependências: NTF-2
+- 🔵 **NTF-4** E2E Cypress: aviso, resolver, aviso some.
+  - *Dado* um cartão com fatura fechada a vencer e um aluguel recorrente a vencer, *quando* abro o app,
+    *então* o sino mostra os dois; *quando* pago a fatura pelo atalho e lanço o aluguel, *então* os dois
+    avisos somem.
+  - Estimativa: 3 · **Must** · Dependências: NTF-3
+- 🔵 **NTF-5** Dispensar aviso.
+  - *Dado* um aviso de fatura "vence em 3 dias", *quando* o dispenso, *então* ele some; *e* volta se a
+    fatura vencer sem pagamento.
+  - *Dado* um aviso de ocorrência, *quando* o dispenso, *então* ele não volta para aquele período.
+  - Estimativa: 3 · **Should** · Dependências: NTF-3
+- 🔵 **NTF-6** Preferências dos avisos.
+  - *Dado* as preferências, *quando* mudo a antecedência para 7 dias e desligo os avisos de recorrência,
+    *então* o painel passa a mostrar faturas que vencem em até 7 dias e nenhuma recorrência.
+  - *Dado* uma antecedência fora de 0 a 15, *quando* salvo, *então* recebo 400.
+  - Estimativa: 3 · **Should** · Dependências: NTF-2
+- 🔵 **NTF-7** Ciclo dos cartões para o serviço.
+  - *Dado* o `reporting` com token de serviço e o escopo `accounts.cards.read`, *quando* consulta
+    `GET /internal/credit-cards?ownerUserId=...` no `accounts`, *então* recebe os cartões do dono com
+    ciclo, conta e escopo; *e* pelo gateway a rota é bloqueada, e sem o escopo dá 403.
+  - Estimativa: 3 · **Should** · Dependências: NTF-1
+- 🔵 **NTF-8** Resumo diário por e-mail.
+  - *Dado* que ativei o e-mail e confirmei o endereço pelo link, *quando* chega o horário do resumo e
+    tenho aviso novo desde o último envio, *então* recebo um e-mail com os avisos e um link para o app;
+    *e* sem aviso novo, nada é enviado.
+  - *Dado* um endereço não confirmado (ou link vencido depois de 24h), *quando* chega o horário, *então*
+    nada é enviado.
+  - *Dado* o compose de desenvolvimento, *quando* o resumo sai, *então* ele aparece no Mailpit (o E2E
+    confere por lá).
+  - Estimativa: 8 · **Should** · Dependências: NTF-6, NTF-7
+- 🔵 **NTF-9** Aviso de orçamento.
+  - *Dado* um orçamento em Atenção ou Estourado no mês corrente, *quando* olho o painel, *então* vejo o
+    aviso com o consumido e o limite, levando a Orçamentos.
+  - Estimativa: 2 · **Could** · Dependências: NTF-3
+
+**Fora do escopo (Won't, nesta versão):** push do navegador e app móvel; SMS e WhatsApp; aviso por
+lançamento individual ou por parcela; aviso de limite do cartão; pagamento a partir do aviso (o atalho leva
+à tela de pagamento que já existe); lembretes personalizados ("me avise dia X de Y"); vários endereços de
+e-mail; mudar o que o `identity` emite.
+
+**Priorização (MoSCoW):** Must = NTF-1 a NTF-4 (15 pts): avisos no app de fatura e recorrência, com atalho
+para resolver, provados ponta a ponta. Should = NTF-5 a NTF-8 (17 pts): dispensar e preferências tornam o
+painel usável no dia a dia; o e-mail entrega o lembrete a quem não abre o app, com o endpoint interno do
+`accounts` como pré-requisito. Could = NTF-9 (2 pts). Total: 34 pts.
+
+**Ordem sugerida:** NTF-1 → NTF-2 → NTF-3 → NTF-4 (fecha o Must) → NTF-5 → NTF-6 → NTF-7 → NTF-8 → NTF-9.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
 - (Receita e edição de lançamentos viraram o épico LNC, em 2026-11-22.)
 - (Lançamentos recorrentes viraram o épico REC, em 2026-11-22.)
+- (Lembretes de vencimento viraram o épico NTF, em 2026-11-23.)
+- Reajuste automático de recorrências por índice (IGP-M, IPCA): aluguel e contratos (Won't do REC).
+- Conciliação da fatura calculada com a fatura importada do banco (Won't do INV).
+- Editar o ciclo do cartão (hoje é criar outro cartão; ADR-0005, decisão 3, pede reabrir a decisão).
