@@ -43,6 +43,10 @@ public static class DependencyInjection
         services.AddScoped<GetRecurrenceHandler>();
         services.AddScoped<UpdateRecurrenceHandler>();
         services.AddScoped<DeleteRecurrenceHandler>();
+        services.AddScoped<LaunchOccurrenceHandler>();
+        services.AddScoped<SkipOccurrenceHandler>();
+        services.AddScoped<UnskipOccurrenceHandler>();
+        services.AddScoped<ListDueOccurrencesHandler>();
 
         // INV-6: pagamentos de fatura (ADR-0005, decisao 6).
         services.AddScoped<ICardPaymentRepository, CardPaymentRepository>();

@@ -1,6 +1,7 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.Contracts;
 using Expense.Tracking.Transactions.Application.Events;
+using Expense.Tracking.Transactions.Application.Recurrences;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
@@ -296,6 +297,7 @@ public sealed class GetTransactionHandler(ITransactionRepository transactions)
 
 public sealed class DeleteTransactionHandler(
     ITransactionRepository transactions,
+    IRecurrenceRepository recurrences,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork)
 {
@@ -310,6 +312,8 @@ public sealed class DeleteTransactionHandler(
         transactions.Remove(transaction);
         // A exclusao e fisica: o evento e o unico registro de que o lancamento existiu.
         outbox.Add(new TransactionDeleted(transaction.Id, transaction.OwnerUserId));
+        // REC-3 (ADR-0008, decisao 7): o lancamento de uma ocorrencia reabre o periodo.
+        await RecurrenceLinks.ReopenLaunchedAsync(recurrences, outbox, transaction, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

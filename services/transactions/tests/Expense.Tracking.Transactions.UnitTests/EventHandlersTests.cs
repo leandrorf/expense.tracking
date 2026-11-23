@@ -53,7 +53,7 @@ public sealed class EventHandlersTests
         ports.Outbox.Events.Clear();
         ports.UnitOfWork.Reset();
 
-        var result = await new DeleteTransactionHandler(ports.Repository, ports.Outbox, ports.UnitOfWork)
+        var result = await new DeleteTransactionHandler(ports.Repository, new NoRecurrences(), ports.Outbox, ports.UnitOfWork)
             .HandleAsync(created.Value.Id, Owner, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -70,7 +70,7 @@ public sealed class EventHandlersTests
         var created = await ports.CreateHandler().HandleAsync(Command(Guid.NewGuid()), CancellationToken.None);
         ports.Outbox.Events.Clear();
 
-        var result = await new DeleteTransactionHandler(ports.Repository, ports.Outbox, ports.UnitOfWork)
+        var result = await new DeleteTransactionHandler(ports.Repository, new NoRecurrences(), ports.Outbox, ports.UnitOfWork)
             .HandleAsync(created.Value.Id, Guid.NewGuid(), CancellationToken.None);
 
         Assert.True(result.IsFailure);

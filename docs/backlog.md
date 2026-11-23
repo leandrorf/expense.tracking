@@ -1672,7 +1672,7 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
     escopo da conta e `recurrenceVersion`. "Hoje" pelo `LocalCalendar`, da configuração `TimeZone`
     (padrão `America/Sao_Paulo`, mesma resolução do reporting).
   - Estimativa: 5 · **Must** · Dependências: REC-1
-- 🔵 **REC-3** Lançar e pular ocorrência; lista "A lançar".
+- ✅ **REC-3** Lançar e pular ocorrência; lista "A lançar". → `.../occurrences/{period}/launch|skip`, `/recurrences/due`.
   - *Dado* uma ocorrência em aberto, *quando* a lanço (podendo trocar valor e data), *então* nasce um
     lançamento comum vinculado à regra e ao período da ocorrência, e ela deixa de estar em aberto;
     lançar o mesmo período de novo responde 409 `recurrence.occurrence_closed`.
@@ -1682,6 +1682,18 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* ocorrências de dias que já passaram sem lançar nem pular, *quando* consulto
     `GET /transactions/recurrences/due`, *então* vejo as dos últimos 60 dias, das mais antigas para as
     mais novas.
+  - Feito assim: `POST /transactions/recurrences/{id}/occurrences/{period}/launch` (corpo opcional com
+    `amount`, `occurredOn`, `notes`; sem eles valem os da regra e a data agendada) cria um lançamento comum
+    (`TransactionRegistered`, mesmas conferências da criação) com `recurrenceId`/`recurrencePeriod`
+    (migração `TransactionRecurrenceLink`; o DTO do lançamento os devolve), grava o período como
+    `Launched` em `recurrence_occurrences` e publica `RecurrenceOccurrenceClosed` (com o `transactionId`),
+    tudo num commit; corrida na chave (regra, período) vira o mesmo 409. `POST .../skip` fecha como
+    `Skipped` (`transactionId` nulo no evento) e `DELETE .../skip` reabre (`RecurrenceOccurrenceReopened`);
+    desfazer pulo de período lançado = 409 `recurrence.occurrence_launched`, de período aberto = 404
+    `recurrence.occurrence_not_skipped`. Excluir o lançamento de uma ocorrência remove o período fechado e
+    publica o `RecurrenceOccurrenceReopened` no commit da exclusão (`RecurrenceLinks`). `GET
+    /transactions/recurrences/due` lista os períodos em aberto com data de 60 dias atrás até ontem, das
+    mais antigas para as mais novas.
   - Estimativa: 5 · **Must** · Dependências: REC-2
 - 🔵 **REC-4** Previsão conta com as recorrências.
   - *Dado* um salário mensal (receita, Pix, dia 5) e um aluguel (gasto, boleto, dia 10), *quando* consulto

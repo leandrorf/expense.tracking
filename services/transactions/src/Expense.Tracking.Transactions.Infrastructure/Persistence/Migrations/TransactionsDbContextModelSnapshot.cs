@@ -596,6 +596,15 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("payment_method");
 
+                    b.Property<Guid?>("RecurrenceId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recurrence_id");
+
+                    b.Property<string>("RecurrencePeriod")
+                        .HasMaxLength(7)
+                        .HasColumnType("varchar(7)")
+                        .HasColumnName("recurrence_period");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(16)

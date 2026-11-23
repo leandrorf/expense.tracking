@@ -25,6 +25,9 @@ public sealed record RecurrenceRequest(
     DateOnly? EndsOn,
     int? Version = null);
 
+/// <summary>REC-3: lancar um periodo; sem corpo (ou campos nulos) valem o valor, a data agendada e as observacoes da regra.</summary>
+public sealed record LaunchOccurrenceRequest(decimal? Amount, DateOnly? OccurredOn, string? Notes);
+
 public static class RecurrencesEndpoints
 {
     public static IEndpointRouteBuilder MapRecurrencesEndpoints(this IEndpointRouteBuilder app)
@@ -104,6 +107,55 @@ public static class RecurrencesEndpoints
             }
 
             var result = await handler.HandleAsync(id, owner.Value, ct);
+            return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // REC-3 (ADR-0008, decisoes 7 e 8): "a lancar", lancar, pular e desfazer o pulo de um periodo.
+        group.MapGet("/due", async (HttpContext http, ListDueOccurrencesHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            return owner is null ? Results.Unauthorized() : Results.Ok(await handler.HandleAsync(owner.Value, ct));
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        group.MapPost("/{id:guid}/occurrences/{period}/launch", async (
+            Guid id, string period, LaunchOccurrenceRequest? request, HttpContext http, LaunchOccurrenceHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(
+                new LaunchOccurrenceCommand(id, owner.Value, period, request?.Amount, request?.OccurredOn, request?.Notes), ct);
+            return result.IsSuccess
+                ? Results.Created($"/transactions/{result.Value.Id}", result.Value)
+                : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapPost("/{id:guid}/occurrences/{period}/skip", async (
+            Guid id, string period, HttpContext http, SkipOccurrenceHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, period, ct);
+            return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapDelete("/{id:guid}/occurrences/{period}/skip", async (
+            Guid id, string period, HttpContext http, UnskipOccurrenceHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, period, ct);
             return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
