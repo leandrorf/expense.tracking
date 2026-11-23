@@ -1810,7 +1810,7 @@ REC-10 (2 pts). Total: 36 pts.
 **Ordem sugerida:** REC-1 → REC-2 → REC-3 → REC-4 (com o `reporting` implantado antes do `transactions`
 que publica os eventos novos) → REC-5 → REC-6 → REC-7 (fecha o Must) → REC-8 → REC-9 → REC-10.
 
-## 🔵 EPIC NTF — Lembretes de vencimento  · *To Do*
+## 🟡 EPIC NTF — Lembretes de vencimento  · *In Progress*
 **Problema:** o produto já sabe o que vai vencer (a fatura de cada cartão com a situação dela, as
 ocorrências recorrentes e o que está "a lançar"), mas só mostra isso a quem abre a aba certa e procura. Fatura
 fechada que ninguém olha vira fatura vencida, com juros no banco; boleto do aluguel cadastrado como
@@ -1843,7 +1843,7 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
 - **Já existe worker no reporting** (`ProjectionWorker`) e "hoje" no fuso configurado (`Reports:TimeZone`).
 - **Os orçamentos já calculam Atenção e Estourado** (BDG-4) no reporting, mas não avisam.
 
-**Decisões em aberto (para a ADR-0009, NTF-1; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0009](adr/0009-lembretes-de-vencimento.md), NTF-1; ficou a recomendação de cada uma, com os refinamentos da NTF-1):**
 1. **Canal.** Opções: (a) **avisos no app**: um sino no topo com o número de avisos e um painel, calculados
    na consulta com o token do usuário; (b) **e-mail diário**, enviado por um job; (c) **push do navegador**.
    *Recomendação:* (a) no Must, porque resolve a maior parte do problema sem infraestrutura nova; (b) no
@@ -1881,10 +1881,19 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
 7. **Atalhos.** *Recomendação:* cada aviso leva aonde se resolve: fatura → aba Cartões com aquela fatura
    aberta; ocorrência ou "a lançar" → aba Recorrências; orçamento → aba Orçamentos.
 
-- 🔵 **NTF-1** ADR: lembretes de vencimento.
+- ✅ **NTF-1** ADR: lembretes de vencimento. → [ADR-0009](adr/0009-lembretes-de-vencimento.md), Aceita.
   - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0009 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: tipos `InvoiceDue`, `InvoiceOverdue`,
+    `RecurrenceDue`, `RecurrencesToLaunch` e `Budget`, cada um com chave estável e urgência (`Overdue` >
+    `Today` > `Soon`); a fatura "a vencer" e a "vencida" têm chaves diferentes (dispensar uma não esconde a
+    outra) e o "a lançar" volta quando entra pendência nova. Tabelas `reminder_settings` (sem linha = padrão)
+    e `reminder_dismissals` (limpas depois de 120 dias). E-mail: token de confirmação de uso único, 24 h,
+    guardado como hash; o link abre a SPA logada, que confirma por rota autenticada (nada de rota anônima);
+    job de hora em hora, na hora escolhida (padrão 8h), uma vez por dia e só com aviso novo desde o último
+    envio; sem `Smtp:Host`, não envia. Escopo de serviço `accounts.cards.read` na semente do identity deste
+    repositório; `/api/internal/**` já é bloqueado no gateway.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **NTF-2** API de avisos.
   - *Dado* um cartão com fatura Fechada de R$ 800 que vence em 2 dias, *quando* consulto
