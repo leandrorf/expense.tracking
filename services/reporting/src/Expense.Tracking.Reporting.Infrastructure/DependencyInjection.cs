@@ -1,6 +1,7 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Budgets;
 using Expense.Tracking.Reporting.Application.Forecast;
+using Expense.Tracking.Reporting.Application.Reminders;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Application.Reports;
@@ -38,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<GetCardInvoicesHandler>();
         services.AddScoped<GetCardLimitsHandler>();
         services.AddScoped<GetCashForecastHandler>();
+        services.AddScoped<GetRemindersHandler>();
         services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();
 

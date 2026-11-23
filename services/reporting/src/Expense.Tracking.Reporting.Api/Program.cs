@@ -51,6 +51,7 @@ app.MapReportsEndpoints();
 app.MapBudgetsEndpoints();
 app.MapInvoicesEndpoints();
 app.MapForecastEndpoints();
+app.MapRemindersEndpoints();
 
 await InitializeDatabaseAsync(app);
 

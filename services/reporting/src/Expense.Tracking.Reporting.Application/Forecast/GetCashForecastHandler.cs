@@ -23,7 +23,8 @@ public sealed record RecurrenceRecord(
     string Frequency,
     DateOnly StartsOn,
     DateOnly? EndsOn,
-    IReadOnlySet<string> ClosedPeriods);
+    IReadOnlySet<string> ClosedPeriods,
+    string Description = "");
 
 /// <summary>INV-13: conta como o accounts a devolve ao dono (so o que a previsao usa).</summary>
 public sealed record AccountInfo(Guid Id, string? Scope, bool IsActive, decimal? OpeningBalance, DateOnly? OpeningBalanceOn);

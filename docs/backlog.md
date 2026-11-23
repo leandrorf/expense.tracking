@@ -1895,7 +1895,7 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     envio; sem `Smtp:Host`, não envia. Escopo de serviço `accounts.cards.read` na semente do identity deste
     repositório; `/api/internal/**` já é bloqueado no gateway.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **NTF-2** API de avisos.
+- ✅ **NTF-2** API de avisos. → `GET /reports/reminders`.
   - *Dado* um cartão com fatura Fechada de R$ 800 que vence em 2 dias, *quando* consulto
     `GET /reports/reminders`, *então* recebo um aviso de fatura com cartão, vencimento e R$ 800 a pagar;
     *e* com pagamento parcial de R$ 300, o aviso mostra R$ 500.
@@ -1905,6 +1905,15 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     *então* recebo o aviso; *dado* um salário (receita), *então* não.
   - *Dado* ocorrências "a lançar", *quando* consulto, *então* recebo um aviso só, com a quantidade.
   - *Dado* uma fatura paga ou uma ocorrência lançada ou pulada, *quando* consulto, *então* o aviso sumiu.
+  - Feito assim: regra pura `ReminderCalculator` (Domain/Reminders) sobre as faturas de todos os cartões do
+    usuário (`CardInvoiceSource`, ciclo lido no accounts com o token dele) e as recorrências projetadas
+    (agenda da REC-4): `InvoiceDue` (Fechada ou Parcialmente paga, falta pagar, vence de hoje até 3 dias;
+    `Today` se vence hoje), `InvoiceOverdue` (Vencida, até 30 dias), `RecurrenceDue` (ocorrência em aberto de
+    gasto de hoje até 3 dias) e um `RecurrencesToLaunch` com a quantidade (em aberto de 60 dias atrás até
+    ontem, gasto ou receita; chave pela data mais recente). Cada aviso traz chave, urgência, data, valor,
+    título e o destino do atalho (cartão e mês, ou regra e período); a lista vem por urgência, data e
+    título, com `overdue` (quantos vencidos) e `leadDays`. Smoke passo 25 (aviso aparece e some ao pular;
+    47 passos).
   - Estimativa: 5 · **Must** · Dependências: NTF-1
 - 🔵 **NTF-3** Sino e painel de avisos na SPA.
   - *Dado* avisos pendentes, *quando* abro o app, *então* o topo mostra um sino com o número de avisos
