@@ -1,3 +1,4 @@
+using Expense.Tracking.Transactions.Domain.Recurrences;
 using Expense.Tracking.Transactions.Domain.AccountingExport;
 using Expense.Tracking.Transactions.Domain.CardPayments;
 using Expense.Tracking.Transactions.Domain.Imports;
@@ -23,6 +24,10 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
     public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
 
     public DbSet<AccountingExportRecord> AccountingExports => Set<AccountingExportRecord>();
+
+    public DbSet<Recurrence> Recurrences => Set<Recurrence>();
+
+    public DbSet<RecurrenceOccurrence> RecurrenceOccurrences => Set<RecurrenceOccurrence>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

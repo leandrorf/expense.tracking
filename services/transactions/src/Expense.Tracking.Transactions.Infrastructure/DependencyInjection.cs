@@ -3,6 +3,7 @@ using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.CardPayments;
 using Expense.Tracking.Transactions.Application.Events;
 using Expense.Tracking.Transactions.Application.Imports;
+using Expense.Tracking.Transactions.Application.Recurrences;
 using Expense.Tracking.Transactions.Application.Transactions;
 using Expense.Tracking.Transactions.Infrastructure.Auth;
 using Expense.Tracking.Transactions.Infrastructure.Clients;
@@ -33,6 +34,15 @@ public static class DependencyInjection
         services.AddScoped<DeleteTransactionHandler>();
         services.AddScoped<UpdateTransactionHandler>();
         services.AddScoped<RecategorizeTransactionsHandler>();
+
+        // REC (ADR-0008): regras de recorrencia; "hoje" no fuso configurado (o mesmo do reporting).
+        services.AddSingleton(LocalCalendar.FromId(configuration["TimeZone"]));
+        services.AddScoped<IRecurrenceRepository, RecurrenceRepository>();
+        services.AddScoped<CreateRecurrenceHandler>();
+        services.AddScoped<ListRecurrencesHandler>();
+        services.AddScoped<GetRecurrenceHandler>();
+        services.AddScoped<UpdateRecurrenceHandler>();
+        services.AddScoped<DeleteRecurrenceHandler>();
 
         // INV-6: pagamentos de fatura (ADR-0005, decisao 6).
         services.AddScoped<ICardPaymentRepository, CardPaymentRepository>();

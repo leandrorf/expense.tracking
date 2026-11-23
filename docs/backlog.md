@@ -1648,7 +1648,7 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
     Os totais da previsão já incluem a recorrência, e `recurringIncome`/`recurringExpense`/
     `recurringInvoices` são a parte dela. Rotas em `/transactions/recurrences` (decisão 12 da ADR).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **REC-2** Regras de recorrência na API.
+- ✅ **REC-2** Regras de recorrência na API. → `/transactions/recurrences`, `RecurrenceSaved`/`RecurrenceDeleted`.
   - *Dado* uma conta minha, *quando* envio `POST /transactions/recurrences` com tipo, meio, descrição,
     categoria, valor estimado, frequência e início (a âncora da agenda), *então* a regra é criada com as validações do
     lançamento (400 com os mesmos códigos; parcelas recusadas) e um `RecurrenceSaved` sai no outbox no
@@ -1658,6 +1658,19 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* uma regra com ocorrências lançadas, *quando* edito o valor ou defino o fim, *então* só as
     ocorrências em aberto mudam; *quando* a excluo, *então* os lançamentos feitos a partir dela ficam.
   - *Dado* o dia 31, *quando* o mês tem 30 dias (ou é fevereiro), *então* a ocorrência cai no último dia.
+  - Feito assim: `Recurrence` (Domain/Recurrences) valida com o próprio `Transaction.Create` (mesmos
+    códigos, parcelas sempre 1) e guarda frequência (`Monthly`/`Yearly`), início (âncora) e fim
+    opcional (antes do início = 400 `recurrence.ends_before_start`); a agenda (`RecurrenceSchedule`)
+    dá o período de uma data, a data de um período (nula fora da agenda) e as ocorrências de uma
+    janela. Tabelas `recurrences` e `recurrence_occurrences` (migração `Recurrences`; só períodos
+    fechados, chave regra + período). Rotas `GET/POST /transactions/recurrences` e
+    `GET/PUT/DELETE /transactions/recurrences/{id}`: a leitura traz `nextOccurrence` (período e data da
+    primeira em aberto de hoje em diante); `PUT` exige `version` (400 `recurrence.version_required`; antiga =
+    409 `recurrence.concurrency_conflict`; conta diferente = 400 `recurrence.account_immutable`; sem
+    mudança = 200 sem evento). Conta e cartão conferidos no accounts. Eventos com base própria
+    (`RecurrenceEvent`: o agregado é a regra, sem `transactionId` no payload); `RecurrenceSaved` leva o
+    escopo da conta e `recurrenceVersion`. "Hoje" pelo `LocalCalendar`, da configuração `TimeZone`
+    (padrão `America/Sao_Paulo`, mesma resolução do reporting).
   - Estimativa: 5 · **Must** · Dependências: REC-1
 - 🔵 **REC-3** Lançar e pular ocorrência; lista "A lançar".
   - *Dado* uma ocorrência em aberto, *quando* a lanço (podendo trocar valor e data), *então* nasce um

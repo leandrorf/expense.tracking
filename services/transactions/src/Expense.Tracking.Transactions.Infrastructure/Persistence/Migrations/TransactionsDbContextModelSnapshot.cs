@@ -385,6 +385,136 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                     b.ToTable("import_lines", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.Recurrence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreditCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("credit_card_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("EndsOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ends_on");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("frequency");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("payment_method");
+
+                    b.Property<DateTime>("StartsOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("starts_on");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("recurrences", (string)null);
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.RecurrenceOccurrence", b =>
+                {
+                    b.Property<Guid>("RecurrenceId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recurrence_id");
+
+                    b.Property<string>("Period")
+                        .HasMaxLength(7)
+                        .HasColumnType("varchar(7)")
+                        .HasColumnName("period");
+
+                    b.Property<DateTime>("ClosedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("closed_at_utc");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("transaction_id");
+
+                    b.HasKey("RecurrenceId", "Period");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("recurrence_occurrences", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Transactions.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
