@@ -19,6 +19,10 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
 
     public DbSet<ProjectedCardPayment> CardPayments => Set<ProjectedCardPayment>();
 
+    public DbSet<ProjectedRecurrence> Recurrences => Set<ProjectedRecurrence>();
+
+    public DbSet<ProjectedRecurrenceOccurrence> RecurrenceOccurrences => Set<ProjectedRecurrenceOccurrence>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
@@ -66,6 +70,42 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(p => p.PaidOn).HasColumnName("paid_on").IsRequired();
             b.Property(p => p.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             b.HasIndex(p => new { p.OwnerUserId, p.CreditCardId }).HasDatabaseName("ix_projected_card_payments_owner_card");
+        });
+
+        // REC-4 (ADR-0008): regras de recorrencia e periodos fechados, so para a previsao.
+        modelBuilder.Entity<ProjectedRecurrence>(b =>
+        {
+            b.ToTable("projected_recurrences");
+            b.HasKey(r => r.RecurrenceId);
+            b.Property(r => r.RecurrenceId).HasColumnName("recurrence_id").ValueGeneratedNever();
+            b.Property(r => r.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(r => r.AccountId).HasColumnName("account_id").IsRequired();
+            b.Property(r => r.AccountScope).HasColumnName("account_scope").HasMaxLength(16);
+            b.Property(r => r.TransactionType).HasColumnName("transaction_type").HasMaxLength(16).IsRequired();
+            b.Property(r => r.PaymentMethod).HasColumnName("payment_method").HasMaxLength(20).IsRequired();
+            b.Property(r => r.CreditCardId).HasColumnName("credit_card_id");
+            b.Property(r => r.Description).HasColumnName("description").HasMaxLength(200).IsRequired();
+            b.Property(r => r.Category).HasColumnName("category").HasMaxLength(60).IsRequired();
+            b.Property(r => r.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+            b.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
+            b.Property(r => r.Frequency).HasColumnName("frequency").HasMaxLength(16).IsRequired();
+            b.Property(r => r.StartsOn).HasColumnName("starts_on").IsRequired();
+            b.Property(r => r.EndsOn).HasColumnName("ends_on");
+            b.Property(r => r.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
+            b.HasIndex(r => r.OwnerUserId).HasDatabaseName("ix_projected_recurrences_owner");
+        });
+
+        modelBuilder.Entity<ProjectedRecurrenceOccurrence>(b =>
+        {
+            b.ToTable("projected_recurrence_occurrences");
+            b.HasKey(o => new { o.RecurrenceId, o.Period });
+            b.Property(o => o.RecurrenceId).HasColumnName("recurrence_id");
+            b.Property(o => o.Period).HasColumnName("period").HasMaxLength(7);
+            b.Property(o => o.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(o => o.Status).HasColumnName("status").HasMaxLength(16).IsRequired();
+            b.Property(o => o.TransactionId).HasColumnName("transaction_id");
+            b.Property(o => o.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
+            b.HasIndex(o => o.OwnerUserId).HasDatabaseName("ix_projected_recurrence_occurrences_owner");
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

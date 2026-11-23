@@ -55,6 +55,24 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
             .ToListAsync(cancellationToken);
 
     // Fora do cartao: sem cartao e com outro meio (uma compra legada no cartao ainda sem o backfill fica de fora).
+    public async Task<IReadOnlyList<RecurrenceRecord>> GetRecurrencesAsync(Guid ownerUserId, CancellationToken cancellationToken)
+    {
+        var rules = await dbContext.Recurrences.AsNoTracking()
+            .Where(r => r.OwnerUserId == ownerUserId)
+            .ToListAsync(cancellationToken);
+        var closed = (await dbContext.RecurrenceOccurrences.AsNoTracking()
+                .Where(o => o.OwnerUserId == ownerUserId)
+                .Select(o => new { o.RecurrenceId, o.Period })
+                .ToListAsync(cancellationToken))
+            .GroupBy(o => o.RecurrenceId)
+            .ToDictionary(g => g.Key, g => (IReadOnlySet<string>)g.Select(o => o.Period).ToHashSet(StringComparer.Ordinal));
+        return rules
+            .Select(r => new RecurrenceRecord(r.RecurrenceId, r.AccountId, r.AccountScope, r.TransactionType, r.PaymentMethod,
+                r.CreditCardId, r.Amount, r.Frequency, r.StartsOn, r.EndsOn,
+                closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>()))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<CashMovementRecord>> GetCashMovementsAsync(
         Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
         await dbContext.Transactions.AsNoTracking()

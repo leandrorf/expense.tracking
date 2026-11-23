@@ -34,6 +34,10 @@ public static class FeedEventTypes
     public const string TransactionUpdated = "TransactionUpdated";
     public const string CardInvoicePaid = "CardInvoicePaid";
     public const string CardInvoicePaymentDeleted = "CardInvoicePaymentDeleted";
+    public const string RecurrenceSaved = "RecurrenceSaved";
+    public const string RecurrenceDeleted = "RecurrenceDeleted";
+    public const string RecurrenceOccurrenceClosed = "RecurrenceOccurrenceClosed";
+    public const string RecurrenceOccurrenceReopened = "RecurrenceOccurrenceReopened";
 
     /// <summary>Versao mais nova que o reporting le de cada tipo; as anteriores continuam valendo.</summary>
     public static int SupportedVersionOf(string eventType) => eventType == TransactionRegistered ? 2 : 1;
@@ -120,6 +124,36 @@ public sealed record TransactionUpdatedV1(
     Guid? CreditCardId,
     int Installments,
     int TransactionVersion);
+
+/// <summary>
+/// Payload v1 do <c>RecurrenceSaved</c> (REC-2, ADR-0008): estado completo da regra, com o escopo da
+/// conta; <see cref="RecurrenceVersion"/> e a versao da regra, nao a do formato do evento.
+/// </summary>
+public sealed record RecurrenceSavedV1(
+    Guid RecurrenceId,
+    Guid OwnerUserId,
+    Guid AccountId,
+    string? AccountScope,
+    string TransactionType,
+    string PaymentMethod,
+    Guid? CreditCardId,
+    string Description,
+    string Category,
+    decimal Amount,
+    string Currency,
+    string Frequency,
+    DateOnly StartsOn,
+    DateOnly? EndsOn,
+    int RecurrenceVersion);
+
+/// <summary>Payload v1 do <c>RecurrenceDeleted</c>.</summary>
+public sealed record RecurrenceDeletedV1(Guid RecurrenceId, Guid OwnerUserId);
+
+/// <summary>Payload v1 do <c>RecurrenceOccurrenceClosed</c> (REC-3): <c>Launched</c> (com o lancamento) ou <c>Skipped</c>.</summary>
+public sealed record RecurrenceOccurrenceClosedV1(Guid RecurrenceId, Guid OwnerUserId, string Period, string Status, Guid? TransactionId);
+
+/// <summary>Payload v1 do <c>RecurrenceOccurrenceReopened</c> (REC-3).</summary>
+public sealed record RecurrenceOccurrenceReopenedV1(Guid RecurrenceId, Guid OwnerUserId, string Period);
 
 /// <summary>Payload v1 do <c>TransactionDeleted</c>.</summary>
 public sealed record TransactionDeletedV1(Guid TransactionId, Guid OwnerUserId);

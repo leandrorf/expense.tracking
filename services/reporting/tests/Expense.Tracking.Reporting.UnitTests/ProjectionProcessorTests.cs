@@ -252,6 +252,80 @@ public sealed class ProjectionProcessorTests
             paidOn = "2026-12-15",
         });
 
+    // ---------- REC-4 (ADR-0008): regras e periodos fechados ----------
+
+    private static FeedEvent RecurrenceSaved(Feed feed, Guid rule, decimal amount, int version = 1) =>
+        feed.Raw(FeedEventTypes.RecurrenceSaved, version, new
+        {
+            recurrenceId = rule,
+            ownerUserId = Guid.Empty,
+            accountId = Guid.Empty,
+            accountScope = "Business",
+            transactionType = "Expense",
+            paymentMethod = "Boleto",
+            creditCardId = (Guid?)null,
+            description = "Aluguel",
+            category = "Moradia",
+            amount,
+            currency = "BRL",
+            frequency = "Monthly",
+            startsOn = "2026-12-10",
+            endsOn = (string?)null,
+            recurrenceVersion = 1,
+        });
+
+    private static FeedEvent Closed(Feed feed, Guid rule, string period, Guid? tx = null) =>
+        feed.Raw(FeedEventTypes.RecurrenceOccurrenceClosed, 1, new
+        {
+            recurrenceId = rule,
+            ownerUserId = Guid.Empty,
+            period,
+            status = tx is null ? "Skipped" : "Launched",
+            transactionId = tx,
+        });
+
+    [Fact]
+    public async Task Recurrences_AreUpserted_PeriodsCloseAndReopen_AndReplayingChangesNothing()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var (rule, tx) = (Guid.NewGuid(), Guid.NewGuid());
+        RecurrenceSaved(feed, rule, 2000m);
+        RecurrenceSaved(feed, rule, 2150m);
+        Closed(feed, rule, "2026-12", tx);
+        Closed(feed, rule, "2027-01");
+        feed.Raw(FeedEventTypes.RecurrenceOccurrenceReopened, 1, new { recurrenceId = rule, ownerUserId = Guid.Empty, period = "2027-01" });
+
+        var result = await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+        store.Checkpoint = 0;
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Equal(5, result.Applied);
+        var row = Assert.Single(store.Recurrences.Values);
+        Assert.Equal((2150m, "Business", "Monthly", new DateOnly(2026, 12, 10)), (row.Amount, row.AccountScope, row.Frequency, row.StartsOn));
+        var closed = Assert.Single(store.Occurrences.Values);
+        Assert.Equal(("2026-12", "Launched", tx), (closed.Period, closed.Status, closed.TransactionId));
+    }
+
+    [Fact]
+    public async Task DeletingARecurrence_RemovesItAndItsClosedPeriods_AndANewerVersionStopsTheBatch()
+    {
+        var feed = new Feed();
+        var store = new Store();
+        var rule = Guid.NewGuid();
+        RecurrenceSaved(feed, rule, 2000m);
+        Closed(feed, rule, "2026-12");
+        feed.Raw(FeedEventTypes.RecurrenceDeleted, 1, new { recurrenceId = rule, ownerUserId = Guid.Empty });
+
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        Assert.Empty(store.Recurrences);
+        Assert.Empty(store.Occurrences);
+
+        RecurrenceSaved(feed, Guid.NewGuid(), 10m, version: 2);
+        await Assert.ThrowsAsync<UnsupportedEventVersionException>(() => Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None));
+    }
+
     // ---------- LNC-4 (ADR-0007): TransactionUpdated ----------
 
     private static FeedEvent Updated(Feed feed, Guid tx, decimal amount, string category = "Feira", Guid? card = null, int installments = 1,
@@ -535,6 +609,36 @@ public sealed class ProjectionProcessorTests
         public void AddPayment(ProjectedCardPayment payment) => Payments[payment.PaymentId] = payment;
 
         public void RemovePayment(ProjectedCardPayment payment) => Payments.Remove(payment.PaymentId);
+
+        // REC-4: regras e periodos fechados (aplicados direto; os testes de recorrencia olham o resultado).
+        public Dictionary<Guid, ProjectedRecurrence> Recurrences { get; } = [];
+
+        public Dictionary<(Guid, string), ProjectedRecurrenceOccurrence> Occurrences { get; } = [];
+
+        public Task<ProjectedRecurrence?> FindRecurrenceAsync(Guid recurrenceId, CancellationToken cancellationToken) =>
+            Task.FromResult(Recurrences.GetValueOrDefault(recurrenceId));
+
+        public void AddRecurrence(ProjectedRecurrence recurrence) => Recurrences[recurrence.RecurrenceId] = recurrence;
+
+        public Task RemoveRecurrenceAsync(ProjectedRecurrence recurrence, CancellationToken cancellationToken)
+        {
+            Recurrences.Remove(recurrence.RecurrenceId);
+            foreach (var key in Occurrences.Keys.Where(k => k.Item1 == recurrence.RecurrenceId).ToList())
+            {
+                Occurrences.Remove(key);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<ProjectedRecurrenceOccurrence?> FindRecurrenceOccurrenceAsync(Guid recurrenceId, string period, CancellationToken cancellationToken) =>
+            Task.FromResult(Occurrences.GetValueOrDefault((recurrenceId, period)));
+
+        public void AddRecurrenceOccurrence(ProjectedRecurrenceOccurrence occurrence) =>
+            Occurrences[(occurrence.RecurrenceId, occurrence.Period)] = occurrence;
+
+        public void RemoveRecurrenceOccurrence(ProjectedRecurrenceOccurrence occurrence) =>
+            Occurrences.Remove((occurrence.RecurrenceId, occurrence.Period));
 
         public void SetCheckpoint(long sequence) => _pendingCheckpoint = sequence;
 

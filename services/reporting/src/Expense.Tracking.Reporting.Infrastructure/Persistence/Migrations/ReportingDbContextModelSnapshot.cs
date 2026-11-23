@@ -137,6 +137,127 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("projected_card_payments", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrence", b =>
+                {
+                    b.Property<Guid>("RecurrenceId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recurrence_id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("AccountScope")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("account_scope");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("category");
+
+                    b.Property<Guid?>("CreditCardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("credit_card_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("varchar(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("EndsOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ends_on");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("frequency");
+
+                    b.Property<long>("LastEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("payment_method");
+
+                    b.Property<DateTime>("StartsOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("starts_on");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("transaction_type");
+
+                    b.HasKey("RecurrenceId");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_projected_recurrences_owner");
+
+                    b.ToTable("projected_recurrences", (string)null);
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrenceOccurrence", b =>
+                {
+                    b.Property<Guid>("RecurrenceId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("recurrence_id");
+
+                    b.Property<string>("Period")
+                        .HasMaxLength(7)
+                        .HasColumnType("varchar(7)")
+                        .HasColumnName("period");
+
+                    b.Property<long>("LastEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("transaction_id");
+
+                    b.HasKey("RecurrenceId", "Period");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_projected_recurrence_occurrences_owner");
+
+                    b.ToTable("projected_recurrence_occurrences", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedTransaction", b =>
                 {
                     b.Property<Guid>("TransactionId")

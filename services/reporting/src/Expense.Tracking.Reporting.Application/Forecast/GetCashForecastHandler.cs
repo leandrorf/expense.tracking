@@ -3,6 +3,7 @@ using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Common;
 using Expense.Tracking.Reporting.Domain.Forecast;
+using Expense.Tracking.Reporting.Domain.Invoices;
 
 namespace Expense.Tracking.Reporting.Application.Forecast;
 
@@ -10,16 +11,34 @@ namespace Expense.Tracking.Reporting.Application.Forecast;
 public sealed record CashMovementRecord(
     string TransactionType, decimal Amount, DateOnly OccurredOn, string? AccountScope, Guid AccountId);
 
+/// <summary>REC-4: regra de recorrencia projetada, com os periodos fechados dela.</summary>
+public sealed record RecurrenceRecord(
+    Guid Id,
+    Guid AccountId,
+    string? AccountScope,
+    string TransactionType,
+    string PaymentMethod,
+    Guid? CreditCardId,
+    decimal Amount,
+    string Frequency,
+    DateOnly StartsOn,
+    DateOnly? EndsOn,
+    IReadOnlySet<string> ClosedPeriods);
+
 /// <summary>INV-13: conta como o accounts a devolve ao dono (so o que a previsao usa).</summary>
 public sealed record AccountInfo(Guid Id, string? Scope, bool IsActive, decimal? OpeningBalance, DateOnly? OpeningBalanceOn);
 
 /// <param name="Balance">INV-13: saldo projetado no fim do mes; nulo sem conta com saldo informado no escopo.</param>
+/// <param name="RecurringIncome">REC-4: parte das entradas que vem de recorrencias ainda nao lancadas.</param>
+/// <param name="RecurringExpense">REC-4: parte das saidas que vem de recorrencias ainda nao lancadas.</param>
+/// <param name="RecurringInvoices">REC-4: parte das faturas que vem de recorrencias no cartao ainda nao lancadas.</param>
 public sealed record MonthFlowDto(
     decimal Income, decimal Expense, decimal Invoices, decimal InvoicesPaid, decimal InvoicesRemaining, decimal Result,
-    decimal? Balance)
+    decimal? Balance, decimal RecurringIncome, decimal RecurringExpense, decimal RecurringInvoices)
 {
     public static MonthFlowDto From(MonthFlow flow, decimal? balance) =>
-        new(flow.Income, flow.Expense, flow.Invoices, flow.InvoicesPaid, flow.InvoicesRemaining, flow.Result, balance);
+        new(flow.Income, flow.Expense, flow.Invoices, flow.InvoicesPaid, flow.InvoicesRemaining, flow.Result, balance,
+            flow.RecurringIncome, flow.RecurringExpense, flow.RecurringInvoices);
 }
 
 /// <param name="Month">Mes da previsao, <c>yyyy-MM</c>.</param>
@@ -71,7 +90,8 @@ public sealed class GetCashForecastHandler(
         var invoices = new List<ForecastInvoice>();
         var invoicesDue = new List<AccountInvoiceDue>();
         var payments = new List<AccountInvoicePayment>();
-        foreach (var (card, scope) in await cards.ListWithScopesAsync(cancellationToken))
+        var scopedCards = await cards.ListWithScopesAsync(cancellationToken);
+        foreach (var (card, scope) in scopedCards)
         {
             var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
             var inWindow = loaded.Invoices.Where(i => i.Period.DueMonth >= first && i.Period.DueMonth <= last).ToList();
@@ -80,10 +100,20 @@ public sealed class GetCashForecastHandler(
             payments.AddRange(loaded.Payments.Select(p => new AccountInvoicePayment(p.AccountId, p.Amount, p.PaidOn)));
         }
 
-        var forecast = CashForecastCalculator.Calculate(first, months, movements, invoices);
+        // REC-4 (ADR-0008, decisao 9): cada periodo em aberto de hoje em diante entra como um lancamento
+        // futuro do valor estimado: fora do cartao pela data, no cartao pela fatura do vencimento.
+        var recurring = await RecurringAsync(ownerUserId, today, last, scopedCards, cancellationToken);
+        var allMovements = movements.Concat(recurring.Movements).ToList();
+        invoices.AddRange(recurring.Invoices.Where(i => i.Invoice.DueMonth >= first && i.Invoice.DueMonth <= last).Select(i => i.Invoice));
+        invoicesDue.AddRange(recurring.Invoices
+            .Where(i => i.Invoice.DueMonth >= first && i.Invoice.DueMonth <= last)
+            .Select(i => new AccountInvoiceDue(i.CardAccountId, i.Invoice.DueMonth, i.Invoice.Remaining)));
+
+        var forecast = CashForecastCalculator.Calculate(first, months, allMovements, invoices);
         var balances = ProjectedBalanceCalculator.Calculate(
             first, months, openings,
-            cash.Select(m => new AccountCashMovement(m.AccountId, m.TransactionType == "Income", m.Amount, m.OccurredOn)),
+            cash.Select(m => new AccountCashMovement(m.AccountId, m.TransactionType == "Income", m.Amount, m.OccurredOn))
+                .Concat(recurring.AccountMovements),
             payments, invoicesDue);
 
         return new CashForecastDto(
@@ -100,4 +130,52 @@ public sealed class GetCashForecastHandler(
     }
 
     private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
+
+    private sealed record RecurringInvoice(ForecastInvoice Invoice, Guid CardAccountId);
+
+    private sealed record RecurringFlows(
+        IReadOnlyList<CashMovement> Movements, IReadOnlyList<AccountCashMovement> AccountMovements, IReadOnlyList<RecurringInvoice> Invoices);
+
+    /// <summary>
+    /// Ocorrencias em aberto (nem lancadas nem puladas) das regras do dono, com data de hoje ate o fim
+    /// da janela. A que ja passou fica no "a lancar" do transactions, fora da previsao (decisao 8).
+    /// Recorrencia num cartao que o accounts nao devolve ao dono fica de fora.
+    /// </summary>
+    private async Task<RecurringFlows> RecurringAsync(
+        Guid ownerUserId, DateOnly today, DateOnly last, IReadOnlyList<ScopedCard> scopedCards, CancellationToken cancellationToken)
+    {
+        var movements = new List<CashMovement>();
+        var accountMovements = new List<AccountCashMovement>();
+        var invoices = new List<RecurringInvoice>();
+        var cardsById = scopedCards.ToDictionary(c => c.Card.Id);
+
+        foreach (var rule in await projection.GetRecurrencesAsync(ownerUserId, cancellationToken))
+        {
+            var isIncome = rule.TransactionType == "Income";
+            var onCard = rule.CreditCardId is not null || rule.PaymentMethod == "CreditCard";
+            foreach (var occurrence in RecurrenceSchedule.Occurrences(rule.Frequency, rule.StartsOn, rule.EndsOn, today, last)
+                         .Where(o => !rule.ClosedPeriods.Contains(o.Period)))
+            {
+                if (!onCard)
+                {
+                    movements.Add(new CashMovement(rule.AccountScope, isIncome, rule.Amount, occurrence.ScheduledOn, Recurring: true));
+                    accountMovements.Add(new AccountCashMovement(rule.AccountId, isIncome, rule.Amount, occurrence.ScheduledOn));
+                    continue;
+                }
+
+                if (rule.CreditCardId is not { } cardId || !cardsById.TryGetValue(cardId, out var scoped))
+                {
+                    continue;
+                }
+
+                // A vista, na fatura da regra de corte (ADR-0005, decisao 4); receita no cartao e estorno.
+                var dueMonth = new CardCycle(scoped.Card.ClosingDay, scoped.Card.DueDay).DueMonthOf(occurrence.ScheduledOn);
+                var signed = isIncome ? -rule.Amount : rule.Amount;
+                invoices.Add(new RecurringInvoice(
+                    new ForecastInvoice(scoped.Scope, dueMonth, signed, 0m, signed, Recurring: true), scoped.Card.AccountId));
+            }
+        }
+
+        return new RecurringFlows(movements, accountMovements, invoices);
+    }
 }

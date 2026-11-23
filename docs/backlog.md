@@ -1695,7 +1695,7 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
     /transactions/recurrences/due` lista os períodos em aberto com data de 60 dias atrás até ontem, das
     mais antigas para as mais novas.
   - Estimativa: 5 · **Must** · Dependências: REC-2
-- 🔵 **REC-4** Previsão conta com as recorrências.
+- ✅ **REC-4** Previsão conta com as recorrências. → projeção das regras no reporting, parte recorrente na previsão.
   - *Dado* um salário mensal (receita, Pix, dia 5) e um aluguel (gasto, boleto, dia 10), *quando* consulto
     a previsão de 6 meses, *então* cada mês a partir de hoje tem os dois nas entradas e saídas, com a
     parte recorrente separada, e o saldo projetado acompanha.
@@ -1704,6 +1704,20 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* uma ocorrência lançada, pulada ou de um dia que já passou, *quando* olho a previsão, *então*
     ela não entra como recorrente (a lançada entra como lançamento, uma vez só).
   - *Dado* uma recorrência em aberto, *quando* olho Resumo e orçamentos, *então* ela não aparece.
+  - Feito assim: o reporting lê os quatro eventos novos (v1) e projeta `projected_recurrences` (upsert
+    pelo `RecurrenceSaved`; `RecurrenceDeleted` remove a regra e os períodos dela) e
+    `projected_recurrence_occurrences` (upsert por regra + período no `RecurrenceOccurrenceClosed`;
+    `RecurrenceOccurrenceReopened` remove), migração `ProjectedRecurrences`. A agenda tem cópia própria no
+    reporting (`RecurrenceSchedule`, Domain/Forecast), como manda a ADR-0001. A previsão soma, de hoje
+    até o fim da janela, cada período em aberto pelo valor estimado: fora do cartão no mês da data (e no
+    saldo projetado, pela conta da regra); no cartão, na fatura do vencimento (`CardCycle.DueMonthOf`,
+    à vista, receita abate) e no saldo pela conta do cartão; cartão que o accounts não devolve ao dono
+    fica de fora. `MonthFlow` e o DTO ganharam `recurringIncome`, `recurringExpense` e
+    `recurringInvoices` (a parte recorrente que já está nos totais). Resumo, orçamentos, fatura e limite
+    não leem as tabelas novas. O compose passa o mesmo fuso aos dois serviços (`APP_TIME_ZONE`, padrão
+    `America/Sao_Paulo`: `TimeZone` no transactions, `Reports__TimeZone` no reporting). Smoke passo 24
+    no MySQL real (regra prevista, lançada com outro valor, relançar = 409, período inválido = 400,
+    excluir devolve, pular tira; 46 passos).
   - Estimativa: 5 · **Must** · Dependências: REC-3
 - 🔵 **REC-5** Recorrências e "A lançar" na SPA.
   - *Dado* a aba Lançamentos, *quando* abro "Recorrências", *então* cadastro, edito, encerro e excluo

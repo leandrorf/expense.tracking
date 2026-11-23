@@ -72,6 +72,9 @@ public sealed class GetCardInvoicesHandlerTests
             Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<CashMovementRecord>>([]);
 
+        public Task<IReadOnlyList<RecurrenceRecord>> GetRecurrencesAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RecurrenceRecord>>([]);
+
         public Task<IReadOnlyList<TransactionRecord>> GetTransactionsAsync(Guid ownerUserId, ReportFilter filter, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TransactionRecord>>([]);
 

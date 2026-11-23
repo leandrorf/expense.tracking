@@ -106,6 +106,47 @@ public sealed class FakeEventFeed : IEventFeedClient
     public FeedEvent InvoicePaymentDeleted(Guid paymentId, Guid ownerUserId, Guid cardId) =>
         Append(FeedEventTypes.CardInvoicePaymentDeleted, paymentId, ownerUserId, new { paymentId, ownerUserId, creditCardId = cardId });
 
+    /// <summary>REC-2: regra de recorrencia criada ou editada (<c>RecurrenceSaved</c> v1).</summary>
+    public FeedEvent RecurrenceSaved(
+        Guid recurrenceId, Guid ownerUserId, decimal amount, string startsOn, string scope = "Personal",
+        string transactionType = "Expense", string paymentMethod = "Boleto", Guid? cardId = null, Guid? accountId = null,
+        string frequency = "Monthly", string? endsOn = null, string description = "Aluguel") =>
+        Append(FeedEventTypes.RecurrenceSaved, recurrenceId, ownerUserId, new
+        {
+            recurrenceId,
+            ownerUserId,
+            accountId = accountId ?? Guid.NewGuid(),
+            accountScope = scope,
+            transactionType,
+            paymentMethod = cardId is null ? paymentMethod : "CreditCard",
+            creditCardId = cardId,
+            description,
+            category = "Moradia",
+            amount,
+            currency = "BRL",
+            frequency,
+            startsOn,
+            endsOn,
+            recurrenceVersion = 1,
+        });
+
+    public FeedEvent RecurrenceDeleted(Guid recurrenceId, Guid ownerUserId) =>
+        Append(FeedEventTypes.RecurrenceDeleted, recurrenceId, ownerUserId, new { recurrenceId, ownerUserId });
+
+    /// <summary>REC-3: periodo fechado (<c>Launched</c> com o lancamento, ou <c>Skipped</c>).</summary>
+    public FeedEvent OccurrenceClosed(Guid recurrenceId, Guid ownerUserId, string period, Guid? transactionId = null) =>
+        Append(FeedEventTypes.RecurrenceOccurrenceClosed, recurrenceId, ownerUserId, new
+        {
+            recurrenceId,
+            ownerUserId,
+            period,
+            status = transactionId is null ? "Skipped" : "Launched",
+            transactionId,
+        });
+
+    public FeedEvent OccurrenceReopened(Guid recurrenceId, Guid ownerUserId, string period) =>
+        Append(FeedEventTypes.RecurrenceOccurrenceReopened, recurrenceId, ownerUserId, new { recurrenceId, ownerUserId, period });
+
     public Task<FeedPage> ReadAsync(long afterSequence, int limit, CancellationToken cancellationToken)
     {
         lock (_events)
