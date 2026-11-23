@@ -40,13 +40,15 @@ interface Props {
   card: CreditCard;
   accounts: Account[];
   onBack: () => void;
+  /** NTF-3: abre nesta fatura (`yyyy-MM`) em vez da atual, se ela existir. */
+  initialDueMonth?: string;
 }
 
 /**
  * INV-7 (ADR-0005): faturas de um cartão. Abre na fatura atual e navega pelas anteriores e
  * próximas; registra e exclui pagamentos (INV-6), que abatem a fatura sem virar gasto.
  */
-export function InvoicesView({ card, accounts, onBack }: Props) {
+export function InvoicesView({ card, accounts, onBack, initialDueMonth }: Props) {
   const [data, setData] = useState<CardInvoices | null>(null);
   const [dueMonth, setDueMonth] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,11 @@ export function InvoicesView({ card, accounts, onBack }: Props) {
     try {
       const result = await invoicesApi.list(card.id);
       setData(result);
-      setDueMonth((current) => current ?? result.currentDueMonth);
+      setDueMonth(
+        (current) =>
+          current ??
+          (initialDueMonth && result.invoices.some((i) => i.dueMonth === initialDueMonth) ? initialDueMonth : result.currentDueMonth),
+      );
       return result;
     } catch (err) {
       setError(messageOf(err));

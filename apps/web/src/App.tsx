@@ -14,6 +14,8 @@ import { CardsView } from './views/CardsView';
 import { ForecastView } from './views/ForecastView';
 import { ImportView } from './views/ImportView';
 import { RecurrencesView } from './views/RecurrencesView';
+import { RemindersBell } from './views/RemindersBell';
+import type { Reminder } from './api/reminders';
 import type { Transaction } from './api/types';
 import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
@@ -28,6 +30,20 @@ export function App() {
   const [tab, setTab] = useState<Tab>('summary');
   // REC-10: lançamento escolhido em "repetir todo mês", que abre a aba Recorrências preenchida.
   const [repeatFrom, setRepeatFrom] = useState<Transaction | null>(null);
+  // NTF-3: fatura que um aviso pediu para abrir na aba Cartões.
+  const [invoiceTarget, setInvoiceTarget] = useState<{ cardId: string; dueMonth: string } | null>(null);
+
+  /** NTF-3 (ADR-0009, decisão 7): cada aviso leva aonde se resolve. */
+  function openReminder(r: Reminder) {
+    if ((r.kind === 'InvoiceDue' || r.kind === 'InvoiceOverdue') && r.cardId && r.dueMonth) {
+      setInvoiceTarget({ cardId: r.cardId, dueMonth: r.dueMonth });
+      setTab('cards');
+    } else if (r.kind === 'Budget') {
+      setTab('budgets');
+    } else {
+      setTab('recurrences');
+    }
+  }
 
   useEffect(() => {
     void bootstrap();
@@ -112,6 +128,7 @@ export function App() {
           </button>
         </nav>
         <div className="user">
+          <RemindersBell refreshKey={tab} onOpen={openReminder} />
           <span data-cy="session-active" title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
           <button data-cy="logout" className="ghost" onClick={() => logout()}>
             Sair
@@ -134,7 +151,7 @@ export function App() {
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
-        {tab === 'cards' && <CardsView />}
+        {tab === 'cards' && <CardsView openInvoice={invoiceTarget} onInvoiceOpened={() => setInvoiceTarget(null)} />}
         {tab === 'accounting' && <AccountingExportView />}
       </main>
     </div>

@@ -1915,13 +1915,21 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     título, com `overdue` (quantos vencidos) e `leadDays`. Smoke passo 25 (aviso aparece e some ao pular;
     47 passos).
   - Estimativa: 5 · **Must** · Dependências: NTF-1
-- 🔵 **NTF-3** Sino e painel de avisos na SPA.
+- ✅ **NTF-3** Sino e painel de avisos na SPA. → `RemindersBell` no topo.
   - *Dado* avisos pendentes, *quando* abro o app, *então* o topo mostra um sino com o número de avisos
     (vencidos em destaque) e, ao clicar, um painel do mais urgente para o menos urgente.
   - *Dado* um aviso de fatura, *quando* clico nele, *então* vou para Cartões com aquela fatura aberta; *e*
     um aviso de ocorrência ou "a lançar" leva a Recorrências.
   - *Dado* que resolvi um aviso em outra aba do app, *quando* volto ao painel, *então* ele está
     atualizado (o painel relê ao abrir e quando a janela volta ao foco).
+  - Feito assim: `RemindersBell` no topo (`reminders-bell`, com `reminders-count` e a classe `has-overdue`
+    quando há vencido) relê os avisos ao montar, a cada troca de aba, ao abrir o painel e quando a janela
+    volta ao foco; falha na leitura só deixa o sino sem número. O painel (`reminders-panel`, fixo no canto
+    da janela, fecha ao clicar fora) lista `reminder-item` com `data-kind`/`data-urgency`, título e o
+    detalhe ("venceu em", "vence hoje", "vence em", "pendentes desde"). Fatura abre a aba Cartões direto na
+    fatura do aviso (`CardsView.openInvoice`, `InvoicesView.initialDueMonth`); ocorrência e "a lançar" levam
+    a Recorrências. Cypress `reminders.cy.ts` (fatura vencida de um cartão que fecha no dia da compra e
+    vence 5 dias depois, com a compra de 15 a 25 dias atrás, e aluguel de amanhã).
   - Estimativa: 5 · **Must** · Dependências: NTF-2
 - 🔵 **NTF-4** E2E Cypress: aviso, resolver, aviso some.
   - *Dado* um cartão com fatura fechada a vencer e um aluguel recorrente a vencer, *quando* abro o app,
