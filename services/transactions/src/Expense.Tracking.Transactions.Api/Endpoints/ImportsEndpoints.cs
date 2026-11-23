@@ -18,9 +18,10 @@ namespace Expense.Tracking.Transactions.Api.Endpoints;
 /// <summary>IMP-5: decisoes da previa. Linha omitida mantem o que a previa tinha.</summary>
 public sealed record ConfirmImportRequest(IReadOnlyList<ConfirmImportLineRequest>? Lines);
 
+/// <remarks>REC-9: <c>recurrence: false</c> troca a sugestao de ocorrencia recorrente por lancamento comum.</remarks>
 public sealed record ConfirmImportLineRequest(
     Guid Id, bool? Included, string? Category, string? PaymentMethod,
-    bool? InvoicePayment = null, Guid? InvoiceCardId = null, string? InvoiceDueMonth = null);
+    bool? InvoicePayment = null, Guid? InvoiceCardId = null, string? InvoiceDueMonth = null, bool? Recurrence = null);
 
 /// <summary>IMP-11: mapeamento a salvar com um nome; <c>headers</c> e o cabecalho do arquivo (opcional).</summary>
 public sealed record SaveCsvMappingRequest(string? Name, CsvColumnMapping? Mapping, IReadOnlyList<string>? Headers);
@@ -153,7 +154,7 @@ public static class ImportsEndpoints
                 }
 
                 decisions.Add(new ImportLineDecision(
-                    line.Id, line.Included, line.Category, method, line.InvoicePayment, line.InvoiceCardId, dueMonth));
+                    line.Id, line.Included, line.Category, method, line.InvoicePayment, line.InvoiceCardId, dueMonth, line.Recurrence));
             }
 
             var result = await handler.HandleAsync(new ConfirmImportCommand(owner.Value, id, decisions), ct);

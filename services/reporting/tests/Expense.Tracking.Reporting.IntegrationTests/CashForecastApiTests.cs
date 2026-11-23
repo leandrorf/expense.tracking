@@ -179,6 +179,22 @@ public sealed class CashForecastApiTests(InvoicesApiFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task YearlyRecurrence_EntersOnlyInItsMonth()
+    {
+        // REC-8: IPVA anual em 15/03; numa janela de 12 meses (2026-11 a 2027-10) so marco tem o valor.
+        var owner = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(Guid.NewGuid(), owner, 1800m, "2027-03-15", frequency: "Yearly", description: "IPVA");
+        await _factory.DrainFeedAsync();
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=12");
+
+        var expenses = body.GetProperty("months").EnumerateArray()
+            .ToDictionary(m => m.GetProperty("month").GetString()!, m => m.GetProperty("personal").GetProperty("recurringExpense").GetDecimal());
+        Assert.Equal(1800m, expenses["2027-03"]);
+        Assert.Equal(1800m, expenses.Values.Sum());
+    }
+
+    [Fact]
     public async Task Balance_IsNullEverywhere_WhenNoAccountHasAnInformedBalance()
     {
         var owner = Guid.NewGuid();

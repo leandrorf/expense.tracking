@@ -69,7 +69,7 @@ describe('Fatura e previsao de caixa (PF e PJ)', () => {
 
   const readRow = (month: string) =>
     cy.get(`[data-cy=forecast-row][data-month="${month}"]`).then(($row): Row => ({
-      expense: parse($row.find('[data-cy=forecast-expense]').text()),
+      expense: parse($row.find('[data-cy=forecast-expense]').contents().first().text()),
       invoices: parse($row.find('[data-cy=forecast-invoices]').contents().first().text()),
       remaining: parse($row.find('[data-cy=forecast-invoices-remaining]').text()),
     }));

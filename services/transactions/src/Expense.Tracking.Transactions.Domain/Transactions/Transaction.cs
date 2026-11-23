@@ -109,6 +109,13 @@ public sealed class Transaction
         RecurrencePeriod = period;
     }
 
+    /// <summary>REC-9: o periodo sugerido ja foi fechado por outro caminho; o lancamento fica comum.</summary>
+    public void UnlinkRecurrence()
+    {
+        RecurrenceId = null;
+        RecurrencePeriod = null;
+    }
+
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,

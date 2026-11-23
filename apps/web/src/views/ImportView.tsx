@@ -35,6 +35,8 @@ interface LineDraft {
   invoicePayment: boolean;
   invoiceCardId: string;
   invoiceDueMonth: string;
+  /** REC-9: mantém a sugestão de que a linha é a ocorrência de uma recorrência. */
+  recurrence: boolean;
 }
 
 /** Valor do select de meio que troca a linha para pagamento de fatura. */
@@ -53,6 +55,7 @@ const draftOf = (line: ImportLine): LineDraft => ({
   invoicePayment: line.invoicePayment,
   invoiceCardId: line.invoiceCardId ?? '',
   invoiceDueMonth: line.invoiceDueMonth ?? '',
+  recurrence: !!line.recurrenceId,
 });
 
 /** Mesma regra do servidor: a fatura de vencimento mais próximo da data paga. */
@@ -274,6 +277,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
           invoicePayment: canBeInvoicePayment(batch, l) ? drafts[l.id].invoicePayment : undefined,
           invoiceCardId: drafts[l.id].invoicePayment ? drafts[l.id].invoiceCardId || null : undefined,
           invoiceDueMonth: drafts[l.id].invoicePayment ? drafts[l.id].invoiceDueMonth || null : undefined,
+          recurrence: l.recurrenceId && !drafts[l.id].recurrence ? false : undefined,
         })),
       );
       includedLines.filter((l) => !drafts[l.id].invoicePayment).forEach((l) => remember(drafts[l.id].category));
@@ -479,7 +483,20 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
                   </td>
                   <td>{line.number}</td>
                   <td>{line.occurredOn ?? '—'}</td>
-                  <td>{line.description || '—'}</td>
+                  <td>
+                    {line.description || '—'}
+                    {includable && !asInvoice && line.recurrenceId && (
+                      <label className="sub recurring-choice" data-cy="import-row-recurrence-label">
+                        <input
+                          type="checkbox"
+                          data-cy="import-row-recurrence"
+                          checked={draft.recurrence}
+                          onChange={(e) => updateDraft(line.id, { recurrence: e.target.checked })}
+                        />{' '}
+                        lançamento da recorrência <strong>{line.recurrenceDescription}</strong> ({line.recurrencePeriod})
+                      </label>
+                    )}
+                  </td>
                   <td className={`right ${line.type === 'Income' ? 'income' : 'expense'}`}>
                     {line.amount === null ? '—' : `${line.type === 'Expense' ? '−' : '+'}${money(line.amount, batch.currency)}`}
                   </td>

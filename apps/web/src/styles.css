@@ -865,6 +865,12 @@ table.data td .sub {
   color: #64748b;
 }
 
+/* REC-6: parte da previsao que vem de recorrencias ainda nao lancadas. */
+.sub.recurring {
+  color: #a78bfa;
+  font-style: italic;
+}
+
 .notice {
   border-left: 3px solid #3b82f6;
   background: #1e293b;

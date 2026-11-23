@@ -23,7 +23,8 @@ public sealed record RecurrenceRequest(
     string? Frequency,
     DateOnly? StartsOn,
     DateOnly? EndsOn,
-    int? Version = null);
+    int? Version = null,
+    Guid? FromTransactionId = null);
 
 /// <summary>REC-3: lancar um periodo; sem corpo (ou campos nulos) valem o valor, a data agendada e as observacoes da regra.</summary>
 public sealed record LaunchOccurrenceRequest(decimal? Amount, DateOnly? OccurredOn, string? Notes);
@@ -67,7 +68,8 @@ public static class RecurrencesEndpoints
                 return HttpResults.Problem(fields.Error);
             }
 
-            var result = await handler.HandleAsync(new CreateRecurrenceCommand(owner.Value, request.AccountId, fields.Value), ct);
+            var result = await handler.HandleAsync(
+                new CreateRecurrenceCommand(owner.Value, request.AccountId, fields.Value, request.FromTransactionId), ct);
             return result.IsSuccess
                 ? Results.Created($"/transactions/recurrences/{result.Value.Id}", result.Value)
                 : HttpResults.Problem(result.Error);

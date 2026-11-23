@@ -155,3 +155,12 @@ outbox.** As regras abaixo valem para as histórias REC-2 a REC-10.
   - Recorrência no cartão de um cartão desativado continua projetando na fatura dele até ser editada
     ou excluída.
   - O fuso passa a ser configurado em dois serviços; o compose usa um valor só para os dois.
+
+## Refinamento: "repetir todo mês" (REC-10, 2026-11-23)
+
+A REC-10 pedia a regra "começando no mês seguinte" com o lançamento original "vinculado à ocorrência do
+mês dele", o que não fecha: se a regra começa no mês seguinte, o mês do lançamento não está na agenda.
+Ficou assim: a regra criada a partir de um lançamento é **ancorada na data do lançamento**, e ele fecha o
+período dele (`RecurrenceOccurrenceClosed`, `Launched`) no mesmo commit da criação; a próxima ocorrência
+em aberto é a do mês seguinte. `POST /transactions/recurrences` aceita `fromTransactionId`: lançamento do
+dono, da mesma conta, ainda sem vínculo e dentro da agenda (senão 400 `recurrence.from_transaction_invalid`).

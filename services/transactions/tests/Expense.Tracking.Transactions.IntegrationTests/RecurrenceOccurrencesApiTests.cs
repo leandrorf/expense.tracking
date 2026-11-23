@@ -156,6 +156,62 @@ public sealed class RecurrenceOccurrencesApiTests(TransactionsApiFactory factory
     }
 
     [Fact]
+    public async Task RepeatFromATransaction_LinksItToItsOwnPeriod_AndTheNextOneIsTheFollowingMonth()
+    {
+        // REC-10: "repetir todo mes" ancora a regra na data do lancamento, que fecha o proprio periodo.
+        var (client, accountId) = (ClientFor(Guid.NewGuid()), Guid.NewGuid());
+        var tx = await Json(await client.PostAsJsonAsync("/transactions", new
+        {
+            accountId, paymentMethod = "Boleto", description = "Aluguel", category = "Moradia", amount = 2000m,
+            currency = "BRL", occurredOn = "2030-01-10",
+        }));
+        var txId = tx.GetProperty("id").GetGuid();
+        object Repeat(Guid account, string startsOn) => new
+        {
+            accountId = account, type = "Expense", paymentMethod = "Boleto", description = "Aluguel", category = "Moradia",
+            amount = 2000m, frequency = "Monthly", startsOn, fromTransactionId = txId,
+        };
+
+        var otherAccount = await client.PostAsJsonAsync("/transactions/recurrences", Repeat(Guid.NewGuid(), "2030-01-10"));
+        var outsideSchedule = await client.PostAsJsonAsync("/transactions/recurrences", Repeat(accountId, "2030-02-10"));
+        var created = await client.PostAsJsonAsync("/transactions/recurrences", Repeat(accountId, "2030-01-10"));
+        var again = await client.PostAsJsonAsync("/transactions/recurrences", Repeat(accountId, "2030-01-10"));
+
+        Assert.Equal((HttpStatusCode.BadRequest, "recurrence.from_transaction_invalid"), (otherAccount.StatusCode, await TitleAsync(otherAccount)));
+        Assert.Equal(HttpStatusCode.BadRequest, outsideSchedule.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode); // ja vinculado
+        var rule = await Json(created);
+        var ruleId = rule.GetProperty("id").GetGuid();
+        Assert.Equal("2030-02", rule.GetProperty("nextOccurrence").GetProperty("period").GetString());
+        var linked = await client.GetFromJsonAsync<JsonElement>($"/transactions/{txId}");
+        Assert.Equal((ruleId, "2030-01"), (linked.GetProperty("recurrenceId").GetGuid(), linked.GetProperty("recurrencePeriod").GetString()));
+        Assert.Equal(["RecurrenceSaved", "RecurrenceOccurrenceClosed"],
+            (await EventsForAsync(ruleId)).Select(e => e.GetProperty("eventType").GetString()));
+    }
+
+    [Fact]
+    public async Task Yearly_IsIdentifiedByTheYear_AndFeb29FallsOn28InCommonYears()
+    {
+        // REC-8: anual em 29/02 (ano bissexto); o periodo e o ano, e 2033 nao e bissexto.
+        var (client, accountId) = (ClientFor(Guid.NewGuid()), Guid.NewGuid());
+        var created = await Json(await client.PostAsJsonAsync("/transactions/recurrences",
+            RecurrencesApiTests.Rule(accountId, startsOn: "2032-02-29", frequency: "Yearly", description: "Seguro")));
+        var ruleId = created.GetProperty("id").GetGuid();
+        Assert.Equal(("2032", "2032-02-29"), (created.GetProperty("nextOccurrence").GetProperty("period").GetString(),
+            created.GetProperty("nextOccurrence").GetProperty("scheduledOn").GetString()));
+
+        await client.PostAsync($"/transactions/recurrences/{ruleId}/occurrences/2032/skip", null);
+        var monthly = await client.PostAsync($"/transactions/recurrences/{ruleId}/occurrences/2033-02/launch", null);
+        var launched = await Json(await client.PostAsync($"/transactions/recurrences/{ruleId}/occurrences/2033/launch", null));
+
+        Assert.Equal((HttpStatusCode.BadRequest, "recurrence.period_invalid"), (monthly.StatusCode, await TitleAsync(monthly)));
+        Assert.Equal(("2033-02-28", "2033"), (launched.GetProperty("occurredOn").GetString(), launched.GetProperty("recurrencePeriod").GetString()));
+        var next = (await client.GetFromJsonAsync<JsonElement>($"/transactions/recurrences/{ruleId}")).GetProperty("nextOccurrence");
+        Assert.Equal(("2034", "2034-02-28"), (next.GetProperty("period").GetString(), next.GetProperty("scheduledOn").GetString()));
+    }
+
+    [Fact]
     public async Task Due_ListsOpenPastOccurrencesOfTheLast60Days_OldestFirst()
     {
         // Comeca 45 dias atras: a primeira ocorrencia (o proprio inicio) ja passou e esta "a lancar".

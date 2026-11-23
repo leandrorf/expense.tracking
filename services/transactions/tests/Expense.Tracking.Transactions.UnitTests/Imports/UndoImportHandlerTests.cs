@@ -101,7 +101,7 @@ public sealed class UndoImportHandlerTests
 
     private static UndoImportHandler Handler(
         IImportBatchRepository batches, FakeTransactions transactions, RecordingOutbox outbox, IUnitOfWork unitOfWork) =>
-        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), outbox, unitOfWork, new ImportMetrics(new TestMeterFactory()), new FixedTime());
+        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), new NoRecurrences(), outbox, unitOfWork, new ImportMetrics(new TestMeterFactory()), new FixedTime());
 
     private sealed class SequenceBatches(params ImportBatch[] sequence) : IImportBatchRepository
     {

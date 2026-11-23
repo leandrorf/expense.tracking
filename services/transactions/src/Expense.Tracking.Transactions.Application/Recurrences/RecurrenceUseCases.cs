@@ -56,7 +56,8 @@ public sealed record RecurrenceFields(
     DateOnly StartsOn,
     DateOnly? EndsOn);
 
-public sealed record CreateRecurrenceCommand(Guid OwnerUserId, Guid AccountId, RecurrenceFields Fields);
+/// <param name="FromTransactionId">REC-10: lancamento que vira a ocorrencia do proprio periodo ("repetir todo mes").</param>
+public sealed record CreateRecurrenceCommand(Guid OwnerUserId, Guid AccountId, RecurrenceFields Fields, Guid? FromTransactionId = null);
 
 public sealed record UpdateRecurrenceCommand(Guid Id, Guid OwnerUserId, Guid AccountId, RecurrenceFields Fields, int Version);
 
@@ -75,6 +76,7 @@ internal static class RecurrenceErrors
 /// </summary>
 public sealed class CreateRecurrenceHandler(
     IRecurrenceRepository recurrences,
+    ITransactionRepository transactions,
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -102,10 +104,39 @@ public sealed class CreateRecurrenceHandler(
             return Result.Failure<RecurrenceDto>(Error.NotFound("card.not_found", "Cartao nao encontrado para o usuario."));
         }
 
+        // REC-10: o lancamento de origem fecha o periodo dele na regra nova (mesma conta, sem vinculo anterior).
+        var closedPeriods = new HashSet<string>();
+        if (command.FromTransactionId is { } fromId)
+        {
+            var origin = await transactions.GetAsync(fromId, command.OwnerUserId, cancellationToken);
+            if (origin is null)
+            {
+                return Result.Failure<RecurrenceDto>(Error.NotFound("transaction.not_found", "Lancamento nao encontrado."));
+            }
+
+            var period = created.Value.PeriodOf(origin.OccurredOn);
+            if (origin.AccountId != command.AccountId || origin.RecurrenceId is not null || created.Value.ScheduledOn(period) is null)
+            {
+                return Result.Failure<RecurrenceDto>(Error.Validation(
+                    "recurrence.from_transaction_invalid",
+                    "O lancamento de origem precisa ser da mesma conta, cair na agenda da recorrencia e nao vir de outra recorrencia."));
+            }
+
+            origin.LinkToRecurrence(created.Value.Id, period);
+            recurrences.AddOccurrence(RecurrenceOccurrence.Launched(created.Value, period, origin.Id, timeProvider.GetUtcNow()));
+            closedPeriods.Add(period);
+        }
+
         await recurrences.AddAsync(created.Value, cancellationToken);
         outbox.Add(RecurrenceSaved.From(created.Value, accountScope));
+        if (command.FromTransactionId is { } linked)
+        {
+            outbox.Add(new RecurrenceOccurrenceClosed(created.Value.Id, created.Value.OwnerUserId,
+                closedPeriods.Single(), nameof(OccurrenceStatus.Launched), linked));
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return RecurrenceDto.From(created.Value, calendar.Today(timeProvider), new HashSet<string>());
+        return RecurrenceDto.From(created.Value, calendar.Today(timeProvider), closedPeriods);
     }
 }
 

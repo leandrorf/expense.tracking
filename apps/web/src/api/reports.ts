@@ -107,6 +107,10 @@ export interface MonthFlow {
   result: number;
   /** INV-13: saldo projetado no fim do mês; nulo sem conta com saldo informado no escopo. */
   balance: number | null;
+  /** REC-4: parte das entradas, saídas e faturas que vem de recorrências ainda não lançadas. */
+  recurringIncome: number;
+  recurringExpense: number;
+  recurringInvoices: number;
 }
 
 export interface ForecastMonth {

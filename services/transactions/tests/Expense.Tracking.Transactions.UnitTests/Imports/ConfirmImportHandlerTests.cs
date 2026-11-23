@@ -80,7 +80,7 @@ public sealed class ConfirmImportHandlerTests
 
     private static ConfirmImportHandler Handler(
         IImportBatchRepository batches, RecordingTransactions transactions, RecordingOutbox outbox, IUnitOfWork unitOfWork) =>
-        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), new AllAccountsExist(), outbox, unitOfWork,
+        new(batches, transactions, new CardPaymentTests.InMemoryPayments(), new NoRecurrences(), new AllAccountsExist(), outbox, unitOfWork,
             new ImportMetrics(new TestMeterFactory()), new FixedTime());
 
     private sealed class SequenceBatches(params ImportBatch[] sequence) : IImportBatchRepository

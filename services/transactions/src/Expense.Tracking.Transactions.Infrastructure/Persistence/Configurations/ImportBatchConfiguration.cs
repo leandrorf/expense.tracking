@@ -63,6 +63,9 @@ internal sealed class ImportLineConfiguration : IEntityTypeConfiguration<ImportL
         builder.Property(l => l.InvoiceCardId).HasColumnName("invoice_card_id");
         builder.Property(l => l.InvoiceDueMonth).HasColumnName("invoice_due_month");
         builder.Property(l => l.CardPaymentId).HasColumnName("card_payment_id");
+        builder.Property(l => l.RecurrenceId).HasColumnName("recurrence_id");
+        builder.Property(l => l.RecurrencePeriod).HasColumnName("recurrence_period").HasMaxLength(7);
+        builder.Property(l => l.RecurrenceDescription).HasColumnName("recurrence_description").HasMaxLength(Transaction.DescriptionMaxLength);
 
         builder.HasIndex(l => new { l.BatchId, l.Number }).IsUnique();
     }

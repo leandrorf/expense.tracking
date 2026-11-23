@@ -22,6 +22,10 @@ export interface ImportLine {
   /** Fatura paga, pelo mês de vencimento (`yyyy-MM`). */
   invoiceDueMonth: string | null;
   cardPaymentId: string | null;
+  /** REC-9: ocorrência em aberto de uma recorrência que a linha sugere ser (nula quando não casou). */
+  recurrenceId?: string | null;
+  recurrencePeriod?: string | null;
+  recurrenceDescription?: string | null;
 }
 
 export interface ImportSummary {
@@ -100,6 +104,8 @@ export interface ImportLineDecision {
   invoicePayment?: boolean;
   invoiceCardId?: string | null;
   invoiceDueMonth?: string | null;
+  /** REC-9: `false` troca a sugestão de recorrência por lançamento comum. */
+  recurrence?: boolean;
 }
 
 /** Mesmo limite do servidor e do gateway: recusar antes de enviar poupa o upload inteiro. */

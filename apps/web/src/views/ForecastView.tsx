@@ -89,7 +89,11 @@ export function ForecastView() {
 
       {forecast && (
         <p className="notice" data-cy="forecast-notice">
-          {forecast.notice} Compras no cartão entram pela fatura, no mês do vencimento.
+          {forecast.notice} Compras no cartão entram pela fatura, no mês do vencimento.{' '}
+          <span data-cy="forecast-recurring-notice">
+            Recorrências entram como "previsto" de hoje em diante, até você lançar ou pular cada ocorrência (aba
+            Recorrências); se você importar o extrato, pule a ocorrência que veio por ele para não contar duas vezes.
+          </span>
         </p>
       )}
       {forecast && forecast.accountsWithoutBalance > 0 && (
@@ -123,13 +127,32 @@ export function ForecastView() {
               {rows.map(({ month, flow }) => (
                 <tr key={month} data-cy="forecast-row" data-month={month}>
                   <td>{monthLabel(month)}</td>
-                  <td className="right" data-cy="forecast-income">{money(flow.income)}</td>
-                  <td className="right" data-cy="forecast-expense">{money(flow.expense)}</td>
+                  <td className="right" data-cy="forecast-income">
+                    {money(flow.income)}
+                    {flow.recurringIncome > 0 && (
+                      <span className="sub recurring" data-cy="forecast-income-recurring">
+                        {money(flow.recurringIncome)} previsto
+                      </span>
+                    )}
+                  </td>
+                  <td className="right" data-cy="forecast-expense">
+                    {money(flow.expense)}
+                    {flow.recurringExpense > 0 && (
+                      <span className="sub recurring" data-cy="forecast-expense-recurring">
+                        {money(flow.recurringExpense)} previsto
+                      </span>
+                    )}
+                  </td>
                   <td className="right" data-cy="forecast-invoices">
                     {money(flow.invoices)}
                     {flow.invoices > 0 && (
                       <span className="sub" data-cy="forecast-invoices-remaining">
                         {flow.invoicesRemaining > 0 ? `falta pagar ${money(flow.invoicesRemaining)}` : 'paga'}
+                      </span>
+                    )}
+                    {flow.recurringInvoices !== 0 && (
+                      <span className="sub recurring" data-cy="forecast-invoices-recurring">
+                        {money(flow.recurringInvoices)} previsto
                       </span>
                     )}
                   </td>
