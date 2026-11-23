@@ -1537,7 +1537,7 @@ relatórios acompanham, provada ponta a ponta. Could = LNC-7 (3 pts). Total: 22 
 
 **Ordem sugerida:** LNC-1 → LNC-2 → LNC-3 → LNC-4 → LNC-5 → LNC-6 (fecha o Must) → LNC-7.
 
-## 🔵 EPIC REC — Lançamentos recorrentes  · *To Do*
+## 🟡 EPIC REC — Lançamentos recorrentes  · *In Progress*
 **Problema:** salário, pró-labore, aluguel, condomínio, escola, internet e assinaturas se repetem todo
 mês, mas o produto só conhece o que já foi lançado. A previsão de caixa (INV-8) e o saldo projetado
 (INV-13) subestimam o futuro: o mês que vem aparece sem salário e sem aluguel, e o saldo no fim do
@@ -1578,7 +1578,7 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
 - **Parcelamento já existe e é outra coisa** (INV-5): uma compra em N parcelas é um lançamento só,
   distribuído nas faturas. Recorrência é um compromisso sem fim definido, um lançamento por ocorrência.
 
-**Decisões em aberto (para a ADR-0008, REC-1; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0008](adr/0008-lancamentos-recorrentes.md), REC-1; ficou a recomendação de cada uma, com os refinamentos da REC-1):**
 1. **Modelo.** Opções: (a) **regra que só projeta**: a recorrência alimenta a previsão e nunca vira
    lançamento sozinha; o usuário lança cada ocorrência (um clique, com o valor real) ou a pula;
    (b) **lançamento automático**: um worker cria o lançamento no dia; (c) **lançamento previsto**: o
@@ -1630,14 +1630,27 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
    lá, quem importa o extrato pula a ocorrência à mão para não contar duas vezes na previsão, e a tela
    diz isso.
 
-- 🔵 **REC-1** ADR: lançamentos recorrentes.
+- ✅ **REC-1** ADR: lançamentos recorrentes. → [ADR-0008](adr/0008-lancamentos-recorrentes.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0008 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: a ocorrência é identificada por regra +
+    **período** (`yyyy-MM` na mensal, `yyyy` na anual), não pela data, para mudar o dia da regra não
+    abrir de novo um mês já lançado; só as ocorrências fechadas são gravadas (as em aberto saem da
+    agenda). A data de início é a âncora da agenda (dia, e mês na anual), e mês sem aquele dia usa o
+    último. Os eventos ficaram `RecurrenceSaved`, `RecurrenceDeleted`, `RecurrenceOccurrenceClosed`
+    (`Launched`/`Skipped`, com o `transactionId` do lançado) e `RecurrenceOccurrenceReopened`; o
+    `TransactionRegistered` não muda. A regra tem `version` e 409 como o lançamento (ADR-0007), e a
+    conta não muda (`recurrence.account_immutable`). Lançar aceita período futuro (conta paga
+    adiantado) e outro valor, data e observações; período fora da agenda = 400
+    `recurrence.period_invalid`, já fechado = 409 `recurrence.occurrence_closed`; pulo pode ser
+    desfeito. O fuso vira a configuração `TimeZone`, lida pelo `transactions` e pelo `reporting`.
+    Os totais da previsão já incluem a recorrência, e `recurringIncome`/`recurringExpense`/
+    `recurringInvoices` são a parte dela. Rotas em `/transactions/recurrences` (decisão 12 da ADR).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **REC-2** Regras de recorrência na API.
   - *Dado* uma conta minha, *quando* envio `POST /transactions/recurrences` com tipo, meio, descrição,
-    categoria, valor estimado, dia do mês e início, *então* a regra é criada com as validações do
+    categoria, valor estimado, frequência e início (a âncora da agenda), *então* a regra é criada com as validações do
     lançamento (400 com os mesmos códigos; parcelas recusadas) e um `RecurrenceSaved` sai no outbox no
     mesmo commit.
   - *Dado* minhas regras, *quando* consulto `GET /transactions/recurrences`, *então* vejo cada uma com a
@@ -1648,10 +1661,11 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - Estimativa: 5 · **Must** · Dependências: REC-1
 - 🔵 **REC-3** Lançar e pular ocorrência; lista "A lançar".
   - *Dado* uma ocorrência em aberto, *quando* a lanço (podendo trocar valor e data), *então* nasce um
-    lançamento comum vinculado à regra e à data da ocorrência, e ela deixa de estar em aberto; lançar a
-    mesma ocorrência de novo responde 409.
+    lançamento comum vinculado à regra e ao período da ocorrência, e ela deixa de estar em aberto;
+    lançar o mesmo período de novo responde 409 `recurrence.occurrence_closed`.
   - *Dado* uma ocorrência lançada, *quando* excluo o lançamento, *então* ela volta a ficar em aberto.
-  - *Dado* uma ocorrência, *quando* a pulo, *então* ela some da previsão e da lista "A lançar".
+  - *Dado* uma ocorrência, *quando* a pulo, *então* ela some da previsão e da lista "A lançar"; *e*
+    desfazer o pulo a reabre.
   - *Dado* ocorrências de dias que já passaram sem lançar nem pular, *quando* consulto
     `GET /transactions/recurrences/due`, *então* vejo as dos últimos 60 dias, das mais antigas para as
     mais novas.

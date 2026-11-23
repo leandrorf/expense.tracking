@@ -13,3 +13,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 | [0005](0005-fatura-de-cartao-e-previsao-de-caixa.md) | Fatura de cartão e previsão de caixa no reporting, com parcelas e pagamento de fatura (épico INV) | Aceito | 2026-11-21 |
 | [0006](0006-exportacao-contabil-pj-no-transactions.md) | Exportação contábil PJ gerada no transactions, como pacote ZIP de CSVs (épico CTB) | Aceito | 2026-11-22 |
 | [0007](0007-edicao-de-lancamentos-e-receita-na-spa.md) | Edição de lançamentos com evento próprio e concorrência otimista, e receita na SPA (épico LNC) | Aceito | 2026-11-22 |
+| [0008](0008-lancamentos-recorrentes.md) | Lançamentos recorrentes como regras que só projetam, com ocorrências lançadas ou puladas pelo usuário (épico REC) | Aceito | 2026-11-23 |
