@@ -1537,9 +1537,184 @@ relatórios acompanham, provada ponta a ponta. Could = LNC-7 (3 pts). Total: 22 
 
 **Ordem sugerida:** LNC-1 → LNC-2 → LNC-3 → LNC-4 → LNC-5 → LNC-6 (fecha o Must) → LNC-7.
 
+## 🔵 EPIC REC — Lançamentos recorrentes  · *To Do*
+**Problema:** salário, pró-labore, aluguel, condomínio, escola, internet e assinaturas se repetem todo
+mês, mas o produto só conhece o que já foi lançado. A previsão de caixa (INV-8) e o saldo projetado
+(INV-13) subestimam o futuro: o mês que vem aparece sem salário e sem aluguel, e o saldo no fim do
+semestre fica otimista ou pessimista conforme o que o usuário lembrou de lançar com data futura. O
+único jeito de "prever" hoje é lançar cada mês à mão com data futura, o que suja Resumo, orçamentos e
+exportação contábil com valores que ainda não aconteceram (e que mudam: a conta de luz nunca é igual).
+**Objetivo (outcome):** o usuário cadastra uma vez o que se repete e a previsão passa a contar com isso
+nos meses seguintes, sem lançar nada antes da hora. Quando a ocorrência acontece, ele a lança com um
+clique (ajustando o valor real) ou a pula; Resumo, orçamentos, fatura e exportação continuam vendo só o
+que foi lançado.
+**Métricas de sucesso:** (1) com salário e aluguel cadastrados, a previsão dos próximos 6 meses mostra
+os dois em todos os meses sem nenhum lançamento futuro; (2) lançar uma ocorrência tira ela da previsão
+como recorrente na mesma hora em que o lançamento entra (nada conta duas vezes); (3) nenhuma recorrência
+aparece no Resumo, nos orçamentos ou na exportação contábil antes de ser lançada; (4) a jornada
+"cadastrar, prever, lançar, conferir" passa no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → "registrar gastos e receitas pessoais e da empresa" e previsão;
+[ADR-0005](adr/0005-fatura-de-cartao-e-previsao-de-caixa.md), decisão 8 e consequências ("a previsão sem
+recorrência subestima o futuro"); ideia de produto promovida a pedido do dono do produto (2026-11-22).
+
+**Achados no código que moldam o épico:**
+- **A previsão já aceita o futuro, mas só o lançado.** `CashForecastCalculator` soma lançamentos fora do
+  cartão pela data e o cartão pela fatura, no mês de vencimento; `ProjectedBalanceCalculator` (INV-13)
+  parte do saldo informado. Os dois leem a projeção do `reporting`, que nasce dos eventos do
+  `transactions`.
+- **Lançamento futuro contamina tudo o que lê a projeção ou a tabela.** Resumo, orçamentos (BDG),
+  fatura e limite (INV) e a exportação contábil (CTB, que lê o `transactions` direto) contam qualquer
+  lançamento que exista. Por isso a recorrência não pode virar lançamento antes da hora.
+- **A importação deduplica só pela chave externa** (`ExternalId` por dono e conta, IMP-4). Um
+  lançamento criado pelo sistema não tem chave: se ele fosse gerado sozinho, importar o extrato do mês
+  traria o mesmo pagamento de novo como lançamento novo.
+- **O `reporting` pula tipo de evento desconhecido e o checkpoint avança** (visto na LNC-4): evento novo
+  exige implantar o `reporting` antes ou junto do `transactions`, senão o que sair nessa janela se perde
+  até zerar o checkpoint.
+- **"Hoje" só tem fuso no `reporting`** (`Reports:TimeZone`). O `transactions` não tem fuso, e as
+  ocorrências "a lançar" dependem do dia de hoje.
+- **Já existem workers no `transactions`** (`ImportBatchCleanupWorker`, backfills): gerar lançamentos
+  sozinho seria possível tecnicamente; o impedimento é o achado da importação, não a técnica.
+- **Parcelamento já existe e é outra coisa** (INV-5): uma compra em N parcelas é um lançamento só,
+  distribuído nas faturas. Recorrência é um compromisso sem fim definido, um lançamento por ocorrência.
+
+**Decisões em aberto (para a ADR-0008, REC-1; recomendação do PO em cada uma):**
+1. **Modelo.** Opções: (a) **regra que só projeta**: a recorrência alimenta a previsão e nunca vira
+   lançamento sozinha; o usuário lança cada ocorrência (um clique, com o valor real) ou a pula;
+   (b) **lançamento automático**: um worker cria o lançamento no dia; (c) **lançamento previsto**: o
+   lançamento nasce com status "previsto" e é "efetivado" depois. *Recomendação: (a).* (b) duplica com a
+   importação de extrato e grava como real um valor que muda (luz, telefone); (c) obriga Resumo,
+   orçamentos, fatura, limite, exportação e todos os eventos a filtrarem o status, o mesmo risco que a
+   ADR-0005 evitou ao não fazer do pagamento de fatura um lançamento.
+2. **Onde mora e como chega ao `reporting`.** Opções: (a) regra no `transactions` (dono dos
+   lançamentos: lançar a ocorrência cria o lançamento no mesmo serviço), publicada no outbox com eventos
+   próprios (`RecurrenceSaved` v1 com o estado completo, `RecurrenceDeleted` v1) e o estado de cada
+   ocorrência (`RecurrenceOccurrenceLaunched`, `RecurrenceOccurrenceSkipped`,
+   `RecurrenceOccurrenceReopened`); (b) regra no `transactions` e o `reporting` a lê por HTTP na consulta
+   da previsão; (c) regra no `reporting`. *Recomendação: (a).* Segue o caminho do EVT (o `reporting` não
+   chama o `transactions` na consulta) e não muda o `TransactionRegistered`; com (c), lançar a ocorrência
+   teria de atravessar serviços para criar o lançamento. Implantar o `reporting` antes do
+   `transactions` (achado do checkpoint).
+3. **Frequência e datas.** *Recomendação:* **mensal** (dia 1 a 31; mês mais curto usa o último dia) no
+   Must e **anual** (dia e mês: IPVA, anuidade, seguro) no Should. Semanal e quinzenal ficam fora. A
+   regra começa numa data e termina opcionalmente noutra; sem "N ocorrências" (o fim por data cobre o
+   caso).
+4. **O que a regra guarda.** *Recomendação:* os mesmos campos do lançamento (conta, tipo, meio, cartão da
+   conta, descrição, categoria, valor estimado, observações) mais frequência, dia, início e fim
+   opcional. **Sem parcelas** (receita já não parcela; compra parcelada é a INV-5). Valem as regras e
+   os códigos de erro do lançamento. A conta não muda depois de criada (como na ADR-0007).
+5. **Editar, encerrar e excluir.** *Recomendação:* editar muda só as ocorrências **ainda não lançadas
+   nem puladas**; o que já foi lançado fica como está (o lançamento se corrige pela LNC). Encerrar =
+   definir o fim. Excluir a regra tira as ocorrências em aberto da previsão e mantém os lançamentos já
+   feitos (eles só deixam de apontar para uma regra viva).
+6. **Lançar, pular e "a lançar".** *Recomendação:* lançar uma ocorrência cria um lançamento comum (o
+   mesmo `TransactionRegistered` de sempre) pré-preenchido com a regra, com valor e data ajustáveis, e
+   grava o vínculo (regra + data da ocorrência). Excluir esse lançamento **reabre** a ocorrência. Pular
+   grava a ocorrência como pulada (some da previsão). Ocorrências de dias que já passaram sem lançar nem
+   pular ficam numa lista **"A lançar"** (últimos 60 dias) e **não** entram na previsão: ou aconteceram
+   e foram lançadas sem vínculo, ou não aconteceram; nos dois casos, contar seria chute. "Hoje" no fuso
+   de `Reports:TimeZone`, que o `transactions` passa a ler também.
+7. **Na previsão.** *Recomendação:* de hoje em diante, cada ocorrência em aberto entra como um
+   lançamento futuro: fora do cartão, no mês da data; **no cartão, na fatura do mês de vencimento**
+   (mesma regra da compra à vista, ADR-0005 decisões 4 e 8). Entra também no saldo projetado (INV-13).
+   A resposta separa a parte recorrente (`recurringIncome`, `recurringExpense`, `recurringInvoices`) para
+   a tela mostrar o que é previsto. A **fatura exibida e o limite disponível não mudam**: mostram só o
+   que foi lançado.
+8. **Fora da previsão.** *Recomendação:* recorrência em aberto **não** entra no Resumo, nos orçamentos,
+   no "Sem orçamento", nas sugestões de categoria nem na exportação contábil; só o lançamento feito a
+   partir dela.
+9. **Importação.** *Recomendação (Should):* na prévia do extrato, a linha da mesma conta e do mesmo tipo,
+   com valor até 10% diferente do estimado e data até 5 dias antes ou depois de uma ocorrência em
+   aberto, vem sugerida como "lançamento da recorrência <descrição>"; confirmar cria o lançamento com a
+   chave externa **e** o vínculo. Continua sendo sugestão (como as pistas da ADR-0004, decisão 5). Até
+   lá, quem importa o extrato pula a ocorrência à mão para não contar duas vezes na previsão, e a tela
+   diz isso.
+
+- 🔵 **REC-1** ADR: lançamentos recorrentes.
+  - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0008 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **REC-2** Regras de recorrência na API.
+  - *Dado* uma conta minha, *quando* envio `POST /transactions/recurrences` com tipo, meio, descrição,
+    categoria, valor estimado, dia do mês e início, *então* a regra é criada com as validações do
+    lançamento (400 com os mesmos códigos; parcelas recusadas) e um `RecurrenceSaved` sai no outbox no
+    mesmo commit.
+  - *Dado* minhas regras, *quando* consulto `GET /transactions/recurrences`, *então* vejo cada uma com a
+    próxima ocorrência em aberto; *e* a regra de outro usuário responde 404.
+  - *Dado* uma regra com ocorrências lançadas, *quando* edito o valor ou defino o fim, *então* só as
+    ocorrências em aberto mudam; *quando* a excluo, *então* os lançamentos feitos a partir dela ficam.
+  - *Dado* o dia 31, *quando* o mês tem 30 dias (ou é fevereiro), *então* a ocorrência cai no último dia.
+  - Estimativa: 5 · **Must** · Dependências: REC-1
+- 🔵 **REC-3** Lançar e pular ocorrência; lista "A lançar".
+  - *Dado* uma ocorrência em aberto, *quando* a lanço (podendo trocar valor e data), *então* nasce um
+    lançamento comum vinculado à regra e à data da ocorrência, e ela deixa de estar em aberto; lançar a
+    mesma ocorrência de novo responde 409.
+  - *Dado* uma ocorrência lançada, *quando* excluo o lançamento, *então* ela volta a ficar em aberto.
+  - *Dado* uma ocorrência, *quando* a pulo, *então* ela some da previsão e da lista "A lançar".
+  - *Dado* ocorrências de dias que já passaram sem lançar nem pular, *quando* consulto
+    `GET /transactions/recurrences/due`, *então* vejo as dos últimos 60 dias, das mais antigas para as
+    mais novas.
+  - Estimativa: 5 · **Must** · Dependências: REC-2
+- 🔵 **REC-4** Previsão conta com as recorrências.
+  - *Dado* um salário mensal (receita, Pix, dia 5) e um aluguel (gasto, boleto, dia 10), *quando* consulto
+    a previsão de 6 meses, *então* cada mês a partir de hoje tem os dois nas entradas e saídas, com a
+    parte recorrente separada, e o saldo projetado acompanha.
+  - *Dado* uma assinatura no cartão, *quando* olho a previsão, *então* ela entra na fatura do mês de
+    vencimento; *e* a fatura do cartão e o limite disponível não mudam.
+  - *Dado* uma ocorrência lançada, pulada ou de um dia que já passou, *quando* olho a previsão, *então*
+    ela não entra como recorrente (a lançada entra como lançamento, uma vez só).
+  - *Dado* uma recorrência em aberto, *quando* olho Resumo e orçamentos, *então* ela não aparece.
+  - Estimativa: 5 · **Must** · Dependências: REC-3
+- 🔵 **REC-5** Recorrências e "A lançar" na SPA.
+  - *Dado* a aba Lançamentos, *quando* abro "Recorrências", *então* cadastro, edito, encerro e excluo
+    regras com o mesmo formulário do lançamento (mais frequência, dia, início e fim) e vejo a próxima
+    ocorrência de cada uma.
+  - *Dado* ocorrências a lançar, *quando* abro "A lançar", *então* lanço cada uma com o valor real
+    (formulário pré-preenchido) ou a pulo, e o lançamento aparece na lista de lançamentos.
+  - Estimativa: 5 · **Must** · Dependências: REC-3
+- 🔵 **REC-6** Previsão mostra o que é recorrente.
+  - *Dado* a previsão, *quando* um mês tem recorrências, *então* entradas, saídas e faturas mostram
+    quanto delas é previsto por recorrência, e o aviso da tela diz que a recorrência conta até ser
+    lançada ou pulada (e, até a REC-9, que quem importa extrato pula a ocorrência importada).
+  - Estimativa: 2 · **Must** · Dependências: REC-4, REC-5
+- 🔵 **REC-7** E2E Cypress: cadastrar, prever, lançar e conferir.
+  - *Dado* uma conta com saldo e um cartão, *quando* cadastro salário, aluguel e uma assinatura no cartão
+    pela SPA, *então* a previsão mostra os três nos meses certos; *quando* lanço o aluguel do mês com
+    outro valor, *então* a previsão conta o valor lançado uma vez só, o Resumo ganha o aluguel e o
+    orçamento da categoria o vê; *quando* pulo o salário, *então* ele some daquele mês.
+  - Estimativa: 3 · **Must** · Dependências: REC-5, REC-6
+- 🔵 **REC-8** Recorrência anual.
+  - *Dado* um IPVA anual em 15 de março, *quando* olho a previsão de 12 meses, *então* ele aparece só em
+    março; *e* uma regra em 29 de fevereiro cai no dia 28 nos anos não bissextos.
+  - Estimativa: 2 · **Should** · Dependências: REC-4
+- 🔵 **REC-9** Importação reconhece a ocorrência.
+  - *Dado* um aluguel recorrente em aberto (R$ 2.000, dia 10), *quando* importo um extrato com um boleto
+    de R$ 2.050 no dia 11 na mesma conta, *então* a prévia sugere "lançamento da recorrência Aluguel";
+    confirmar cria o lançamento com a chave externa e o vínculo, e a ocorrência sai da previsão.
+  - *Dado* a sugestão, *quando* troco para lançamento comum, *então* nada é vinculado.
+  - Estimativa: 5 · **Should** · Dependências: REC-3
+- 🔵 **REC-10** Repetir a partir de um lançamento.
+  - *Dado* um lançamento na lista, *quando* escolho "repetir todo mês", *então* o formulário de
+    recorrência abre preenchido com os dados dele, começando no mês seguinte, e o lançamento original
+    fica vinculado à ocorrência do mês dele.
+  - Estimativa: 2 · **Could** · Dependências: REC-5
+
+**Fora do escopo (Won't, nesta versão):** gerar lançamentos sozinho; frequências semanal e quinzenal;
+recorrência por "N ocorrências"; reajuste automático do valor (IGP-M, IPCA); lembrete por e-mail ou
+push; recorrência de pagamento de fatura (a fatura já entra pela previsão); recorrência que muda de
+conta; orçamento "previsto até o fim do mês" a partir das recorrências.
+
+**Priorização (MoSCoW):** Must = REC-1 a REC-7 (27 pts): cadastrar, prever, lançar ou pular e ver na
+previsão o que é recorrente, provado ponta a ponta. Should = REC-8, REC-9 (7 pts): o anual cobre IPVA e
+anuidades; reconhecer na importação tira de quem importa extrato o trabalho de pular à mão. Could =
+REC-10 (2 pts). Total: 36 pts.
+
+**Ordem sugerida:** REC-1 → REC-2 → REC-3 → REC-4 (com o `reporting` implantado antes do `transactions`
+que publica os eventos novos) → REC-5 → REC-6 → REC-7 (fecha o Must) → REC-8 → REC-9 → REC-10.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
 - (Receita e edição de lançamentos viraram o épico LNC, em 2026-11-22.)
-- Lançamentos recorrentes (salário, aluguel, assinaturas): a previsão de caixa subestima o futuro
-  sem eles (ADR-0005, consequências).
+- (Lançamentos recorrentes viraram o épico REC, em 2026-11-22.)
