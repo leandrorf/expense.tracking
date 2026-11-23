@@ -1537,7 +1537,7 @@ relatórios acompanham, provada ponta a ponta. Could = LNC-7 (3 pts). Total: 22 
 
 **Ordem sugerida:** LNC-1 → LNC-2 → LNC-3 → LNC-4 → LNC-5 → LNC-6 (fecha o Must) → LNC-7.
 
-## 🟡 EPIC REC — Lançamentos recorrentes  · *In Progress*
+## 🟢 EPIC REC — Lançamentos recorrentes  · *Done*
 **Problema:** salário, pró-labore, aluguel, condomínio, escola, internet e assinaturas se repetem todo
 mês, mas o produto só conhece o que já foi lançado. A previsão de caixa (INV-8) e o saldo projetado
 (INV-13) subestimam o futuro: o mês que vem aparece sem salário e sem aluguel, e o saldo no fim do
@@ -1648,7 +1648,7 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
     Os totais da previsão já incluem a recorrência, e `recurringIncome`/`recurringExpense`/
     `recurringInvoices` são a parte dela. Rotas em `/transactions/recurrences` (decisão 12 da ADR).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **REC-2** Regras de recorrência na API.
+- ✅ **REC-2** Regras de recorrência na API. → `/transactions/recurrences`, `RecurrenceSaved`/`RecurrenceDeleted`.
   - *Dado* uma conta minha, *quando* envio `POST /transactions/recurrences` com tipo, meio, descrição,
     categoria, valor estimado, frequência e início (a âncora da agenda), *então* a regra é criada com as validações do
     lançamento (400 com os mesmos códigos; parcelas recusadas) e um `RecurrenceSaved` sai no outbox no
@@ -1658,8 +1658,21 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* uma regra com ocorrências lançadas, *quando* edito o valor ou defino o fim, *então* só as
     ocorrências em aberto mudam; *quando* a excluo, *então* os lançamentos feitos a partir dela ficam.
   - *Dado* o dia 31, *quando* o mês tem 30 dias (ou é fevereiro), *então* a ocorrência cai no último dia.
+  - Feito assim: `Recurrence` (Domain/Recurrences) valida com o próprio `Transaction.Create` (mesmos
+    códigos, parcelas sempre 1) e guarda frequência (`Monthly`/`Yearly`), início (âncora) e fim
+    opcional (antes do início = 400 `recurrence.ends_before_start`); a agenda (`RecurrenceSchedule`)
+    dá o período de uma data, a data de um período (nula fora da agenda) e as ocorrências de uma
+    janela. Tabelas `recurrences` e `recurrence_occurrences` (migração `Recurrences`; só períodos
+    fechados, chave regra + período). Rotas `GET/POST /transactions/recurrences` e
+    `GET/PUT/DELETE /transactions/recurrences/{id}`: a leitura traz `nextOccurrence` (período e data da
+    primeira em aberto de hoje em diante); `PUT` exige `version` (400 `recurrence.version_required`; antiga =
+    409 `recurrence.concurrency_conflict`; conta diferente = 400 `recurrence.account_immutable`; sem
+    mudança = 200 sem evento). Conta e cartão conferidos no accounts. Eventos com base própria
+    (`RecurrenceEvent`: o agregado é a regra, sem `transactionId` no payload); `RecurrenceSaved` leva o
+    escopo da conta e `recurrenceVersion`. "Hoje" pelo `LocalCalendar`, da configuração `TimeZone`
+    (padrão `America/Sao_Paulo`, mesma resolução do reporting).
   - Estimativa: 5 · **Must** · Dependências: REC-1
-- 🔵 **REC-3** Lançar e pular ocorrência; lista "A lançar".
+- ✅ **REC-3** Lançar e pular ocorrência; lista "A lançar". → `.../occurrences/{period}/launch|skip`, `/recurrences/due`.
   - *Dado* uma ocorrência em aberto, *quando* a lanço (podendo trocar valor e data), *então* nasce um
     lançamento comum vinculado à regra e ao período da ocorrência, e ela deixa de estar em aberto;
     lançar o mesmo período de novo responde 409 `recurrence.occurrence_closed`.
@@ -1669,8 +1682,20 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* ocorrências de dias que já passaram sem lançar nem pular, *quando* consulto
     `GET /transactions/recurrences/due`, *então* vejo as dos últimos 60 dias, das mais antigas para as
     mais novas.
+  - Feito assim: `POST /transactions/recurrences/{id}/occurrences/{period}/launch` (corpo opcional com
+    `amount`, `occurredOn`, `notes`; sem eles valem os da regra e a data agendada) cria um lançamento comum
+    (`TransactionRegistered`, mesmas conferências da criação) com `recurrenceId`/`recurrencePeriod`
+    (migração `TransactionRecurrenceLink`; o DTO do lançamento os devolve), grava o período como
+    `Launched` em `recurrence_occurrences` e publica `RecurrenceOccurrenceClosed` (com o `transactionId`),
+    tudo num commit; corrida na chave (regra, período) vira o mesmo 409. `POST .../skip` fecha como
+    `Skipped` (`transactionId` nulo no evento) e `DELETE .../skip` reabre (`RecurrenceOccurrenceReopened`);
+    desfazer pulo de período lançado = 409 `recurrence.occurrence_launched`, de período aberto = 404
+    `recurrence.occurrence_not_skipped`. Excluir o lançamento de uma ocorrência remove o período fechado e
+    publica o `RecurrenceOccurrenceReopened` no commit da exclusão (`RecurrenceLinks`). `GET
+    /transactions/recurrences/due` lista os períodos em aberto com data de 60 dias atrás até ontem, das
+    mais antigas para as mais novas.
   - Estimativa: 5 · **Must** · Dependências: REC-2
-- 🔵 **REC-4** Previsão conta com as recorrências.
+- ✅ **REC-4** Previsão conta com as recorrências. → projeção das regras no reporting, parte recorrente na previsão.
   - *Dado* um salário mensal (receita, Pix, dia 5) e um aluguel (gasto, boleto, dia 10), *quando* consulto
     a previsão de 6 meses, *então* cada mês a partir de hoje tem os dois nas entradas e saídas, com a
     parte recorrente separada, e o saldo projetado acompanha.
@@ -1679,39 +1704,97 @@ recorrência subestima o futuro"); ideia de produto promovida a pedido do dono d
   - *Dado* uma ocorrência lançada, pulada ou de um dia que já passou, *quando* olho a previsão, *então*
     ela não entra como recorrente (a lançada entra como lançamento, uma vez só).
   - *Dado* uma recorrência em aberto, *quando* olho Resumo e orçamentos, *então* ela não aparece.
+  - Feito assim: o reporting lê os quatro eventos novos (v1) e projeta `projected_recurrences` (upsert
+    pelo `RecurrenceSaved`; `RecurrenceDeleted` remove a regra e os períodos dela) e
+    `projected_recurrence_occurrences` (upsert por regra + período no `RecurrenceOccurrenceClosed`;
+    `RecurrenceOccurrenceReopened` remove), migração `ProjectedRecurrences`. A agenda tem cópia própria no
+    reporting (`RecurrenceSchedule`, Domain/Forecast), como manda a ADR-0001. A previsão soma, de hoje
+    até o fim da janela, cada período em aberto pelo valor estimado: fora do cartão no mês da data (e no
+    saldo projetado, pela conta da regra); no cartão, na fatura do vencimento (`CardCycle.DueMonthOf`,
+    à vista, receita abate) e no saldo pela conta do cartão; cartão que o accounts não devolve ao dono
+    fica de fora. `MonthFlow` e o DTO ganharam `recurringIncome`, `recurringExpense` e
+    `recurringInvoices` (a parte recorrente que já está nos totais). Resumo, orçamentos, fatura e limite
+    não leem as tabelas novas. O compose passa o mesmo fuso aos dois serviços (`APP_TIME_ZONE`, padrão
+    `America/Sao_Paulo`: `TimeZone` no transactions, `Reports__TimeZone` no reporting). Smoke passo 24
+    no MySQL real (regra prevista, lançada com outro valor, relançar = 409, período inválido = 400,
+    excluir devolve, pular tira; 46 passos).
   - Estimativa: 5 · **Must** · Dependências: REC-3
-- 🔵 **REC-5** Recorrências e "A lançar" na SPA.
+- ✅ **REC-5** Recorrências e "A lançar" na SPA. → aba "Recorrências".
   - *Dado* a aba Lançamentos, *quando* abro "Recorrências", *então* cadastro, edito, encerro e excluo
     regras com o mesmo formulário do lançamento (mais frequência, dia, início e fim) e vejo a próxima
     ocorrência de cada uma.
   - *Dado* ocorrências a lançar, *quando* abro "A lançar", *então* lanço cada uma com o valor real
     (formulário pré-preenchido) ou a pulo, e o lançamento aparece na lista de lançamentos.
+  - Feito assim: em vez de uma sub-aba de Lançamentos, uma aba própria **"Recorrências"**
+    (`tab-recurrences`, `RecurrencesView`), porque a tela de lançamentos já é grande. Ela tem a lista "A
+    lançar" (`rec-due-row`, com lançar pelo valor e data reais e pular), o formulário da regra (`rec-form`:
+    os campos do lançamento mais frequência, "a partir de" e "até"; conta travada na edição; conflito de
+    versão recarrega e avisa, `rec-conflict`) e as regras cadastradas (`rec-row`: "todo dia N" ou "todo
+    ano em dd/mm", valor estimado, próxima ocorrência, e lançar ou pular a próxima direto dali, para quem
+    paga adiantado; editar e excluir). Na lista de lançamentos, o lançado a partir de uma regra mostra
+    "recorrência" (`tx-recurring-label`). Cypress `recurrences.cy.ts`.
   - Estimativa: 5 · **Must** · Dependências: REC-3
-- 🔵 **REC-6** Previsão mostra o que é recorrente.
+- ✅ **REC-6** Previsão mostra o que é recorrente. → "previsto" em entradas, saídas e faturas.
   - *Dado* a previsão, *quando* um mês tem recorrências, *então* entradas, saídas e faturas mostram
     quanto delas é previsto por recorrência, e o aviso da tela diz que a recorrência conta até ser
     lançada ou pulada (e, até a REC-9, que quem importa extrato pula a ocorrência importada).
+  - Feito assim: entradas, saídas e faturas ganham, abaixo do valor, "R$ X previsto"
+    (`forecast-income-recurring`, `forecast-expense-recurring`, `forecast-invoices-recurring`) quando o mês
+    tem recorrência em aberto; o aviso da tela (`forecast-recurring-notice`) explica que a recorrência conta
+    até ser lançada ou pulada. Os specs da previsão passaram a ler só o valor da célula (primeiro nó de
+    texto), como já faziam com as faturas.
   - Estimativa: 2 · **Must** · Dependências: REC-4, REC-5
-- 🔵 **REC-7** E2E Cypress: cadastrar, prever, lançar e conferir.
+- ✅ **REC-7** E2E Cypress: cadastrar, prever, lançar e conferir. → `recurrence-journey.cy.ts`.
   - *Dado* uma conta com saldo e um cartão, *quando* cadastro salário, aluguel e uma assinatura no cartão
     pela SPA, *então* a previsão mostra os três nos meses certos; *quando* lanço o aluguel do mês com
     outro valor, *então* a previsão conta o valor lançado uma vez só, o Resumo ganha o aluguel e o
     orçamento da categoria o vê; *quando* pulo o salário, *então* ele some daquele mês.
+  - Feito assim: tudo pela SPA, comparando a previsão PF por diferença (o demo acumula dados): conta PF
+    com cartão (fecha 10, vence 17) e orçamento na categoria do aluguel; salário (dia 5 do mês que vem),
+    aluguel (hoje) e assinatura no cartão (hoje, que cai na fatura deste mês até o dia 10 e na do mês
+    seguinte depois). Sem lançar nada, o mês atual ganha R$ 1.500 de saídas e o seguinte R$ 3.000 de
+    entradas, R$ 1.500 de saídas e R$ 50 de fatura, com o "previsto" na tela. Lançado por R$ 1.650, o
+    aluguel conta uma vez só pelo valor real e aparece no Resumo e no orçamento; pulado, o salário sai do
+    mês seguinte. No fim as regras são excluídas.
   - Estimativa: 3 · **Must** · Dependências: REC-5, REC-6
-- 🔵 **REC-8** Recorrência anual.
+- ✅ **REC-8** Recorrência anual. → frequência `Yearly`, período `yyyy`.
   - *Dado* um IPVA anual em 15 de março, *quando* olho a previsão de 12 meses, *então* ele aparece só em
     março; *e* uma regra em 29 de fevereiro cai no dia 28 nos anos não bissextos.
+  - Feito assim: a frequência anual já nasceu com a REC-2 (agenda no dia e mês do início, período
+    `yyyy`) e a tela tem "Todo ano"; a história fechou com os testes: previsão de 12 meses com o IPVA só
+    em março (reporting) e regra em 29/02/2032 com período `2033` lançado em 28/02/2033 e próxima
+    `2034` em 28/02 (transactions); período mensal numa regra anual = 400.
   - Estimativa: 2 · **Should** · Dependências: REC-4
-- 🔵 **REC-9** Importação reconhece a ocorrência.
+- ✅ **REC-9** Importação reconhece a ocorrência. → sugestão na prévia, vínculo na confirmação.
   - *Dado* um aluguel recorrente em aberto (R$ 2.000, dia 10), *quando* importo um extrato com um boleto
     de R$ 2.050 no dia 11 na mesma conta, *então* a prévia sugere "lançamento da recorrência Aluguel";
     confirmar cria o lançamento com a chave externa e o vínculo, e a ocorrência sai da previsão.
   - *Dado* a sugestão, *quando* troco para lançamento comum, *então* nada é vinculado.
+  - Feito assim: na prévia, o `PreviewImportHandler` busca as ocorrências em aberto das regras **da conta
+    do extrato** entre a menor e a maior data das linhas (com 5 dias de folga) e a regra pura
+    `RecurrenceMatcher` casa cada linha incluída (fora pagamento de fatura) com no máximo uma ocorrência
+    do mesmo tipo, valor até 10% diferente e data até 5 dias, a de data mais próxima primeiro; cada
+    ocorrência vai para uma linha só. A linha guarda `recurrenceId`/`recurrencePeriod`/
+    `recurrenceDescription` (migração `ImportLineRecurrence`) e herda a categoria da regra. A decisão
+    `recurrence: false` troca para lançamento comum. Na confirmação, o lançamento importado ganha o
+    vínculo e o período fecha (`RecurrenceOccurrenceClosed`) no mesmo commit; se a regra sumiu ou o
+    período foi fechado depois da prévia, o lançamento entra comum. Desfazer a importação reabre os
+    períodos. Na SPA, a linha mostra "lançamento da recorrência <descrição> (<período>)" com uma caixa
+    marcada (`import-row-recurrence`) que, desmarcada, manda `recurrence: false`. Cypress
+    `recurrence-import-repeat.cy.ts`.
   - Estimativa: 5 · **Should** · Dependências: REC-3
-- 🔵 **REC-10** Repetir a partir de um lançamento.
+- ✅ **REC-10** Repetir a partir de um lançamento. → "repetir" na lista, `fromTransactionId`.
   - *Dado* um lançamento na lista, *quando* escolho "repetir todo mês", *então* o formulário de
     recorrência abre preenchido com os dados dele, começando no mês seguinte, e o lançamento original
     fica vinculado à ocorrência do mês dele.
+  - Feito assim: os dois critérios se contradiziam (se a regra começa no mês seguinte, o mês do
+    lançamento não está na agenda). A regra é **ancorada na data do lançamento**, que fecha o período
+    dele; a próxima em aberto fica sendo a do mês seguinte. `POST /transactions/recurrences` aceita
+    `fromTransactionId` (lançamento do dono, da mesma conta, ainda sem vínculo e dentro da agenda; senão
+    400 `recurrence.from_transaction_invalid`) e publica `RecurrenceSaved` e `RecurrenceOccurrenceClosed`
+    no mesmo commit. Na lista de lançamentos, "repetir" (`tx-repeat`, só à vista e sem vínculo) abre a
+    aba Recorrências preenchida (`rec-from-transaction`, com "desistir"). Cypress
+    `recurrence-import-repeat.cy.ts`.
   - Estimativa: 2 · **Could** · Dependências: REC-5
 
 **Fora do escopo (Won't, nesta versão):** gerar lançamentos sozinho; frequências semanal e quinzenal;

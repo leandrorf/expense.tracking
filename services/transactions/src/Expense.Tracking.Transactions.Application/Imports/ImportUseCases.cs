@@ -1,10 +1,12 @@
 using Expense.Tracking.Transactions.Application.Abstractions;
 using Expense.Tracking.Transactions.Application.Contracts;
 using Expense.Tracking.Transactions.Application.Events;
+using Expense.Tracking.Transactions.Application.Recurrences;
 using Expense.Tracking.Transactions.Domain.Common;
 using Expense.Tracking.Transactions.Domain.Imports;
 using Expense.Tracking.Transactions.Domain.Imports.Csv;
 using Expense.Tracking.Transactions.Domain.Imports.Ofx;
+using Expense.Tracking.Transactions.Domain.Recurrences;
 using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Imports;
@@ -30,6 +32,7 @@ public sealed class PreviewImportHandler(
     ITransactionRepository transactions,
     ICardPaymentRepository payments,
     IImportBatchRepository batches,
+    IRecurrenceRepository recurrences,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
 {
@@ -95,9 +98,12 @@ public sealed class PreviewImportHandler(
                 ? await accountsClient.ListActiveCardsAsync(command.AccountId, cancellationToken)
                 : [];
 
+        // REC-9: ocorrencias em aberto das regras desta conta perto das datas do extrato.
+        var openOccurrences = await OpenOccurrencesAsync(command.OwnerUserId, command.AccountId, statement.Value, cancellationToken);
+
         var batch = ImportBatch.Create(
             command.OwnerUserId, command.AccountId, command.CreditCardId, command.DefaultPaymentMethod,
-            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards);
+            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards, openOccurrences);
         if (batch.IsFailure)
         {
             return Result.Failure<ImportBatchDto>(batch.Error);
@@ -106,6 +112,30 @@ public sealed class PreviewImportHandler(
         await batches.AddAsync(batch.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ImportBatchDto.From(batch.Value);
+    }
+
+    private async Task<IReadOnlyList<RecurrenceCandidate>> OpenOccurrencesAsync(
+        Guid ownerUserId, Guid accountId, ParsedStatement statement, CancellationToken cancellationToken)
+    {
+        var dates = statement.Lines.Where(l => l.IsValid && l.Date is not null).Select(l => l.Date!.Value).ToList();
+        if (dates.Count == 0)
+        {
+            return [];
+        }
+
+        var rules = (await recurrences.ListAsync(ownerUserId, cancellationToken)).Where(r => r.AccountId == accountId).ToList();
+        if (rules.Count == 0)
+        {
+            return [];
+        }
+
+        var closed = await recurrences.ListClosedPeriodsAsync(ownerUserId, rules.Select(r => r.Id).ToArray(), cancellationToken);
+        var (from, to) = (dates.Min().AddDays(-RecurrenceMatcher.DayTolerance), dates.Max().AddDays(RecurrenceMatcher.DayTolerance));
+        return rules
+            .SelectMany(r => r.Occurrences(from, to)
+                .Where(o => !(closed.GetValueOrDefault(r.Id)?.Contains(o.Period) ?? false))
+                .Select(o => new RecurrenceCandidate(r.Id, o.Period, o.ScheduledOn, r.Type, r.Amount, r.Description, r.Category)))
+            .ToList();
     }
 
     /// <summary>OFX sem FITID usa a impressao digital como chave (ADR-0004, decisao 3).</summary>
@@ -170,6 +200,7 @@ public sealed class ConfirmImportHandler(
     IImportBatchRepository batches,
     ITransactionRepository transactions,
     ICardPaymentRepository payments,
+    IRecurrenceRepository recurrences,
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -227,6 +258,7 @@ public sealed class ConfirmImportHandler(
 
             foreach (var transaction in created.Value.Transactions)
             {
+                await CloseRecurrenceAsync(transaction, now, cancellationToken);
                 await transactions.AddAsync(transaction, cancellationToken);
                 outbox.Add(TransactionRegistered.From(transaction, accountScope));
             }
@@ -252,6 +284,31 @@ public sealed class ConfirmImportHandler(
             return dto;
         }
     }
+
+    /// <summary>
+    /// REC-9 (ADR-0008, decisao 11): a linha confirmada como ocorrencia fecha o periodo no mesmo commit.
+    /// Se a regra sumiu ou o periodo ja foi fechado por outro caminho desde a previa, o lancamento entra
+    /// comum (sem vinculo). Na corrida pela chave (regra, periodo), a nova tentativa cai neste caso.
+    /// </summary>
+    private async Task CloseRecurrenceAsync(Transaction transaction, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (transaction.RecurrenceId is not { } recurrenceId || transaction.RecurrencePeriod is not { } period)
+        {
+            return;
+        }
+
+        var recurrence = await recurrences.GetAsync(recurrenceId, transaction.OwnerUserId, cancellationToken);
+        if (recurrence is null || recurrence.ScheduledOn(period) is null
+            || await recurrences.FindOccurrenceAsync(recurrenceId, period, cancellationToken) is not null)
+        {
+            transaction.UnlinkRecurrence();
+            return;
+        }
+
+        recurrences.AddOccurrence(RecurrenceOccurrence.Launched(recurrence, period, transaction.Id, now));
+        outbox.Add(new RecurrenceOccurrenceClosed(
+            recurrenceId, transaction.OwnerUserId, period, nameof(OccurrenceStatus.Launched), transaction.Id));
+    }
 }
 
 public sealed record UndoImportCommand(Guid OwnerUserId, Guid BatchId);
@@ -267,6 +324,7 @@ public sealed class UndoImportHandler(
     IImportBatchRepository batches,
     ITransactionRepository transactions,
     ICardPaymentRepository payments,
+    IRecurrenceRepository recurrences,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
     ImportMetrics metrics,
@@ -301,6 +359,8 @@ public sealed class UndoImportHandler(
             {
                 transactions.Remove(transaction);
                 outbox.Add(new TransactionDeleted(transaction.Id, transaction.OwnerUserId));
+                // REC-9: o lancamento de uma ocorrencia reabre o periodo, como na exclusao a mao.
+                await RecurrenceLinks.ReopenLaunchedAsync(recurrences, outbox, transaction, cancellationToken);
             }
 
             // INV-11: os pagamentos de fatura criados pelo lote tambem saem; a fatura volta a dever.

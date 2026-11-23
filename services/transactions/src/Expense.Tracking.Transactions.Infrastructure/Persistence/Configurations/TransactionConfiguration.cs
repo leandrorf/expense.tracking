@@ -35,6 +35,8 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         builder.Property(t => t.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
         builder.Property(t => t.ExternalId).HasColumnName("external_id").HasMaxLength(ImportLine.ExternalIdMaxLength);
         builder.Property(t => t.ImportBatchId).HasColumnName("import_batch_id");
+        builder.Property(t => t.RecurrenceId).HasColumnName("recurrence_id");
+        builder.Property(t => t.RecurrencePeriod).HasColumnName("recurrence_period").HasMaxLength(7);
         builder.Property(t => t.Installments).HasColumnName("installments").IsRequired().HasDefaultValue(1);
         // LNC-3 (ADR-0007, decisao 4): a edicao grava "WHERE version = <lida>"; duas edicoes em paralelo
         // com a mesma versao nao passam. Os lancamentos que ja existiam comecam em 1.

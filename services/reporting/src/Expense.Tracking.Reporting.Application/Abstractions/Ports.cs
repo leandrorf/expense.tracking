@@ -26,6 +26,9 @@ public interface IProjectionQueries
     /// <summary>INV-6: pagamentos das faturas de um cartao do dono.</summary>
     Task<IReadOnlyList<CardPaymentRecord>> GetCardPaymentsAsync(Guid ownerUserId, Guid cardId, CancellationToken cancellationToken);
 
+    /// <summary>REC-4: regras de recorrencia do dono, com os periodos ja fechados (lancados ou pulados) de cada uma.</summary>
+    Task<IReadOnlyList<RecurrenceRecord>> GetRecurrencesAsync(Guid ownerUserId, CancellationToken cancellationToken);
+
     /// <summary>INV-8: lancamentos do dono fora do cartao, entre as datas (inclusive).</summary>
     Task<IReadOnlyList<CashMovementRecord>> GetCashMovementsAsync(
         Guid ownerUserId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
@@ -79,6 +82,20 @@ public interface IProjectionStore
     void AddPayment(ProjectedCardPayment payment);
 
     void RemovePayment(ProjectedCardPayment payment);
+
+    /// <summary>REC-4: regra projetada, inclusive uma adicionada no lote atual.</summary>
+    Task<ProjectedRecurrence?> FindRecurrenceAsync(Guid recurrenceId, CancellationToken cancellationToken);
+
+    void AddRecurrence(ProjectedRecurrence recurrence);
+
+    /// <summary>Remove a regra e os periodos fechados dela.</summary>
+    Task RemoveRecurrenceAsync(ProjectedRecurrence recurrence, CancellationToken cancellationToken);
+
+    Task<ProjectedRecurrenceOccurrence?> FindRecurrenceOccurrenceAsync(Guid recurrenceId, string period, CancellationToken cancellationToken);
+
+    void AddRecurrenceOccurrence(ProjectedRecurrenceOccurrence occurrence);
+
+    void RemoveRecurrenceOccurrence(ProjectedRecurrenceOccurrence occurrence);
 
     void SetCheckpoint(long sequence);
 

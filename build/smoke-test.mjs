@@ -448,6 +448,54 @@ async function main() {
   await fetch(`${GATEWAY}/api/accounts/${balanceAcc.id}/opening-balance`, { method: 'DELETE', headers: auth });
   if (rent.id) await fetch(`${GATEWAY}/api/transactions/${rent.id}`, { method: 'DELETE', headers: auth });
 
+  // 24) Recorrencias (REC-2 a REC-4): a regra entra na previsao como recorrente ate ser lancada ou
+  // pulada; excluir o lancamento a devolve. Por diferenca no mes que vem (o demo acumula dados).
+  const recurrenceMonth = isoDay(nextMonthDay).slice(0, 7);
+  const recurringOf = async () => {
+    const f = await (await fetch(`${GATEWAY}/api/reports/cash-forecast?months=3`, { headers: auth })).json();
+    const m = f.months.find((x) => x.month === recurrenceMonth)?.personal ?? {};
+    return { recurring: m.recurringIncome ?? 0, income: m.income ?? 0 };
+  };
+  const recurringBefore = await recurringOf();
+  const waitRecurring = async (expectRecurring, expectIncome) => {
+    let diff = {};
+    for (let i = 0; i < 30; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+      const now = await recurringOf();
+      diff = { recurring: Math.round((now.recurring - recurringBefore.recurring) * 100) / 100,
+        income: Math.round((now.income - recurringBefore.income) * 100) / 100 };
+      if (diff.recurring === expectRecurring && diff.income === expectIncome) break;
+    }
+    return diff;
+  };
+  const ruleRes = await fetch(`${GATEWAY}/api/transactions/recurrences`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: account.id, type: 'Income', paymentMethod: 'Pix', description: 'Smoke salario',
+      category: 'Smoke salario', amount: 1234.56, currency: 'BRL', frequency: 'Monthly', startsOn: isoDay(nextMonthDay) }),
+  });
+  const rule = ruleRes.status === 201 ? await ruleRes.json() : {};
+  const projected = await waitRecurring(1234.56, 1234.56);
+  const occurrenceUrl = `${GATEWAY}/api/transactions/recurrences/${rule.id}/occurrences`;
+  const launchRes = await fetch(`${occurrenceUrl}/${recurrenceMonth}/launch`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ amount: 1300 }),
+  });
+  const launchedTx = launchRes.status === 201 ? await launchRes.json() : {};
+  const relaunch = (await fetch(`${occurrenceUrl}/${recurrenceMonth}/launch`, { method: 'POST', headers: auth })).status;
+  const badPeriod = (await fetch(`${occurrenceUrl}/1999-01/launch`, { method: 'POST', headers: auth })).status;
+  const afterLaunch = await waitRecurring(0, 1300);
+  if (launchedTx.id) await fetch(`${GATEWAY}/api/transactions/${launchedTx.id}`, { method: 'DELETE', headers: auth });
+  const afterDelete = await waitRecurring(1234.56, 1234.56);
+  const skipStatus = (await fetch(`${occurrenceUrl}/${recurrenceMonth}/skip`, { method: 'POST', headers: auth })).status;
+  const afterSkip = await waitRecurring(0, 0);
+  const dueStatus = (await fetch(`${GATEWAY}/api/transactions/recurrences/due`, { headers: auth })).status;
+  ok(ruleRes.status === 201 && rule.nextOccurrence?.period === recurrenceMonth
+    && projected.recurring === 1234.56 && launchRes.status === 201 && launchedTx.recurrencePeriod === recurrenceMonth
+    && relaunch === 409 && badPeriod === 400 && afterLaunch.recurring === 0 && afterLaunch.income === 1300
+    && afterDelete.recurring === 1234.56 && skipStatus === 204 && afterSkip.recurring === 0 && dueStatus === 200,
+    `recorrencia: regra ${ruleRes.status}, prevista +${projected.recurring}; lancada ${launchRes.status} (+${afterLaunch.income} real, `
+      + `relancar ${relaunch}, periodo invalido ${badPeriod}); excluida volta +${afterDelete.recurring}; pulada ${skipStatus} → +${afterSkip.recurring}`);
+  if (rule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${rule.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

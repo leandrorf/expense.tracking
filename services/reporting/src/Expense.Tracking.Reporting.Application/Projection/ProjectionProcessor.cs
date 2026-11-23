@@ -119,6 +119,26 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
                 await ApplyCardInvoicePaymentDeletedAsync(Read<CardInvoicePaymentDeletedV1>(feedEvent), cancellationToken);
                 return true;
 
+            case FeedEventTypes.RecurrenceSaved:
+                EnsureSupported(feedEvent);
+                await ApplyRecurrenceSavedAsync(feedEvent, Read<RecurrenceSavedV1>(feedEvent), cancellationToken);
+                return true;
+
+            case FeedEventTypes.RecurrenceDeleted:
+                EnsureSupported(feedEvent);
+                await ApplyRecurrenceDeletedAsync(Read<RecurrenceDeletedV1>(feedEvent), cancellationToken);
+                return true;
+
+            case FeedEventTypes.RecurrenceOccurrenceClosed:
+                EnsureSupported(feedEvent);
+                await ApplyOccurrenceClosedAsync(feedEvent, Read<RecurrenceOccurrenceClosedV1>(feedEvent), cancellationToken);
+                return true;
+
+            case FeedEventTypes.RecurrenceOccurrenceReopened:
+                EnsureSupported(feedEvent);
+                await ApplyOccurrenceReopenedAsync(Read<RecurrenceOccurrenceReopenedV1>(feedEvent), cancellationToken);
+                return true;
+
             default:
                 // Tipo novo que o reporting ainda nao usa: nao afeta a projecao.
                 return false;
@@ -234,6 +254,66 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         if (row is not null)
         {
             store.RemovePayment(row);
+        }
+    }
+
+    // REC-4 (ADR-0008, decisao 2): upsert pelo id da regra; a edicao chega como outro RecurrenceSaved.
+    private async Task ApplyRecurrenceSavedAsync(FeedEvent feedEvent, RecurrenceSavedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindRecurrenceAsync(e.RecurrenceId, cancellationToken);
+        if (row is null)
+        {
+            row = new ProjectedRecurrence { RecurrenceId = e.RecurrenceId };
+            store.AddRecurrence(row);
+        }
+
+        row.OwnerUserId = e.OwnerUserId;
+        row.AccountId = e.AccountId;
+        row.AccountScope = e.AccountScope;
+        row.TransactionType = e.TransactionType;
+        row.PaymentMethod = e.PaymentMethod;
+        row.CreditCardId = e.CreditCardId;
+        row.Description = e.Description;
+        row.Category = e.Category;
+        row.Amount = e.Amount;
+        row.Currency = e.Currency;
+        row.Frequency = e.Frequency;
+        row.StartsOn = e.StartsOn;
+        row.EndsOn = e.EndsOn;
+        row.LastEventSequence = feedEvent.Sequence;
+    }
+
+    private async Task ApplyRecurrenceDeletedAsync(RecurrenceDeletedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindRecurrenceAsync(e.RecurrenceId, cancellationToken);
+        if (row is not null)
+        {
+            await store.RemoveRecurrenceAsync(row, cancellationToken);
+        }
+    }
+
+    // Upsert por (regra, periodo): reler o evento nao duplica.
+    private async Task ApplyOccurrenceClosedAsync(FeedEvent feedEvent, RecurrenceOccurrenceClosedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindRecurrenceOccurrenceAsync(e.RecurrenceId, e.Period, cancellationToken);
+        if (row is null)
+        {
+            row = new ProjectedRecurrenceOccurrence { RecurrenceId = e.RecurrenceId, Period = e.Period };
+            store.AddRecurrenceOccurrence(row);
+        }
+
+        row.OwnerUserId = e.OwnerUserId;
+        row.Status = e.Status;
+        row.TransactionId = e.TransactionId;
+        row.LastEventSequence = feedEvent.Sequence;
+    }
+
+    private async Task ApplyOccurrenceReopenedAsync(RecurrenceOccurrenceReopenedV1 e, CancellationToken cancellationToken)
+    {
+        var row = await store.FindRecurrenceOccurrenceAsync(e.RecurrenceId, e.Period, cancellationToken);
+        if (row is not null)
+        {
+            store.RemoveRecurrenceOccurrence(row);
         }
     }
 

@@ -44,9 +44,10 @@ public enum ImportLineStatus
 /// tinha (incluida por padrao, meio do lote, categoria sugerida). INV-11: <see cref="InvoicePayment"/>
 /// troca a linha entre pagamento de fatura e lancamento comum; cartao e mes escolhem a fatura.
 /// </summary>
+/// <remarks>REC-9: <see cref="Recurrence"/> = <c>false</c> troca a linha sugerida como ocorrencia de uma recorrencia para lancamento comum.</remarks>
 public sealed record ImportLineDecision(
     Guid LineId, bool? Included, string? Category, PaymentMethod? PaymentMethod,
-    bool? InvoicePayment = null, Guid? InvoiceCardId = null, DateOnly? InvoiceDueMonth = null);
+    bool? InvoicePayment = null, Guid? InvoiceCardId = null, DateOnly? InvoiceDueMonth = null, bool? Recurrence = null);
 
 /// <summary>O que a confirmacao criou: lancamentos e (INV-11) pagamentos de fatura.</summary>
 public sealed record ImportConfirmation(IReadOnlyList<Transaction> Transactions, IReadOnlyList<CardPayment> Payments);
@@ -122,7 +123,7 @@ public sealed class ImportBatch
         Guid ownerUserId, Guid accountId, Guid? creditCardId, PaymentMethod? defaultPaymentMethod,
         ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
         DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null,
-        IReadOnlyList<InvoiceCardHint>? accountCards = null)
+        IReadOnlyList<InvoiceCardHint>? accountCards = null, IReadOnlyList<RecurrenceCandidate>? openOccurrences = null)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -149,6 +150,19 @@ public sealed class ImportBatch
             batch._lines.Add(ImportLine.From(
                 batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds,
                 categoryHistory ?? EmptyHistory, accountCards is [var onlyCard] ? onlyCard : null));
+        }
+
+        // REC-9: linha que bate com uma ocorrencia em aberto de uma regra da conta vem sugerida como ela.
+        if (openOccurrences is { Count: > 0 })
+        {
+            var candidates = batch._lines
+                .Where(l => l.Included && !l.InvoicePayment)
+                .Select(l => (l.Number, l.Type!.Value, l.Amount!.Value, l.OccurredOn!.Value));
+            var matches = RecurrenceMatcher.Match(candidates, openOccurrences);
+            foreach (var line in batch._lines.Where(l => matches.ContainsKey(l.Number)))
+            {
+                line.SuggestRecurrence(matches[line.Number]);
+            }
         }
 
         return batch;
@@ -267,6 +281,12 @@ public sealed class ImportBatch
                 });
             }
 
+            // REC-9: quem chama fecha o periodo (ou desfaz o vinculo, se ele ja foi fechado).
+            if (line.RecurrenceId is { } recurrenceId)
+            {
+                transaction.Value.LinkToRecurrence(recurrenceId, line.RecurrencePeriod!);
+            }
+
             line.MarkImported(transaction.Value.Id);
             created.Add(transaction.Value);
         }
@@ -357,6 +377,24 @@ public sealed class ImportLine
     /// <summary>INV-11: pagamento de fatura criado por esta linha na confirmacao.</summary>
     public Guid? CardPaymentId { get; private set; }
 
+    /// <summary>REC-9: regra da ocorrencia que a linha sugere ser (nula quando nao casou ou o usuario trocou).</summary>
+    public Guid? RecurrenceId { get; private set; }
+
+    /// <summary>REC-9: periodo da ocorrencia sugerida (<c>yyyy-MM</c> ou <c>yyyy</c>).</summary>
+    public string? RecurrencePeriod { get; private set; }
+
+    /// <summary>REC-9: descricao da regra, para a previa mostrar "lancamento da recorrencia ...".</summary>
+    public string? RecurrenceDescription { get; private set; }
+
+    internal void SuggestRecurrence(RecurrenceCandidate candidate)
+    {
+        RecurrenceId = candidate.RecurrenceId;
+        RecurrencePeriod = candidate.Period;
+        RecurrenceDescription = candidate.Description;
+        // A categoria da regra e pista mais forte que o historico da descricao.
+        Category = candidate.Category;
+    }
+
     /// <summary>So linha nova ou fora por padrao pode entrar; duplicada e invalida, nao.</summary>
     public bool CanBeIncluded => Status is ImportLineStatus.New or ImportLineStatus.ExcludedByDefault;
 
@@ -383,6 +421,13 @@ public sealed class ImportLine
             }
 
             Category = category.Length == 0 ? null : category;
+        }
+
+        if (decision.Recurrence == false)
+        {
+            RecurrenceId = null;
+            RecurrencePeriod = null;
+            RecurrenceDescription = null;
         }
 
         if (decision.InvoicePayment is { } invoicePayment)

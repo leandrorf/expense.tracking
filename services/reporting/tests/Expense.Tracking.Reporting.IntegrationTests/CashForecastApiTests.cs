@@ -122,6 +122,78 @@ public sealed class CashForecastApiTests(InvoicesApiFactory factory) : IClassFix
         Assert.Equal(1, body.GetProperty("accountsWithoutBalance").GetInt32());
     }
 
+    private static (decimal Income, decimal Expense, decimal Invoices, decimal RecIncome, decimal RecExpense, decimal RecInvoices) Recurring(
+        JsonElement month, string scope)
+    {
+        var flow = month.GetProperty(scope);
+        return (flow.GetProperty("income").GetDecimal(), flow.GetProperty("expense").GetDecimal(), flow.GetProperty("invoices").GetDecimal(),
+            flow.GetProperty("recurringIncome").GetDecimal(), flow.GetProperty("recurringExpense").GetDecimal(),
+            flow.GetProperty("recurringInvoices").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Recurrences_EnterFromTodayOn_ByDateOrByInvoice_UntilLaunchedOrSkipped()
+    {
+        // Hoje = 2026-11-21; janela de 4 meses: 2026-11 a 2027-02.
+        var owner = Guid.NewGuid();
+        var pf = _factory.Cards.AddAccount(owner, "Personal", openingBalance: 1000m, openingBalanceOn: "2026-11-20");
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17, scope: "Personal", accountId: pf.Id);
+        var feed = _factory.EventFeed;
+
+        // Salario no dia 5: a de novembro ja passou (fica no "a lancar"), entra de dezembro em diante.
+        var salary = Guid.NewGuid();
+        feed.RecurrenceSaved(salary, owner, 5000m, "2026-11-05", transactionType: "Income", paymentMethod: "Pix", accountId: pf.Id,
+            description: "Salario");
+        // Aluguel PJ no dia 25: dezembro pulado, janeiro lancado (com outro valor), fevereiro pulado e reaberto.
+        var rent = Guid.NewGuid();
+        feed.RecurrenceSaved(rent, owner, 2000m, "2026-11-25", scope: "Business");
+        feed.OccurrenceClosed(rent, owner, "2026-12");
+        var januaryRent = Guid.NewGuid();
+        feed.Registered(januaryRent, owner, "Business", 2100m, "Moradia", occurredOn: "2027-01-25", paymentMethod: "Boleto");
+        feed.OccurrenceClosed(rent, owner, "2027-01", januaryRent);
+        feed.OccurrenceClosed(rent, owner, "2027-02");
+        feed.OccurrenceReopened(rent, owner, "2027-02");
+        // Assinatura no cartao no dia 28: depois do fechamento (10), cai na fatura do mes seguinte.
+        feed.RecurrenceSaved(Guid.NewGuid(), owner, 40m, "2026-11-28", cardId: card.Id, accountId: pf.Id, description: "Streaming");
+        // Regra excluida nao entra.
+        var gone = Guid.NewGuid();
+        feed.RecurrenceSaved(gone, owner, 999m, "2026-11-22");
+        feed.RecurrenceDeleted(gone, owner);
+        // Regra de outro usuario nao entra.
+        feed.RecurrenceSaved(Guid.NewGuid(), Guid.NewGuid(), 777m, "2026-11-22");
+        await _factory.DrainFeedAsync();
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=4");
+
+        var m = body.GetProperty("months").EnumerateArray().ToList();
+        Assert.Equal((0m, 0m, 0m, 0m, 0m, 0m), Recurring(m[0], "personal"));
+        Assert.All(m.Skip(1), month => Assert.Equal((5000m, 0m, 40m, 5000m, 0m, 40m), Recurring(month, "personal")));
+        Assert.Equal((0m, 2000m, 0m, 0m, 2000m, 0m), Recurring(m[0], "business"));
+        Assert.Equal((0m, 0m, 0m, 0m, 0m, 0m), Recurring(m[1], "business"));
+        Assert.Equal((0m, 2100m, 0m, 0m, 0m, 0m), Recurring(m[2], "business"));
+        Assert.Equal((0m, 2000m, 0m, 0m, 2000m, 0m), Recurring(m[3], "business"));
+        Assert.Equal(5000m - 40m, m[1].GetProperty("personal").GetProperty("result").GetDecimal());
+        Assert.Equal((5000m, 0m, 40m, 5000m, 0m, 40m), Recurring(m[1], "total"));
+        // Saldo PF: 1000 em 20/11; dezembro +5000 do salario e -40 da fatura da assinatura.
+        Assert.Equal([1000m, 5960m, 10920m, 15880m], m.Select(x => Balance(x, "personal")));
+    }
+
+    [Fact]
+    public async Task YearlyRecurrence_EntersOnlyInItsMonth()
+    {
+        // REC-8: IPVA anual em 15/03; numa janela de 12 meses (2026-11 a 2027-10) so marco tem o valor.
+        var owner = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(Guid.NewGuid(), owner, 1800m, "2027-03-15", frequency: "Yearly", description: "IPVA");
+        await _factory.DrainFeedAsync();
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=12");
+
+        var expenses = body.GetProperty("months").EnumerateArray()
+            .ToDictionary(m => m.GetProperty("month").GetString()!, m => m.GetProperty("personal").GetProperty("recurringExpense").GetDecimal());
+        Assert.Equal(1800m, expenses["2027-03"]);
+        Assert.Equal(1800m, expenses.Values.Sum());
+    }
+
     [Fact]
     public async Task Balance_IsNullEverywhere_WhenNoAccountHasAnInformedBalance()
     {

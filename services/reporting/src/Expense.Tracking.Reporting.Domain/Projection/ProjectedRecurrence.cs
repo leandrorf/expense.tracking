@@ -1,0 +1,64 @@
+namespace Expense.Tracking.Reporting.Domain.Projection;
+
+/// <summary>
+/// REC-4 (ADR-0008, decisao 2): regra de recorrencia projetada a partir do <c>RecurrenceSaved</c>.
+/// So alimenta a previsao: nunca entra no Resumo, nos orcamentos nem na fatura.
+/// </summary>
+public sealed class ProjectedRecurrence
+{
+    public Guid RecurrenceId { get; set; }
+
+    public Guid OwnerUserId { get; set; }
+
+    public Guid AccountId { get; set; }
+
+    /// <summary><c>Personal</c>/<c>Business</c>, da conta da regra.</summary>
+    public string? AccountScope { get; set; }
+
+    /// <summary><c>Expense</c> ou <c>Income</c>.</summary>
+    public string TransactionType { get; set; } = string.Empty;
+
+    public string PaymentMethod { get; set; } = string.Empty;
+
+    public Guid? CreditCardId { get; set; }
+
+    public string Description { get; set; } = string.Empty;
+
+    public string Category { get; set; } = string.Empty;
+
+    /// <summary>Valor estimado de cada ocorrencia.</summary>
+    public decimal Amount { get; set; }
+
+    public string Currency { get; set; } = string.Empty;
+
+    /// <summary><c>Monthly</c> ou <c>Yearly</c>.</summary>
+    public string Frequency { get; set; } = string.Empty;
+
+    public DateOnly StartsOn { get; set; }
+
+    public DateOnly? EndsOn { get; set; }
+
+    /// <summary>Sequencia do ultimo evento do feed aplicado a esta linha.</summary>
+    public long LastEventSequence { get; set; }
+}
+
+/// <summary>
+/// REC-4 (ADR-0008, decisao 4): periodo fechado (lancado ou pulado) de uma regra, do
+/// <c>RecurrenceOccurrenceClosed</c>; o <c>RecurrenceOccurrenceReopened</c> o remove.
+/// </summary>
+public sealed class ProjectedRecurrenceOccurrence
+{
+    public Guid RecurrenceId { get; set; }
+
+    /// <summary><c>yyyy-MM</c> (mensal) ou <c>yyyy</c> (anual).</summary>
+    public string Period { get; set; } = string.Empty;
+
+    public Guid OwnerUserId { get; set; }
+
+    /// <summary><c>Launched</c> ou <c>Skipped</c>.</summary>
+    public string Status { get; set; } = string.Empty;
+
+    public Guid? TransactionId { get; set; }
+
+    public long LastEventSequence { get; set; }
+}

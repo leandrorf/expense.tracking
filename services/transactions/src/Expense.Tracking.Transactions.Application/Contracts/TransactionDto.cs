@@ -17,10 +17,12 @@ public sealed record TransactionDto(
     DateTimeOffset CreatedAtUtc,
     int Installments,
     int Version,
-    bool Imported)
+    bool Imported,
+    Guid? RecurrenceId = null,
+    string? RecurrencePeriod = null)
 {
     public static TransactionDto From(Transaction t) =>
         new(t.Id, t.AccountId, t.Type.ToString(), t.PaymentMethod.ToString(), t.CreditCardId,
             t.Description, t.Category, t.Amount, t.Currency, t.OccurredOn, t.Notes, t.CreatedAtUtc, t.Installments,
-            t.Version, t.ImportBatchId is not null || t.ExternalId is not null);
+            t.Version, t.ImportBatchId is not null || t.ExternalId is not null, t.RecurrenceId, t.RecurrencePeriod);
 }

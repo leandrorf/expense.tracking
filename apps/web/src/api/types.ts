@@ -49,4 +49,7 @@ export interface Transaction {
   version: number;
   /** LNC-3: veio de uma importação (desfazer a importação ainda o apaga). */
   imported: boolean;
+  /** REC-3: regra de recorrência de onde o lançamento veio, e o período que ele fechou. */
+  recurrenceId?: string | null;
+  recurrencePeriod?: string | null;
 }

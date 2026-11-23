@@ -93,6 +93,29 @@ public sealed class Transaction
     /// </summary>
     public int Version { get; private set; } = 1;
 
+    /// <summary>
+    /// REC-3 (ADR-0008, decisao 7): regra de recorrencia de onde o lancamento veio (nula para os
+    /// outros). A regra pode ter sido excluida depois; o lancamento fica.
+    /// </summary>
+    public Guid? RecurrenceId { get; private set; }
+
+    /// <summary>Periodo da ocorrencia que o lancamento fechou (<c>yyyy-MM</c> ou <c>yyyy</c>).</summary>
+    public string? RecurrencePeriod { get; private set; }
+
+    /// <summary>REC-3: marca o lancamento como a ocorrencia de um periodo da regra.</summary>
+    public void LinkToRecurrence(Guid recurrenceId, string period)
+    {
+        RecurrenceId = recurrenceId;
+        RecurrencePeriod = period;
+    }
+
+    /// <summary>REC-9: o periodo sugerido ja foi fechado por outro caminho; o lancamento fica comum.</summary>
+    public void UnlinkRecurrence()
+    {
+        RecurrenceId = null;
+        RecurrencePeriod = null;
+    }
+
     public static Result<Transaction> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod,
         Guid? creditCardId, string? description, string? category, decimal amount, string? currency,

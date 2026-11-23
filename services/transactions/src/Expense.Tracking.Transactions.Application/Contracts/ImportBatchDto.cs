@@ -59,12 +59,15 @@ public sealed record ImportLineDto(
     bool InvoicePayment,
     Guid? InvoiceCardId,
     string? InvoiceDueMonth,
-    Guid? CardPaymentId)
+    Guid? CardPaymentId,
+    Guid? RecurrenceId = null,
+    string? RecurrencePeriod = null,
+    string? RecurrenceDescription = null)
 {
     public static ImportLineDto From(ImportLine line) =>
         new(line.Id, line.Number, line.Status.ToString(), line.Included, line.OccurredOn, line.Type?.ToString(),
             line.Amount, line.Description, line.PaymentMethod?.ToString(), line.Category, line.Problem,
             line.TransactionId, line.InvoicePayment, line.InvoiceCardId,
             line.InvoiceDueMonth?.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture),
-            line.CardPaymentId);
+            line.CardPaymentId, line.RecurrenceId, line.RecurrencePeriod, line.RecurrenceDescription);
 }

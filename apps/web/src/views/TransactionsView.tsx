@@ -9,7 +9,8 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function TransactionsView() {
+/** REC-10: `onRepeat` abre a aba Recorrências com o lançamento como modelo ("repetir todo mês"). */
+export function TransactionsView({ onRepeat }: { onRepeat?: (t: Transaction) => void } = {}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -432,6 +433,11 @@ export function TransactionsView() {
                       {t.notes}
                     </span>
                   )}
+                  {t.recurrenceId && (
+                    <span className="sub" data-cy="tx-recurring-label" title="Lançado a partir de uma recorrência">
+                      recorrência
+                    </span>
+                  )}
                 </td>
                 <td>{t.category}</td>
                 <td>{paymentMethods.find((m) => m.code === t.paymentMethod)?.name ?? t.paymentMethod}</td>
@@ -449,6 +455,16 @@ export function TransactionsView() {
                   <button className="link" data-cy="tx-edit" onClick={() => startEdit(t)}>
                     editar
                   </button>
+                  {onRepeat && !t.recurrenceId && t.installments === 1 && (
+                    <button
+                      className="link"
+                      data-cy="tx-repeat"
+                      title="Criar uma recorrência a partir deste lançamento"
+                      onClick={() => onRepeat(t)}
+                    >
+                      repetir
+                    </button>
+                  )}
                   <button className="link-danger" onClick={() => void handleRemove(t.id)}>
                     excluir
                   </button>

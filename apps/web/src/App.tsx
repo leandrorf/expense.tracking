@@ -13,17 +13,21 @@ import { BudgetsView } from './views/BudgetsView';
 import { CardsView } from './views/CardsView';
 import { ForecastView } from './views/ForecastView';
 import { ImportView } from './views/ImportView';
+import { RecurrencesView } from './views/RecurrencesView';
+import type { Transaction } from './api/types';
 import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'summary' | 'forecast' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'import' | 'accounting';
+type Tab = 'summary' | 'forecast' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'recurrences' | 'import' | 'accounting';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<UserInfo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('summary');
+  // REC-10: lançamento escolhido em "repetir todo mês", que abre a aba Recorrências preenchida.
+  const [repeatFrom, setRepeatFrom] = useState<Transaction | null>(null);
 
   useEffect(() => {
     void bootstrap();
@@ -88,6 +92,9 @@ export function App() {
           <button data-cy="tab-transactions" className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
             Lançamentos
           </button>
+          <button data-cy="tab-recurrences" className={tab === 'recurrences' ? 'active' : ''} onClick={() => setTab('recurrences')}>
+            Recorrências
+          </button>
           <button data-cy="tab-import" className={tab === 'import' ? 'active' : ''} onClick={() => setTab('import')}>
             Importar
           </button>
@@ -115,7 +122,15 @@ export function App() {
       <main className="content">
         {tab === 'summary' && <SummaryView />}
         {tab === 'forecast' && <ForecastView />}
-        {tab === 'transactions' && <TransactionsView />}
+        {tab === 'transactions' && (
+          <TransactionsView
+            onRepeat={(t) => {
+              setRepeatFrom(t);
+              setTab('recurrences');
+            }}
+          />
+        )}
+        {tab === 'recurrences' && <RecurrencesView template={repeatFrom} onTemplateUsed={() => setRepeatFrom(null)} />}
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}

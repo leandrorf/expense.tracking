@@ -59,6 +59,7 @@ app.MapTransactionsEndpoints();
 app.MapEventsEndpoints();
 app.MapImportsEndpoints();
 app.MapCardPaymentsEndpoints();
+app.MapRecurrencesEndpoints();
 app.MapAccountingExportEndpoints();
 
 await InitializeDatabaseAsync(app);

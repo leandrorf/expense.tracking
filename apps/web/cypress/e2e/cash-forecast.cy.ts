@@ -23,8 +23,8 @@ describe('Previsao de caixa', () => {
 
   const readRow = (month: string) =>
     cy.get(`[data-cy=forecast-row][data-month="${month}"]`).then(($row) => ({
-      income: parse($row.find('[data-cy=forecast-income]').text()),
-      expense: parse($row.find('[data-cy=forecast-expense]').text()),
+      income: parse($row.find('[data-cy=forecast-income]').contents().first().text()),
+      expense: parse($row.find('[data-cy=forecast-expense]').contents().first().text()),
       invoices: parse($row.find('[data-cy=forecast-invoices]').contents().first().text()),
     }));
 
