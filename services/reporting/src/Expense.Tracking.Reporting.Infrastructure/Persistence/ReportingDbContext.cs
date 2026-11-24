@@ -1,5 +1,6 @@
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Projection;
+using Expense.Tracking.Reporting.Domain.Reminders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -22,6 +23,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
     public DbSet<ProjectedRecurrence> Recurrences => Set<ProjectedRecurrence>();
 
     public DbSet<ProjectedRecurrenceOccurrence> RecurrenceOccurrences => Set<ProjectedRecurrenceOccurrence>();
+
+    public DbSet<ReminderDismissal> ReminderDismissals => Set<ReminderDismissal>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -106,6 +109,16 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(o => o.TransactionId).HasColumnName("transaction_id");
             b.Property(o => o.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             b.HasIndex(o => o.OwnerUserId).HasDatabaseName("ix_projected_recurrence_occurrences_owner");
+        });
+
+        // NTF-5 (ADR-0009, decisao 5): avisos dispensados, por dono e chave.
+        modelBuilder.Entity<ReminderDismissal>(b =>
+        {
+            b.ToTable("reminder_dismissals");
+            b.HasKey(d => new { d.OwnerUserId, d.Key });
+            b.Property(d => d.OwnerUserId).HasColumnName("owner_user_id");
+            b.Property(d => d.Key).HasColumnName("reminder_key").HasMaxLength(ReminderDismissal.KeyMaxLength);
+            b.Property(d => d.DismissedAtUtc).HasColumnName("dismissed_at_utc").IsRequired();
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

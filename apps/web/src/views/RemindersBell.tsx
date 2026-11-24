@@ -65,6 +65,18 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
 
+  /** NTF-5: some na hora (otimista) e relê; se falhar, a releitura o traz de volta. */
+  async function dismiss(key: string) {
+    setReminders((current) =>
+      current ? { ...current, items: current.items.filter((i) => i.key !== key) } : current,
+    );
+    try {
+      await remindersApi.dismiss(key);
+    } finally {
+      load();
+    }
+  }
+
   const items = reminders?.items ?? [];
   const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: reminders?.currency ?? 'BRL' });
 
@@ -98,7 +110,7 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
           ) : (
             <ul>
               {items.map((r) => (
-                <li key={r.key}>
+                <li key={r.key} className="reminder-row" data-cy="reminder-row">
                   <button
                     type="button"
                     className={`reminder ${r.urgency.toLowerCase()}`}
@@ -112,6 +124,16 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
                   >
                     <span className="reminder-title">{r.title}</span>
                     <span className="sub">{detailOf(r, money)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="link dismiss"
+                    data-cy="reminder-dismiss"
+                    title={r.kind === 'InvoiceDue' ? 'Dispensar (volta se a fatura vencer sem pagamento)' : 'Dispensar este aviso'}
+                    aria-label={`Dispensar: ${r.title}`}
+                    onClick={() => void dismiss(r.key)}
+                  >
+                    dispensar
                   </button>
                 </li>
               ))}

@@ -105,4 +105,41 @@ describe('Avisos de vencimento', () => {
     // Limpeza: a regra sai (o cartao e a compra ficam, como nos outros specs).
     cy.contains('[data-cy=rec-row]', rent).find('[data-cy=rec-remove]').click();
   });
+
+  it('dispensar esconde o aviso, inclusive depois de recarregar a pagina', () => {
+    // NTF-5 (ADR-0009, decisao 5).
+    const [account, gym] = [`E2E Dispensa ${stamp}`, `Academia Aviso ${stamp}`];
+    cy.get('[data-cy=tab-accounts]').click();
+    cy.get('[data-cy=account-name]').type(account);
+    cy.get('[data-cy=account-submit]').click();
+    cy.get('[data-cy=accounts-table]').contains('td', account).should('be.visible');
+
+    cy.get('[data-cy=tab-recurrences]').click();
+    cy.get('[data-cy=rec-account]').select(account);
+    cy.get('[data-cy=rec-payment-method]').select('Pix');
+    cy.get('[data-cy=rec-description]').type(gym);
+    cy.get('[data-cy=rec-category]').type(`Saude ${stamp}`);
+    cy.get('[data-cy=rec-amount]').type('130');
+    cy.get('[data-cy=rec-starts-on]').clear().type(iso(tomorrow));
+    cy.get('[data-cy=rec-submit]').click();
+    cy.contains('[data-cy=rec-row]', gym).should('exist');
+
+    waitForReminder(gym);
+    cy.contains('[data-cy=reminder-row]', gym).find('[data-cy=reminder-dismiss]').click();
+    cy.contains('[data-cy=reminder-item]', gym).should('not.exist');
+
+    // A dispensa e gravada no servidor: recarregar a pagina nao traz o aviso de volta.
+    cy.intercept('GET', '**/api/reports/reminders').as('reminders');
+    cy.reload();
+    cy.get('[data-cy=session-active]').should('be.visible');
+    cy.wait('@reminders');
+    cy.get('[data-cy=reminders-bell]').click();
+    cy.wait('@reminders');
+    cy.get('[data-cy=reminders-panel]').should('be.visible');
+    cy.contains('[data-cy=reminder-item]', gym).should('not.exist');
+
+    cy.get('[data-cy=reminders-bell]').click();
+    cy.get('[data-cy=tab-recurrences]').click();
+    cy.contains('[data-cy=rec-row]', gym).find('[data-cy=rec-remove]').click();
+  });
 });

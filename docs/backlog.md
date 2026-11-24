@@ -1941,10 +1941,17 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     aberta pelo aviso e paga pelo valor sugerido (fica "Paga"); o aluguel é lançado pela aba Recorrências;
     os dois avisos somem sem dispensar nada.
   - Estimativa: 3 · **Must** · Dependências: NTF-3
-- 🔵 **NTF-5** Dispensar aviso.
+- ✅ **NTF-5** Dispensar aviso. → `POST /reports/reminders/dismissals`.
   - *Dado* um aviso de fatura "vence em 3 dias", *quando* o dispenso, *então* ele some; *e* volta se a
     fatura vencer sem pagamento.
   - *Dado* um aviso de ocorrência, *quando* o dispenso, *então* ele não volta para aquele período.
+  - Feito assim: `POST /reports/reminders/dismissals` com `{ key }` (`expenses.write`; chave vazia, longa
+    demais ou de prefixo desconhecido = 400 `reminders.key_invalid`; a mesma chave duas vezes = 204 sem
+    duplicar) grava em `reminder_dismissals` (dono + chave, migração `ReminderDismissals`) e apaga as
+    dispensas do usuário com mais de 120 dias. `GET /reports/reminders` esconde as chaves dispensadas; como
+    a fatura "a vencer" e a "vencida" têm chaves diferentes, a vencida volta. Na SPA, cada aviso tem
+    "dispensar" (`reminder-dismiss`), que o tira na hora e relê. Cypress: segundo caso do `reminders.cy.ts`
+    (dispensado continua fora depois de recarregar a página).
   - Estimativa: 3 · **Should** · Dependências: NTF-3
 - 🔵 **NTF-6** Preferências dos avisos.
   - *Dado* as preferências, *quando* mudo a antecedência para 7 dias e desligo os avisos de recorrência,

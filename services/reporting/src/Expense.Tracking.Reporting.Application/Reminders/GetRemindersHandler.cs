@@ -39,7 +39,7 @@ public sealed record RemindersDto(string Currency, int LeadDays, int Overdue, IR
 /// todos os cartoes dele (ciclo lido no accounts com o token dele) e as recorrencias projetadas.
 /// </summary>
 public sealed class GetRemindersHandler(
-    ICardDirectory cards, IProjectionQueries projection, InvoiceOptions options, TimeProvider timeProvider)
+    ICardDirectory cards, IProjectionQueries projection, IReminderStore store, InvoiceOptions options, TimeProvider timeProvider)
 {
     public async Task<RemindersDto> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
@@ -57,7 +57,11 @@ public sealed class GetRemindersHandler(
             .Select(r => new ReminderRecurrence(r.Id, r.Description, r.TransactionType != "Income", r.Amount, r.Frequency,
                 r.StartsOn, r.EndsOn, r.ClosedPeriods));
 
-        var reminders = ReminderCalculator.Calculate(today, leadDays, invoices, recurrences);
+        // NTF-5: o dispensado some ate a chave dele mudar (decisao 5).
+        var dismissed = await store.ListDismissedKeysAsync(ownerUserId, cancellationToken);
+        var reminders = ReminderCalculator.Calculate(today, leadDays, invoices, recurrences)
+            .Where(r => !dismissed.Contains(r.Key))
+            .ToList();
         return new RemindersDto(
             "BRL",
             leadDays,

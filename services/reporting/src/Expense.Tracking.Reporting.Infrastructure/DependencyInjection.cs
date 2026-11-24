@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<GetCardLimitsHandler>();
         services.AddScoped<GetCashForecastHandler>();
         services.AddScoped<GetRemindersHandler>();
+        services.AddScoped<IReminderStore, ReminderStore>();
+        services.AddScoped<DismissReminderHandler>();
         services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();
 

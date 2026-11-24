@@ -33,4 +33,8 @@ export interface Reminders {
 
 export const remindersApi = {
   list: () => apiFetch<Reminders>('/api/reports/reminders'),
+
+  /** NTF-5: esconde o aviso até a chave dele mudar (ex.: a fatura vence sem pagamento). */
+  dismiss: (key: string) =>
+    apiFetch<void>('/api/reports/reminders/dismissals', { method: 'POST', body: JSON.stringify({ key }) }),
 };

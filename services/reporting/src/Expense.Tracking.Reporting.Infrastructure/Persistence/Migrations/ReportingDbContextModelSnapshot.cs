@@ -340,6 +340,26 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("projected_transactions", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Reminders.ReminderDismissal", b =>
+                {
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("reminder_key");
+
+                    b.Property<DateTimeOffset>("DismissedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("dismissed_at_utc");
+
+                    b.HasKey("OwnerUserId", "Key");
+
+                    b.ToTable("reminder_dismissals", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Infrastructure.Persistence.ProjectionCheckpoint", b =>
                 {
                     b.Property<string>("Feed")
