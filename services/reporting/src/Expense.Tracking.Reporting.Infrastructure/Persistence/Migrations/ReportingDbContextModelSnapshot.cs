@@ -360,6 +360,37 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("reminder_dismissals", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Reminders.ReminderSettings", b =>
+                {
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<bool>("Budgets")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("budgets");
+
+                    b.Property<bool>("Invoices")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("invoices");
+
+                    b.Property<int>("LeadDays")
+                        .HasColumnType("int")
+                        .HasColumnName("lead_days");
+
+                    b.Property<bool>("Recurrences")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("recurrences");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("OwnerUserId");
+
+                    b.ToTable("reminder_settings", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Infrastructure.Persistence.ProjectionCheckpoint", b =>
                 {
                     b.Property<string>("Feed")

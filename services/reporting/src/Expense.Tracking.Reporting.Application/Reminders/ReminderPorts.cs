@@ -11,5 +11,10 @@ public interface IReminderStore
     /// <summary>Grava a dispensa (a mesma chave duas vezes nao duplica) e apaga as do usuario mais velhas que <paramref name="olderThan"/>.</summary>
     Task DismissAsync(ReminderDismissal dismissal, DateTimeOffset olderThan, CancellationToken cancellationToken);
 
+    /// <summary>NTF-6: as preferencias gravadas do usuario (nulo = nunca gravou: valem os padroes).</summary>
+    Task<ReminderSettings?> FindSettingsAsync(Guid ownerUserId, CancellationToken cancellationToken);
+
+    void AddSettings(ReminderSettings settings);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

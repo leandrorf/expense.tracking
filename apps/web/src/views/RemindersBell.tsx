@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { remindersApi, type Reminder, type Reminders } from '../api/reminders';
+import { ApiError } from '../api/client';
+import { remindersApi, type Reminder, type ReminderSettings, type Reminders } from '../api/reminders';
 
 /** `2026-11-23` → `23/11`. */
 function shortDate(iso: string): string {
@@ -36,6 +37,11 @@ interface Props {
 export function RemindersBell({ refreshKey, onOpen }: Props) {
   const [reminders, setReminders] = useState<Reminders | null>(null);
   const [open, setOpen] = useState(false);
+  // NTF-6: preferências editadas dentro do painel.
+  const [settings, setSettings] = useState<ReminderSettings | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  // O campo guarda o texto digitado: apagar para redigitar nao vira "0" no meio do caminho.
+  const [leadDaysText, setLeadDaysText] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -77,6 +83,34 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
     }
   }
 
+  async function toggleSettings() {
+    setSettingsError(null);
+    if (settings) {
+      setSettings(null);
+      return;
+    }
+    try {
+      const current = await remindersApi.settings();
+      setSettings(current);
+      setLeadDaysText(String(current.leadDays));
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Erro inesperado.');
+    }
+  }
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    if (!settings) return;
+    setSettingsError(null);
+    try {
+      await remindersApi.saveSettings({ ...settings, leadDays: Number(leadDaysText) });
+      setSettings(null);
+      load();
+    } catch (err) {
+      setSettingsError(err instanceof ApiError || err instanceof Error ? err.message : 'Erro inesperado.');
+    }
+  }
+
   const items = reminders?.items ?? [];
   const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: reminders?.currency ?? 'BRL' });
 
@@ -102,7 +136,60 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
       </button>
       {open && (
         <div className="reminders-panel" data-cy="reminders-panel" role="dialog" aria-label="Avisos">
-          <strong>Avisos</strong>
+          <div className="reminders-head">
+            <strong>Avisos</strong>
+            <button type="button" className="link" data-cy="reminders-settings-toggle" onClick={() => void toggleSettings()}>
+              {settings ? 'fechar preferências' : 'preferências'}
+            </button>
+          </div>
+          {settingsError && <p className="error">{settingsError}</p>}
+          {settings && (
+            <form className="reminders-settings" data-cy="reminders-settings" onSubmit={saveSettings}>
+              <label>
+                Avisar com{' '}
+                <input
+                  data-cy="reminders-lead-days"
+                  type="number"
+                  min={0}
+                  max={15}
+                  value={leadDaysText}
+                  onChange={(e) => setLeadDaysText(e.target.value)}
+                  required
+                />{' '}
+                dias de antecedência
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  data-cy="reminders-kind-invoices"
+                  checked={settings.invoices}
+                  onChange={(e) => setSettings({ ...settings, invoices: e.target.checked })}
+                />{' '}
+                faturas
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  data-cy="reminders-kind-recurrences"
+                  checked={settings.recurrences}
+                  onChange={(e) => setSettings({ ...settings, recurrences: e.target.checked })}
+                />{' '}
+                recorrências
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  data-cy="reminders-kind-budgets"
+                  checked={settings.budgets}
+                  onChange={(e) => setSettings({ ...settings, budgets: e.target.checked })}
+                />{' '}
+                orçamentos
+              </label>
+              <button type="submit" className="primary small" data-cy="reminders-settings-save">
+                Salvar
+              </button>
+            </form>
+          )}
           {items.length === 0 ? (
             <p className="muted" data-cy="reminders-empty">
               Nada vencendo nos próximos {reminders?.leadDays ?? 3} dias.

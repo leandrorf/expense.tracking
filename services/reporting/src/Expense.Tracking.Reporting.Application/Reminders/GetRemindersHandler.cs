@@ -44,10 +44,12 @@ public sealed class GetRemindersHandler(
     public async Task<RemindersDto> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
         var today = CardInvoiceSource.Today(timeProvider, options);
-        const int leadDays = ReminderCalculator.DefaultLeadDays;
+        // NTF-6: antecedencia e tipos ligados nas preferencias (sem preferencia gravada, os padroes).
+        var settings = await store.FindSettingsAsync(ownerUserId, cancellationToken) ?? ReminderSettings.Default(ownerUserId);
+        var leadDays = settings.LeadDays;
 
         var invoices = new List<ReminderInvoice>();
-        foreach (var (card, _) in await cards.ListWithScopesAsync(cancellationToken))
+        foreach (var (card, _) in settings.Invoices ? await cards.ListWithScopesAsync(cancellationToken) : [])
         {
             var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
             invoices.AddRange(loaded.Invoices.Select(i => new ReminderInvoice(card.Id, card.Label, card.LastFourDigits, i)));
@@ -59,7 +61,7 @@ public sealed class GetRemindersHandler(
 
         // NTF-5: o dispensado some ate a chave dele mudar (decisao 5).
         var dismissed = await store.ListDismissedKeysAsync(ownerUserId, cancellationToken);
-        var reminders = ReminderCalculator.Calculate(today, leadDays, invoices, recurrences)
+        var reminders = ReminderCalculator.Calculate(today, leadDays, invoices, recurrences, settings.Invoices, settings.Recurrences)
             .Where(r => !dismissed.Contains(r.Key))
             .ToList();
         return new RemindersDto(

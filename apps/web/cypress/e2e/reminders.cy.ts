@@ -102,8 +102,64 @@ describe('Avisos de vencimento', () => {
     cy.get('[data-cy=recurrences]').should('be.visible');
     cy.contains('[data-cy=rec-row]', rent).should('exist');
 
-    // Limpeza: a regra sai (o cartao e a compra ficam, como nos outros specs).
+    // Limpeza: a regra sai e o aviso da fatura vencida e dispensado (senao ele fica 30 dias no sino do
+    // demo, que todos os specs usam); o cartao e a compra ficam, como nos outros specs.
     cy.contains('[data-cy=rec-row]', rent).find('[data-cy=rec-remove]').click();
+    waitForReminder(`Fatura ${card}`);
+    cy.contains('[data-cy=reminder-row]', `Fatura ${card}`).find('[data-cy=reminder-dismiss]').click();
+    cy.contains('[data-cy=reminder-item]', `Fatura ${card}`).should('not.exist');
+  });
+
+  describe('preferencias', () => {
+    // As preferencias do demo valem para todos os specs: volta aos padroes no fim, mesmo se o teste falhar.
+    afterEach(() => {
+      cy.window().then((win) => {
+        const token = JSON.parse(win.sessionStorage.getItem('expense.tokens')!).accessToken as string;
+        cy.request({
+          method: 'PUT',
+          url: `${Cypress.env('gatewayUrl')}/api/reports/reminder-settings`,
+          headers: { Authorization: `Bearer ${token}` },
+          body: { leadDays: 3, invoices: true, recurrences: true, budgets: true },
+        });
+      });
+    });
+
+    it('desligar as recorrencias tira os avisos delas e a antecedencia fica gravada', () => {
+      // NTF-6 (ADR-0009, decisao 4).
+      const [account, gym] = [`E2E Preferencias ${stamp}`, `Academia Pref ${stamp}`];
+      cy.get('[data-cy=tab-accounts]').click();
+      cy.get('[data-cy=account-name]').type(account);
+      cy.get('[data-cy=account-submit]').click();
+      cy.get('[data-cy=accounts-table]').contains('td', account).should('be.visible');
+
+      cy.get('[data-cy=tab-recurrences]').click();
+      cy.get('[data-cy=rec-account]').select(account);
+      cy.get('[data-cy=rec-payment-method]').select('Pix');
+      cy.get('[data-cy=rec-description]').type(gym);
+      cy.get('[data-cy=rec-category]').type(`Saude ${stamp}`);
+      cy.get('[data-cy=rec-amount]').type('140');
+      cy.get('[data-cy=rec-starts-on]').clear().type(iso(tomorrow));
+      cy.get('[data-cy=rec-submit]').click();
+      cy.contains('[data-cy=rec-row]', gym).should('exist');
+      waitForReminder(gym);
+
+      // Recorrencias desligadas (e antecedencia de 5 dias): o aviso da academia some. A antecedencia fora
+      // de 0 a 15 e recusada pelo servidor (teste de integracao) e o campo ja limita de 0 a 15.
+      cy.get('[data-cy=reminders-settings-toggle]').click();
+      cy.get('[data-cy=reminders-lead-days]').should('have.value', '3').and('have.attr', 'max', '15');
+      cy.get('[data-cy=reminders-lead-days]').clear().type('5');
+      cy.get('[data-cy=reminders-kind-recurrences]').uncheck();
+      cy.get('[data-cy=reminders-settings-save]').click();
+      cy.get('[data-cy=reminders-settings]').should('not.exist');
+      cy.contains('[data-cy=reminder-item]', gym).should('not.exist');
+      cy.get('[data-cy=reminders-settings-toggle]').click();
+      cy.get('[data-cy=reminders-lead-days]').should('have.value', '5');
+      cy.get('[data-cy=reminders-kind-recurrences]').should('not.be.checked');
+
+      cy.get('[data-cy=reminders-bell]').click();
+      cy.get('[data-cy=tab-recurrences]').click();
+      cy.contains('[data-cy=rec-row]', gym).find('[data-cy=rec-remove]').click();
+    });
   });
 
   it('dispensar esconde o aviso, inclusive depois de recarregar a pagina', () => {

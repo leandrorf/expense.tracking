@@ -33,6 +33,28 @@ public static class RemindersEndpoints
         .WithTags("Reminders")
         .RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        // NTF-6 (ADR-0009, decisao 4): preferencias dos avisos (sem gravacao, os padroes).
+        app.MapGet("/reports/reminder-settings", async (ClaimsPrincipal user, GetReminderSettingsHandler handler, CancellationToken ct) =>
+            Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId)
+                ? Results.Ok(await handler.HandleAsync(ownerUserId, ct))
+                : Results.Unauthorized())
+        .WithTags("Reminders")
+        .RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
+        app.MapPut("/reports/reminder-settings", async (
+            ReminderSettingsDto request, ClaimsPrincipal user, UpdateReminderSettingsHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(ownerUserId, request, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        })
+        .WithTags("Reminders")
+        .RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         return app;
     }
 }

@@ -25,5 +25,10 @@ internal sealed class ReminderStore(ReportingDbContext dbContext) : IReminderSto
         }
     }
 
+    public Task<ReminderSettings?> FindSettingsAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
+        dbContext.ReminderSettings.FirstOrDefaultAsync(s => s.OwnerUserId == ownerUserId, cancellationToken);
+
+    public void AddSettings(ReminderSettings settings) => dbContext.ReminderSettings.Add(settings);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) => dbContext.SaveChangesAsync(cancellationToken);
 }

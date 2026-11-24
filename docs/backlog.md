@@ -1953,10 +1953,19 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     "dispensar" (`reminder-dismiss`), que o tira na hora e relê. Cypress: segundo caso do `reminders.cy.ts`
     (dispensado continua fora depois de recarregar a página).
   - Estimativa: 3 · **Should** · Dependências: NTF-3
-- 🔵 **NTF-6** Preferências dos avisos.
+- ✅ **NTF-6** Preferências dos avisos. → `GET/PUT /reports/reminder-settings`.
   - *Dado* as preferências, *quando* mudo a antecedência para 7 dias e desligo os avisos de recorrência,
     *então* o painel passa a mostrar faturas que vencem em até 7 dias e nenhuma recorrência.
   - *Dado* uma antecedência fora de 0 a 15, *quando* salvo, *então* recebo 400.
+  - Feito assim: `reminder_settings` (uma linha por usuário, criada na primeira gravação; migração
+    `ReminderSettings`) com antecedência e os tipos ligados (faturas, recorrências e orçamentos, este para a
+    NTF-9). `GET /reports/reminder-settings` devolve os padrões (3 dias, tudo ligado) quando não há linha;
+    `PUT` (`expenses.write`) recusa antecedência fora de 0 a 15 com 400 `reminders.lead_days_invalid`. A
+    lista de avisos usa a antecedência gravada e nem lê os cartões quando as faturas estão desligadas. Na
+    SPA, "preferências" no painel do sino (`reminders-settings`: dias, faturas, recorrências, orçamentos);
+    o campo de dias guarda o texto digitado (apagar para redigitar não vira "0"). Cypress: terceiro caso do
+    `reminders.cy.ts`, que devolve os padrões no fim (as preferências do demo valem para todos os specs).
+    O primeiro caso passou a dispensar o aviso da fatura vencida que cria, para não acumular no demo.
   - Estimativa: 3 · **Should** · Dependências: NTF-2
 - 🔵 **NTF-7** Ciclo dos cartões para o serviço.
   - *Dado* o `reporting` com token de serviço e o escopo `accounts.cards.read`, *quando* consulta

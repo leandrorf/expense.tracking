@@ -31,10 +31,24 @@ export interface Reminders {
   items: Reminder[];
 }
 
+/** NTF-6: preferências dos avisos (sem gravação, os padrões: 3 dias e tudo ligado). */
+export interface ReminderSettings {
+  /** Dias corridos de antecedência, de 0 a 15. */
+  leadDays: number;
+  invoices: boolean;
+  recurrences: boolean;
+  budgets: boolean;
+}
+
 export const remindersApi = {
   list: () => apiFetch<Reminders>('/api/reports/reminders'),
 
   /** NTF-5: esconde o aviso até a chave dele mudar (ex.: a fatura vence sem pagamento). */
   dismiss: (key: string) =>
     apiFetch<void>('/api/reports/reminders/dismissals', { method: 'POST', body: JSON.stringify({ key }) }),
+
+  settings: () => apiFetch<ReminderSettings>('/api/reports/reminder-settings'),
+
+  saveSettings: (settings: ReminderSettings) =>
+    apiFetch<ReminderSettings>('/api/reports/reminder-settings', { method: 'PUT', body: JSON.stringify(settings) }),
 };

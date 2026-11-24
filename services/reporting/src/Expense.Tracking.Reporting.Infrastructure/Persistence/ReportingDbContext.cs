@@ -26,6 +26,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
 
     public DbSet<ReminderDismissal> ReminderDismissals => Set<ReminderDismissal>();
 
+    public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
@@ -119,6 +121,19 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(d => d.OwnerUserId).HasColumnName("owner_user_id");
             b.Property(d => d.Key).HasColumnName("reminder_key").HasMaxLength(ReminderDismissal.KeyMaxLength);
             b.Property(d => d.DismissedAtUtc).HasColumnName("dismissed_at_utc").IsRequired();
+        });
+
+        // NTF-6 (ADR-0009, decisao 4): preferencias dos avisos, uma linha por usuario.
+        modelBuilder.Entity<ReminderSettings>(b =>
+        {
+            b.ToTable("reminder_settings");
+            b.HasKey(s => s.OwnerUserId);
+            b.Property(s => s.OwnerUserId).HasColumnName("owner_user_id").ValueGeneratedNever();
+            b.Property(s => s.LeadDays).HasColumnName("lead_days").IsRequired();
+            b.Property(s => s.Invoices).HasColumnName("invoices").IsRequired();
+            b.Property(s => s.Recurrences).HasColumnName("recurrences").IsRequired();
+            b.Property(s => s.Budgets).HasColumnName("budgets").IsRequired();
+            b.Property(s => s.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

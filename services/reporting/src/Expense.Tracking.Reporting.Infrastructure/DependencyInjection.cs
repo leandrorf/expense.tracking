@@ -42,6 +42,8 @@ public static class DependencyInjection
         services.AddScoped<GetRemindersHandler>();
         services.AddScoped<IReminderStore, ReminderStore>();
         services.AddScoped<DismissReminderHandler>();
+        services.AddScoped<GetReminderSettingsHandler>();
+        services.AddScoped<UpdateReminderSettingsHandler>();
         services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();
 

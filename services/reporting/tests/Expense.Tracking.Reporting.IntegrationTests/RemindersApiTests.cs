@@ -105,6 +105,42 @@ public sealed class RemindersApiTests(InvoicesApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Settings_ChangeTheLeadDays_AndTurnKindsOff()
+    {
+        // NTF-6 (ADR-0009, decisao 4). Fecha 15, vence 27: a fatura vence em 6 dias.
+        var owner = Guid.NewGuid();
+        var feed = _factory.EventFeed;
+        var card = _factory.Cards.Add(owner, closingDay: 15, dueDay: 27);
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 400m, "2026-11-10");
+        feed.RecurrenceSaved(Guid.NewGuid(), owner, 2000m, "2026-11-23");
+        await _factory.DrainFeedAsync();
+        var client = WriterFor(owner);
+        async Task<List<string?>> KindsAsync() =>
+            (await client.GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray()
+                .Select(i => i.GetProperty("kind").GetString()).ToList();
+
+        var defaults = await client.GetFromJsonAsync<JsonElement>("/reports/reminder-settings");
+        Assert.Equal((3, true, true, true), (defaults.GetProperty("leadDays").GetInt32(), defaults.GetProperty("invoices").GetBoolean(),
+            defaults.GetProperty("recurrences").GetBoolean(), defaults.GetProperty("budgets").GetBoolean()));
+        Assert.Equal(["RecurrenceDue"], await KindsAsync());
+
+        var saved = await client.PutAsJsonAsync("/reports/reminder-settings", new { leadDays = 7, invoices = true, recurrences = false, budgets = true });
+
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        Assert.Equal(["InvoiceDue"], await KindsAsync());
+        var body = await client.GetFromJsonAsync<JsonElement>("/reports/reminders");
+        Assert.Equal(7, body.GetProperty("leadDays").GetInt32());
+
+        var tooFar = await client.PutAsJsonAsync("/reports/reminder-settings", new { leadDays = 16, invoices = true, recurrences = true, budgets = true });
+        var negative = await client.PutAsJsonAsync("/reports/reminder-settings", new { leadDays = -1, invoices = true, recurrences = true, budgets = true });
+        var readOnly = await ClientFor(owner).PutAsJsonAsync("/reports/reminder-settings", new { leadDays = 1, invoices = true, recurrences = true, budgets = true });
+        Assert.Equal("reminders.lead_days_invalid", (await tooFar.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, negative.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, readOnly.StatusCode);
+        Assert.Equal(7, (await client.GetFromJsonAsync<JsonElement>("/reports/reminder-settings")).GetProperty("leadDays").GetInt32());
+    }
+
+    [Fact]
     public async Task Reminders_DisappearWhenResolved_AndRequireAToken()
     {
         var owner = Guid.NewGuid();
