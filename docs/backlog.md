@@ -1931,10 +1931,15 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     a Recorrências. Cypress `reminders.cy.ts` (fatura vencida de um cartão que fecha no dia da compra e
     vence 5 dias depois, com a compra de 15 a 25 dias atrás, e aluguel de amanhã).
   - Estimativa: 5 · **Must** · Dependências: NTF-2
-- 🔵 **NTF-4** E2E Cypress: aviso, resolver, aviso some.
+- ✅ **NTF-4** E2E Cypress: aviso, resolver, aviso some. → `reminders-journey.cy.ts`.
   - *Dado* um cartão com fatura fechada a vencer e um aluguel recorrente a vencer, *quando* abro o app,
     *então* o sino mostra os dois; *quando* pago a fatura pelo atalho e lanço o aluguel, *então* os dois
     avisos somem.
+  - Feito assim: tudo pela SPA, achando os avisos pelo título (único por execução: o demo acumula dados).
+    Fatura vencida de um cartão que fecha no dia da compra e vence 5 dias depois (compra de 15 a 25 dias
+    atrás, escolhida para os dois dias existirem em todo mês) e aluguel recorrente de amanhã. A fatura é
+    aberta pelo aviso e paga pelo valor sugerido (fica "Paga"); o aluguel é lançado pela aba Recorrências;
+    os dois avisos somem sem dispensar nada.
   - Estimativa: 3 · **Must** · Dependências: NTF-3
 - 🔵 **NTF-5** Dispensar aviso.
   - *Dado* um aviso de fatura "vence em 3 dias", *quando* o dispenso, *então* ele some; *e* volta se a
