@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<DeactivateAccountHandler>();
         services.AddScoped<IAccountScopeLookup, AccountScopeLookup>();
         services.AddScoped<GetAccountScopesHandler>();
+        services.AddScoped<GetOwnerCardsForServiceHandler>();
         services.AddScoped<CreateCreditCardHandler>();
         services.AddScoped<ListCreditCardsHandler>();
         services.AddScoped<GetCreditCardHandler>();

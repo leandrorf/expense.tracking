@@ -1967,10 +1967,17 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     `reminders.cy.ts`, que devolve os padrões no fim (as preferências do demo valem para todos os specs).
     O primeiro caso passou a dispensar o aviso da fatura vencida que cria, para não acumular no demo.
   - Estimativa: 3 · **Should** · Dependências: NTF-2
-- 🔵 **NTF-7** Ciclo dos cartões para o serviço.
+- ✅ **NTF-7** Ciclo dos cartões para o serviço. → `GET /internal/credit-cards` no accounts.
   - *Dado* o `reporting` com token de serviço e o escopo `accounts.cards.read`, *quando* consulta
     `GET /internal/credit-cards?ownerUserId=...` no `accounts`, *então* recebe os cartões do dono com
     ciclo, conta e escopo; *e* pelo gateway a rota é bloqueada, e sem o escopo dá 403.
+  - Feito assim: `GetOwnerCardsForServiceHandler` no accounts devolve os cartões do dono (ativos ou não:
+    cartão desativado ainda pode ter fatura) com os campos que o reporting já lê do `/credit-cards` mais o
+    `accountScope`; política `AccountCardsRead` (escopo `accounts.cards.read`), sem `ownerUserId` = 400
+    `service_cards.owner_required`. O escopo entrou na semente do identity (`infra/identity/`), e o
+    identity já em execução o concede ao cliente de serviço depois de reiniciar (a semente atualiza
+    cliente existente). Conferido no stack real: com o escopo, 275 cartões do demo; sem ele, 403; pelo
+    gateway, 404. Documentado em `docs/architecture.md`.
   - Estimativa: 3 · **Should** · Dependências: NTF-1
 - 🔵 **NTF-8** Resumo diário por e-mail.
   - *Dado* que ativei o e-mail e confirmei o endereço pelo link, *quando* chega o horário do resumo e

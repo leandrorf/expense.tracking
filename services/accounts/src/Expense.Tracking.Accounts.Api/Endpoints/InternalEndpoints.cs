@@ -1,5 +1,6 @@
 using Expense.Tracking.Accounts.Api.Setup;
 using Expense.Tracking.Accounts.Application.Accounts;
+using Expense.Tracking.Accounts.Application.Cards;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Expense.Tracking.Accounts.Api.Endpoints;
@@ -21,6 +22,14 @@ public static class InternalEndpoints
             var result = await handler.HandleAsync(ids, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.AccountScopesReadPolicy);
+
+        // NTF-7 (ADR-0009, decisao 6): cartoes de um dono (ativos ou nao), com ciclo e escopo da conta.
+        // GET /internal/credit-cards?ownerUserId={id}
+        group.MapGet("/credit-cards", async (Guid? ownerUserId, GetOwnerCardsForServiceHandler handler, CancellationToken ct) =>
+        {
+            var result = await handler.HandleAsync(ownerUserId, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.AccountCardsReadPolicy);
 
         return app;
     }

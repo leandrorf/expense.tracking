@@ -150,6 +150,12 @@ Exige token com o escopo `accounts.scopes.read`, que só o cliente de serviço p
 não), e não passa pelo gateway. É a única consulta do `accounts` sem filtro de dono (porta
 `IAccountScopeLookup`, separada do repositório escopado).
 
+**Endpoint interno (NTF-7)**: `GET /internal/credit-cards?ownerUserId={id}` devolve os cartões de um
+dono (ativos ou não) com ciclo (`closingDay`, `dueDay`), conta e escopo PF/PJ da conta, para o job de
+avisos do `reporting`, que não tem token de usuário (ADR-0009, decisão 6). Exige o escopo de serviço
+`accounts.cards.read` (só o cliente de serviço o pede) e também não passa pelo gateway
+(`/api/internal/**` responde 404). Sem `ownerUserId`, 400 `service_cards.owner_required`.
+
 ## Serviço `transactions` (recurso) — implementado
 
 Núcleo do controle de gastos. Mesma divisão hexagonal, banco próprio `expense_transactions`,
