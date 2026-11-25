@@ -2031,7 +2031,7 @@ painel usável no dia a dia; o e-mail entrega o lembrete a quem não abre o app,
 
 **Ordem sugerida:** NTF-1 → NTF-2 → NTF-3 → NTF-4 (fecha o Must) → NTF-5 → NTF-6 → NTF-7 → NTF-8 → NTF-9.
 
-## 🟡 EPIC RJT — Reajuste das recorrências  · *In Progress*
+## 🟢 EPIC RJT — Reajuste das recorrências  · *Done*
 **Problema:** aluguel, condomínio, escola, plano de saúde e contratos de serviço são reajustados uma vez
 por ano, quase sempre por um índice (IGP-M, IPCA, INPC) ou por um percentual combinado. A recorrência
 (REC) só conhece um valor: o usuário precisa lembrar de editar a regra no mês certo, e a edição muda todos
