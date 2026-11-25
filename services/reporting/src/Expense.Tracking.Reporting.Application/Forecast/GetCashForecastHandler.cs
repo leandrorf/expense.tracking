@@ -24,7 +24,12 @@ public sealed record RecurrenceRecord(
     DateOnly StartsOn,
     DateOnly? EndsOn,
     IReadOnlySet<string> ClosedPeriods,
-    string Description = "");
+    string Description = "",
+    IReadOnlyList<RecurrenceAmountFrom>? Amounts = null)
+{
+    /// <summary>RJT-3: valor estimado de um periodo (sem vigencias, o <see cref="Amount"/>).</summary>
+    public decimal AmountFor(string period) => RecurrenceAmounts.For(Amounts ?? [], Amount, period);
+}
 
 /// <summary>INV-13: conta como o accounts a devolve ao dono (so o que a previsao usa).</summary>
 public sealed record AccountInfo(Guid Id, string? Scope, bool IsActive, decimal? OpeningBalance, DateOnly? OpeningBalanceOn);
@@ -159,8 +164,9 @@ public sealed class GetCashForecastHandler(
             {
                 if (!onCard)
                 {
-                    movements.Add(new CashMovement(rule.AccountScope, isIncome, rule.Amount, occurrence.ScheduledOn, Recurring: true));
-                    accountMovements.Add(new AccountCashMovement(rule.AccountId, isIncome, rule.Amount, occurrence.ScheduledOn));
+                    var amount = rule.AmountFor(occurrence.Period);
+                    movements.Add(new CashMovement(rule.AccountScope, isIncome, amount, occurrence.ScheduledOn, Recurring: true));
+                    accountMovements.Add(new AccountCashMovement(rule.AccountId, isIncome, amount, occurrence.ScheduledOn));
                     continue;
                 }
 
@@ -171,7 +177,8 @@ public sealed class GetCashForecastHandler(
 
                 // A vista, na fatura da regra de corte (ADR-0005, decisao 4); receita no cartao e estorno.
                 var dueMonth = new CardCycle(scoped.Card.ClosingDay, scoped.Card.DueDay).DueMonthOf(occurrence.ScheduledOn);
-                var signed = isIncome ? -rule.Amount : rule.Amount;
+                var periodAmount = rule.AmountFor(occurrence.Period);
+                var signed = isIncome ? -periodAmount : periodAmount;
                 invoices.Add(new RecurringInvoice(
                     new ForecastInvoice(scoped.Scope, dueMonth, signed, 0m, signed, Recurring: true), scoped.Card.AccountId));
             }

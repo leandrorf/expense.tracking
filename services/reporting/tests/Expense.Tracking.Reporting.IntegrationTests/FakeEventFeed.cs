@@ -110,9 +110,12 @@ public sealed class FakeEventFeed : IEventFeedClient
     public FeedEvent RecurrenceSaved(
         Guid recurrenceId, Guid ownerUserId, decimal amount, string startsOn, string scope = "Personal",
         string transactionType = "Expense", string paymentMethod = "Boleto", Guid? cardId = null, Guid? accountId = null,
-        string frequency = "Monthly", string? endsOn = null, string description = "Aluguel") =>
+        string frequency = "Monthly", string? endsOn = null, string description = "Aluguel",
+        (string FromPeriod, decimal Amount)[]? amounts = null) =>
         Append(FeedEventTypes.RecurrenceSaved, recurrenceId, ownerUserId, new
         {
+            // RJT-3: com vigencias, o payload e o da v2.
+            amounts = amounts?.Select(a => new { fromPeriod = a.FromPeriod, amount = a.Amount }).ToArray(),
             recurrenceId,
             ownerUserId,
             accountId = accountId ?? Guid.NewGuid(),
@@ -128,7 +131,7 @@ public sealed class FakeEventFeed : IEventFeedClient
             startsOn,
             endsOn,
             recurrenceVersion = 1,
-        });
+        }, version: amounts is null ? 1 : 2);
 
     public FeedEvent RecurrenceDeleted(Guid recurrenceId, Guid ownerUserId) =>
         Append(FeedEventTypes.RecurrenceDeleted, recurrenceId, ownerUserId, new { recurrenceId, ownerUserId });

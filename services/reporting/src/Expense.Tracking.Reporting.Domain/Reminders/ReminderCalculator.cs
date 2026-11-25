@@ -29,7 +29,11 @@ public sealed record ReminderInvoice(Guid CardId, string CardLabel, string LastF
 /// <summary>Regra de recorrencia com os periodos ja fechados (lancados ou pulados).</summary>
 public sealed record ReminderRecurrence(
     Guid RecurrenceId, string Description, bool IsExpense, decimal Amount, string Frequency, DateOnly StartsOn,
-    DateOnly? EndsOn, IReadOnlySet<string> ClosedPeriods);
+    DateOnly? EndsOn, IReadOnlySet<string> ClosedPeriods, IReadOnlyList<RecurrenceAmountFrom>? Amounts = null)
+{
+    /// <summary>RJT-3: valor estimado do periodo pelas vigencias.</summary>
+    public decimal AmountFor(string period) => RecurrenceAmounts.For(Amounts ?? [], Amount, period);
+}
 
 /// <summary>
 /// Um aviso. <see cref="Key"/> e estavel por item e estado (para dispensar, ADR-0009, decisao 5).
@@ -116,7 +120,7 @@ public static class ReminderCalculator
                     {
                         reminders.Add(new Reminder(ReminderKind.RecurrenceDue, $"recurrence:{rule.RecurrenceId}:{occurrence.Period}",
                             occurrence.ScheduledOn == today ? ReminderUrgency.Today : ReminderUrgency.Soon, occurrence.ScheduledOn,
-                            rule.Amount, rule.Description, RecurrenceId: rule.RecurrenceId, Period: occurrence.Period));
+                            rule.AmountFor(occurrence.Period), rule.Description, RecurrenceId: rule.RecurrenceId, Period: occurrence.Period));
                     }
                 }
             }

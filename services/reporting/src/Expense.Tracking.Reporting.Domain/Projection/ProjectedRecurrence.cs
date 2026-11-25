@@ -26,8 +26,11 @@ public sealed class ProjectedRecurrence
 
     public string Category { get; set; } = string.Empty;
 
-    /// <summary>Valor estimado de cada ocorrencia.</summary>
+    /// <summary>Valor estimado da primeira vigencia (no v1, de todas as ocorrencias).</summary>
     public decimal Amount { get; set; }
+
+    /// <summary>RJT-3 (ADR-0010): todas as vigencias, a primeira inclusive; substituidas a cada RecurrenceSaved.</summary>
+    public List<ProjectedRecurrenceAmount> Amounts { get; set; } = [];
 
     public string Currency { get; set; } = string.Empty;
 
@@ -61,4 +64,12 @@ public sealed class ProjectedRecurrenceOccurrence
     public Guid? TransactionId { get; set; }
 
     public long LastEventSequence { get; set; }
+}
+
+/// <summary>RJT-3: o valor estimado de uma regra a partir de um periodo.</summary>
+public sealed class ProjectedRecurrenceAmount
+{
+    public string FromPeriod { get; set; } = string.Empty;
+
+    public decimal Amount { get; set; }
 }

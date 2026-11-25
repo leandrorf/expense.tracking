@@ -2145,7 +2145,11 @@ CI.
     `amounts` e o valor da próxima ocorrência. Lançar sem valor, "a lançar" e o casamento da importação usam o
     valor do período. `RecurrenceSaved` v2 com `amounts` (e `amount` = vigente no dia do evento).
   - Estimativa: 5 · **Must** · Dependências: RJT-1
-- 🔵 **RJT-3** Previsão usa o valor vigente.
+- ✅ **RJT-3** Previsão usa o valor vigente.
+  - Feito assim: o `ProjectionProcessor` lê o `RecurrenceSaved` v1 e v2 (v1 vira uma vigência só, no período
+    do início) e guarda as vigências em `projected_recurrence_amounts` (migration
+    `ProjectedRecurrenceAmounts`), trocadas inteiras a cada evento. A previsão (caixa, conta e fatura do
+    cartão) e o aviso `RecurrenceDue` usam `AmountFor(período)` de cada ocorrência.
   - *Dado* um aluguel de R$ 2.000 com R$ 2.100 a partir de março, *quando* consulto a previsão de 6 meses
     em janeiro, *então* janeiro e fevereiro têm R$ 2.000 e março em diante R$ 2.100, inclusive no saldo
     projetado e no aviso de saída recorrente.

@@ -473,6 +473,35 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
 
                     b.Navigation("_limits");
                 });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrence", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrenceAmount", "Amounts", b1 =>
+                        {
+                            b1.Property<Guid>("RecurrenceId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("recurrence_id");
+
+                            b1.Property<string>("FromPeriod")
+                                .HasMaxLength(7)
+                                .HasColumnType("varchar(7)")
+                                .HasColumnName("from_period");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.HasKey("RecurrenceId", "FromPeriod");
+
+                            b1.ToTable("projected_recurrence_amounts", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("RecurrenceId");
+                        });
+
+                    b.Navigation("Amounts");
+                });
 #pragma warning restore 612, 618
         }
     }

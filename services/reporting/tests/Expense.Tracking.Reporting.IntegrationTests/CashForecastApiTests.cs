@@ -179,6 +179,21 @@ public sealed class CashForecastApiTests(InvoicesApiFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Recurrence_WithAmountsByPeriod_UsesTheAmountOfEachMonth()
+    {
+        // RJT-3: aluguel de R$ 2.000 que passa a R$ 2.100 em janeiro (v2 com vigencias).
+        var owner = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(Guid.NewGuid(), owner, 2000m, "2026-11-25",
+            amounts: [("2026-11", 2000m), ("2027-01", 2100m)]);
+        await _factory.DrainFeedAsync();
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=4");
+
+        Assert.Equal([2000m, 2000m, 2100m, 2100m], body.GetProperty("months").EnumerateArray()
+            .Select(m => m.GetProperty("personal").GetProperty("recurringExpense").GetDecimal()));
+    }
+
+    [Fact]
     public async Task YearlyRecurrence_EntersOnlyInItsMonth()
     {
         // REC-8: IPVA anual em 15/03; numa janela de 12 meses (2026-11 a 2027-10) so marco tem o valor.

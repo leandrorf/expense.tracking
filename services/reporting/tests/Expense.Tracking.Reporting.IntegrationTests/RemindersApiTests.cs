@@ -176,6 +176,21 @@ public sealed class RemindersApiTests(InvoicesApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task RecurrenceReminder_ShowsTheAmountOfItsPeriod()
+    {
+        // RJT-3: comeca em 23/10 com R$ 2.000 e passa a R$ 2.100 em novembro; o aviso de 23/11 traz R$ 2.100.
+        var owner = Guid.NewGuid();
+        var rule = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(rule, owner, 2100m, "2026-10-23", amounts: [("2026-10", 2000m), ("2026-11", 2100m)]);
+        _factory.EventFeed.OccurrenceClosed(rule, owner, "2026-10", Guid.NewGuid());
+        await _factory.DrainFeedAsync();
+
+        var item = Assert.Single((await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray());
+
+        Assert.Equal(("RecurrenceDue", 2100m), (item.GetProperty("kind").GetString(), item.GetProperty("amount").GetDecimal()));
+    }
+
+    [Fact]
     public async Task Reminders_DisappearWhenResolved_AndRequireAToken()
     {
         var owner = Guid.NewGuid();
