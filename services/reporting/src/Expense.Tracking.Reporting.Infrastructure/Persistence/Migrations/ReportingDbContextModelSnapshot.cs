@@ -152,6 +152,19 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(16)")
                         .HasColumnName("account_scope");
 
+                    b.Property<decimal?>("AdjustmentEstimatedRate")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("decimal(9,4)")
+                        .HasColumnName("adjustment_estimated_rate");
+
+                    b.Property<int?>("AdjustmentMonth")
+                        .HasColumnType("int")
+                        .HasColumnName("adjustment_month");
+
+                    b.Property<bool>("AdjustmentNoReduction")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("adjustment_no_reduction");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")

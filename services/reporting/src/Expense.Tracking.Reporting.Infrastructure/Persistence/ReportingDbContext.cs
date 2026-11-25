@@ -98,6 +98,10 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(r => r.EndsOn).HasColumnName("ends_on");
             b.Property(r => r.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             b.HasIndex(r => r.OwnerUserId).HasDatabaseName("ix_projected_recurrences_owner");
+            // RJT-8 (ADR-0010, decisao 8): reajuste anual e a taxa estimada.
+            b.Property(r => r.AdjustmentMonth).HasColumnName("adjustment_month");
+            b.Property(r => r.AdjustmentEstimatedRate).HasColumnName("adjustment_estimated_rate").HasPrecision(9, 4);
+            b.Property(r => r.AdjustmentNoReduction).HasColumnName("adjustment_no_reduction").IsRequired();
             // RJT-3 (ADR-0010): vigencias da regra, trocadas inteiras a cada RecurrenceSaved.
             b.OwnsMany(r => r.Amounts, a =>
             {

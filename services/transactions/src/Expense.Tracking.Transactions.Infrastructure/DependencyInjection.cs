@@ -54,7 +54,7 @@ public static class DependencyInjection
         // RJT-6 (ADR-0010, decisao 6): indices oficiais da API SGS do Banco Central (o worker fica na Api).
         services.AddScoped<IEconomicIndexRepository, EconomicIndexRepository>();
         services.AddScoped<FetchEconomicIndexesJob>();
-        services.AddScoped<PendingAdjustmentRates>();
+        services.AddScoped<AdjustmentRates>();
         services.AddSingleton(IndexFetchOptionsFrom(configuration));
         var indexesBaseUrl = configuration[IndexesBaseUrlKey] ?? "https://api.bcb.gov.br/";
         services.AddHttpClient<IEconomicIndexSource, BcbSgsIndexSource>(client =>

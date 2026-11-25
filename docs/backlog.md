@@ -2228,7 +2228,19 @@ CI.
   - *Dado* que o índice do último mês ainda não saiu, *quando* abro a regra, *então* vejo "aguardando o
     índice de fevereiro" e posso informar o percentual à mão.
   - Estimativa: 3 · **Should** · Dependências: RJT-4, RJT-6
-- 🔵 **RJT-8** Previsão estima o reajuste futuro.
+- ✅ **RJT-8** Previsão estima o reajuste futuro. → `estimatedRate` no evento, `estimatedRecurring` na previsão.
+  - Feito assim: o `transactions` põe no `RecurrenceSaved` v2 a `estimatedRate` (percentual fixo, ou o
+    último acumulado de 12 meses seguidos do índice; sem eles, nula) ao criar, editar, mudar vigência e
+    aplicar reajuste; quando o job grava mês novo de um índice, republica no mesmo commit as regras que
+    reajustam por ele (escopo pelo `/internal/account-scopes` com token de serviço; regra sem escopo
+    conhecido fica de fora; falha = nada gravado, nova tentativa no dia seguinte). O `reporting` guarda
+    mês, taxa estimada e "não reduzir" (migration `ProjectedRecurrenceAdjustment`) e estima um reajuste
+    só: o do aniversário mais recente sem vigência (pendente) ou, se já aplicado, o próximo; nunca o do
+    período do início. Do aniversário em diante, até começar uma vigência posterior, a ocorrência usa o
+    valor vigente antes dele reajustado pela taxa (centavos, meio para cima, "não reduzir"), e o fluxo do
+    mês traz `estimatedRecurring` (quanto disso é reajuste estimado). A Previsão mostra "inclui R$ X de
+    reajuste estimado" no resultado do mês. A jornada da RJT-10 passou a conferir o estimado antes da
+    confirmação (R$ 1.050 marcado). Conferido no Docker que a consulta das regras por índice roda no MySQL.
   - *Dado* um aluguel com reajuste por IPCA no mês que vem ainda não confirmado, *quando* consulto a
     previsão de 12 meses, *então* do mês que vem em diante o valor é o estimado pelo último acumulado de 12
     meses conhecido, e a tela mostra a parte estimada.

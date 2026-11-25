@@ -194,6 +194,25 @@ public sealed class CashForecastApiTests(InvoicesApiFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Recurrence_WithAnEstimatedAdjustment_UsesItFromTheAnniversary_AndMarksTheEstimatedPart()
+    {
+        // RJT-8: comeca no dia 1 deste mes (a deste mes ja passou) com reajuste estimado de 5% daqui a dois meses.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = new DateOnly(today.Year, today.Month, 1);
+        var owner = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(Guid.NewGuid(), owner, 2000m, start.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            adjustment: new { anniversaryMonth = start.AddMonths(2).Month, kind = "Index", index = "IPCA", rate = (decimal?)null,
+                noReduction = true, estimatedRate = 5m });
+        await _factory.DrainFeedAsync();
+
+        var months = (await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/cash-forecast?months=4"))
+            .GetProperty("months").EnumerateArray().Select(m => m.GetProperty("personal")).ToList();
+
+        Assert.Equal([0m, 2000m, 2100m, 2100m], months.Select(m => m.GetProperty("recurringExpense").GetDecimal()));
+        Assert.Equal([0m, 0m, 100m, 100m], months.Select(m => m.GetProperty("estimatedRecurring").GetDecimal()));
+    }
+
+    [Fact]
     public async Task YearlyRecurrence_EntersOnlyInItsMonth()
     {
         // REC-8: IPVA anual em 15/03; numa janela de 12 meses (2026-11 a 2027-10) so marco tem o valor.

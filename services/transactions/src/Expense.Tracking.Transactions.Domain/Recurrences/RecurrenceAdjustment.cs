@@ -111,6 +111,30 @@ public sealed record RecurrenceAdjustment(
         return decimal.Round((factor - 1m) * 100m, 4, MidpointRounding.AwayFromZero);
     }
 
+    /// <summary>
+    /// RJT-8 (ADR-0010, decisao 8): ultimo acumulado de 12 meses conhecido de um indice: os 12 meses mais
+    /// recentes, desde que seguidos; com buraco (ou menos de 12), nulo.
+    /// </summary>
+    public static decimal? LatestAccumulated(IEnumerable<(string Month, decimal Rate)> monthlyRates)
+    {
+        var latest = monthlyRates.DistinctBy(r => r.Month).OrderByDescending(r => r.Month, StringComparer.Ordinal).Take(12).ToList();
+        if (latest.Count < 12)
+        {
+            return null;
+        }
+
+        var newest = DateOnly.ParseExact(latest[0].Month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        for (var i = 0; i < latest.Count; i++)
+        {
+            if (latest[i].Month != newest.AddMonths(-i).ToString("yyyy-MM", CultureInfo.InvariantCulture))
+            {
+                return null;
+            }
+        }
+
+        return Accumulate(latest.Select(r => r.Rate).Reverse());
+    }
+
     /// <summary>Periodo do aniversario de um ano: <c>yyyy-MM</c> na mensal, <c>yyyy</c> na anual.</summary>
     public string PeriodOf(int year, RecurrenceFrequency frequency) => frequency == RecurrenceFrequency.Yearly
         ? year.ToString("0000", CultureInfo.InvariantCulture)

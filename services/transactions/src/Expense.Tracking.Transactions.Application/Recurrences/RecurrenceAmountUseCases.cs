@@ -16,7 +16,7 @@ public sealed class SetRecurrenceAmountHandler(
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
-    PendingAdjustmentRates adjustmentRates,
+    AdjustmentRates adjustmentRates,
     LocalCalendar calendar,
     TimeProvider timeProvider)
 {
@@ -51,7 +51,7 @@ public sealed class RemoveRecurrenceAmountHandler(
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
-    PendingAdjustmentRates adjustmentRates,
+    AdjustmentRates adjustmentRates,
     LocalCalendar calendar,
     TimeProvider timeProvider)
 {
@@ -92,7 +92,7 @@ public sealed class ApplyRecurrenceAdjustmentHandler(
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
-    PendingAdjustmentRates adjustmentRates,
+    AdjustmentRates adjustmentRates,
     LocalCalendar calendar,
     TimeProvider timeProvider)
 {
@@ -126,12 +126,13 @@ internal static class RecurrenceAmountSave
     /// <summary>Publica o estado novo da regra e grava (conflito de versao entre leitura e gravacao = 409).</summary>
     public static async Task<Result<RecurrenceDto>> SaveAsync(
         Recurrence recurrence, IReadOnlySet<string> closed, IAccountsClient accountsClient, IEventOutbox outbox,
-        IUnitOfWork unitOfWork, PendingAdjustmentRates adjustmentRates, LocalCalendar calendar, TimeProvider timeProvider,
+        IUnitOfWork unitOfWork, AdjustmentRates adjustmentRates, LocalCalendar calendar, TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var today = calendar.Today(timeProvider);
         var accountScope = await accountsClient.FindAccountScopeAsync(recurrence.AccountId, cancellationToken);
-        outbox.Add(RecurrenceSaved.From(recurrence, accountScope, recurrence.PeriodOf(today)));
+        outbox.Add(RecurrenceSaved.From(recurrence, accountScope, recurrence.PeriodOf(today),
+            await adjustmentRates.EstimatedRateAsync(recurrence, cancellationToken)));
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -141,6 +142,6 @@ internal static class RecurrenceAmountSave
             return Result.Failure<RecurrenceDto>(RecurrenceErrors.ConcurrencyConflict);
         }
 
-        return RecurrenceDto.From(recurrence, today, closed, await adjustmentRates.ForAsync([recurrence], today, cancellationToken));
+        return RecurrenceDto.From(recurrence, today, closed, await adjustmentRates.PendingAsync([recurrence], today, cancellationToken));
     }
 }

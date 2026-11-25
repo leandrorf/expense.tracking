@@ -11,13 +11,16 @@ public static class ForecastScopes
 /// Lancamento fora do cartao (entra pela data). <see cref="IsIncome"/> = receita. <see cref="Recurring"/>
 /// = ocorrencia em aberto de uma recorrencia (REC-4), ainda nao lancada.
 /// </summary>
-public sealed record CashMovement(string? Scope, bool IsIncome, decimal Amount, DateOnly OccurredOn, bool Recurring = false);
+/// <param name="EstimatedPart">RJT-8: quanto de <paramref name="Amount"/> e reajuste ainda nao confirmado (estimado).</param>
+public sealed record CashMovement(
+    string? Scope, bool IsIncome, decimal Amount, DateOnly OccurredOn, bool Recurring = false, decimal EstimatedPart = 0m);
 
 /// <summary>
 /// Fatura de um cartao, no escopo da conta do cartao, pelo mes de vencimento (dia 1).
 /// <see cref="Recurring"/> = parte da fatura que vem de ocorrencias recorrentes em aberto (REC-4).
 /// </summary>
-public sealed record ForecastInvoice(string? Scope, DateOnly DueMonth, decimal Total, decimal Paid, decimal Remaining, bool Recurring = false);
+public sealed record ForecastInvoice(
+    string? Scope, DateOnly DueMonth, decimal Total, decimal Paid, decimal Remaining, bool Recurring = false, decimal EstimatedPart = 0m);
 
 /// <summary>
 /// Fluxo de um mes num escopo. <see cref="Result"/> = entradas − saidas − faturas (total), para o
@@ -27,11 +30,12 @@ public sealed record ForecastInvoice(string? Scope, DateOnly DueMonth, decimal T
 /// <remarks>
 /// REC-4 (ADR-0008, decisao 9): <see cref="RecurringIncome"/>, <see cref="RecurringExpense"/> e
 /// <see cref="RecurringInvoices"/> sao a parte recorrente (ocorrencias em aberto) que ja esta dentro de
-/// <see cref="Income"/>, <see cref="Expense"/> e <see cref="Invoices"/>.
+/// <see cref="Income"/>, <see cref="Expense"/> e <see cref="Invoices"/>. RJT-8: <see cref="EstimatedRecurring"/> e
+/// quanto dessa parte recorrente e reajuste estimado (ainda nao confirmado), entradas e saidas somadas.
 /// </remarks>
 public sealed record MonthFlow(
     decimal Income, decimal Expense, decimal Invoices, decimal InvoicesPaid, decimal InvoicesRemaining,
-    decimal RecurringIncome = 0m, decimal RecurringExpense = 0m, decimal RecurringInvoices = 0m)
+    decimal RecurringIncome = 0m, decimal RecurringExpense = 0m, decimal RecurringInvoices = 0m, decimal EstimatedRecurring = 0m)
 {
     public static readonly MonthFlow Empty = new(0m, 0m, 0m, 0m, 0m);
 
@@ -90,6 +94,7 @@ public static class CashForecastCalculator
             invoices.Sum(i => i.Remaining),
             movements.Where(m => m.IsIncome && m.Recurring).Sum(m => m.Amount),
             movements.Where(m => !m.IsIncome && m.Recurring).Sum(m => m.Amount),
-            invoices.Where(i => i.Recurring).Sum(i => i.Total));
+            invoices.Where(i => i.Recurring).Sum(i => i.Total),
+            movements.Sum(m => m.EstimatedPart) + invoices.Sum(i => i.EstimatedPart));
     }
 }

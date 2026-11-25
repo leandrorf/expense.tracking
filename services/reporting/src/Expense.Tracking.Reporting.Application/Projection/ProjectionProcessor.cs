@@ -304,6 +304,10 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         row.Amount = amounts[0].Amount;
         row.Amounts.Clear();
         row.Amounts.AddRange(amounts.Select(a => new ProjectedRecurrenceAmount { FromPeriod = a.FromPeriod, Amount = a.Amount }));
+        // RJT-8: o reajuste configurado e a taxa estimada (v1 e v2 sem reajuste = nulos).
+        row.AdjustmentMonth = e.Adjustment?.AnniversaryMonth;
+        row.AdjustmentEstimatedRate = e.Adjustment?.EstimatedRate;
+        row.AdjustmentNoReduction = e.Adjustment?.NoReduction ?? false;
         row.LastEventSequence = feedEvent.Sequence;
     }
 

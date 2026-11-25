@@ -1,6 +1,7 @@
 // RJT-10 (ADR-0010): jornada do reajuste pela SPA ate a previsao. Um aluguel de R$ 1.000 que comecou ha
-// um ano (dia 1), com reajuste anual de 5% neste mes, entra na previsao do mes que vem com R$ 1.000.
-// Confirmado o reajuste pendente, o mes que vem passa a R$ 1.050 e o lancamento da proxima ocorrencia vem
+// um ano (dia 1), com reajuste anual de 5% neste mes, entra na previsao do mes que vem com o reajuste
+// estimado (RJT-8): R$ 1.050, marcado como estimado. Confirmado o reajuste pendente, o mes que vem fica em
+// R$ 1.050 (agora pela vigencia) e o lancamento da proxima ocorrencia vem
 // pre-preenchido com R$ 1.050. Um valor renegociado de R$ 1.100 a partir de daqui a dois meses deixa o mes
 // que vem com R$ 1.050 e o seguinte com R$ 1.100. O reajuste so e confirmavel a partir do mes do
 // aniversario (ADR-0010, decisao 5): por isso o aniversario e este mes e a previsao e lida nos seguintes.
@@ -81,9 +82,10 @@ describe('Recorrencias (jornada do reajuste com previsao)', () => {
     cy.get('[data-cy=rec-submit]').click();
     ruleRow().find('[data-cy=rec-adjust-pending]').should('exist');
 
-    // Sem o reajuste confirmado, a previsao usa o valor de hoje.
+    // RJT-8: sem o reajuste confirmado, a previsao ja usa o valor estimado e mostra a parte estimada.
     openForecast();
-    cy.then(() => waitForDiff(next, before, 1000));
+    cy.then(() => waitForDiff(next, before, 1050));
+    cy.get(`[data-cy=forecast-row][data-month="${next}"] [data-cy=forecast-estimated]`).should('contain', 'reajuste estimado');
 
     // Confirma o reajuste pendente (sugestao de 5%): o valor de hoje e o da proxima passam a R$ 1.050.
     cy.get('[data-cy=tab-recurrences]').click();

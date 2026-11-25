@@ -23,6 +23,7 @@ public sealed class EconomicIndexesTests(TransactionsApiFactory factory) : IClas
         var provider = scope.ServiceProvider;
         var source = new FixedSource([new("2026-08", 0.23m), new("2026-09", 0.48m)]);
         var job = new FetchEconomicIndexesJob(source, provider.GetRequiredService<IEconomicIndexRepository>(),
+            provider.GetRequiredService<IRecurrenceRepository>(), new NoScopes(), provider.GetRequiredService<IEventOutbox>(),
             provider.GetRequiredService<IUnitOfWork>(), new IndexFetchOptions(new DateOnly(2026, 8, 1)),
             provider.GetRequiredService<LocalCalendar>(), TimeProvider.System);
 
@@ -33,6 +34,12 @@ public sealed class EconomicIndexesTests(TransactionsApiFactory factory) : IClas
         var stored = await check.ServiceProvider.GetRequiredService<IEconomicIndexRepository>()
             .ListAsync(EconomicIndex.IGPM, "2026-01", "2026-12", CancellationToken.None);
         Assert.Equal([("2026-08", 0.23m), ("2026-09", 0.48m)], stored.Select(v => (v.Month, v.Rate)));
+    }
+
+    private sealed class NoScopes : IAccountScopeDirectory
+    {
+        public Task<IReadOnlyDictionary<Guid, string>> GetScopesAsync(IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
     }
 
     private sealed class FixedSource(IReadOnlyList<IndexMonthRate> rates) : IEconomicIndexSource

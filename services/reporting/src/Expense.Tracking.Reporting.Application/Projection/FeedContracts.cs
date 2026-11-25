@@ -150,6 +150,13 @@ public sealed record RecurrenceSavedV1(
 public sealed record RecurrenceAmountV2(string FromPeriod, decimal Amount);
 
 /// <summary>
+/// RJT-8: reajuste anual no payload do <c>RecurrenceSaved</c> v2. <c>estimatedRate</c> e a taxa que a previsao
+/// usa para o aniversario ainda nao aplicado (nula = sem estimativa).
+/// </summary>
+public sealed record RecurrenceAdjustmentV2(
+    int AnniversaryMonth, string Kind, string? Index, decimal? Rate, bool NoReduction, decimal? EstimatedRate);
+
+/// <summary>
 /// Payload v2 do <c>RecurrenceSaved</c> (RJT-2, ADR-0010, decisao 7): os campos da v1 (com <c>amount</c> =
 /// valor vigente no dia do evento) mais todas as vigencias. O reajuste configurado (RJT-4) vem em
 /// <c>adjustment</c>, lido pela RJT-8.
@@ -170,7 +177,8 @@ public sealed record RecurrenceSavedV2(
     DateOnly StartsOn,
     DateOnly? EndsOn,
     int RecurrenceVersion,
-    IReadOnlyList<RecurrenceAmountV2>? Amounts);
+    IReadOnlyList<RecurrenceAmountV2>? Amounts,
+    RecurrenceAdjustmentV2? Adjustment = null);
 
 /// <summary>Payload v1 do <c>RecurrenceDeleted</c>.</summary>
 public sealed record RecurrenceDeletedV1(Guid RecurrenceId, Guid OwnerUserId);

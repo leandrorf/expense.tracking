@@ -24,6 +24,9 @@ public interface IRecurrenceRepository
     /// <summary>REC-3: o periodo fechado pelo lancamento, se ele veio de uma recorrencia.</summary>
     Task<RecurrenceOccurrence?> FindOccurrenceByTransactionAsync(Guid transactionId, CancellationToken cancellationToken);
 
+    /// <summary>RJT-8: regras (de todos os donos) que reajustam por um indice, para republicar a taxa estimada.</summary>
+    Task<IReadOnlyList<Recurrence>> ListByAdjustmentIndexAsync(EconomicIndex index, CancellationToken cancellationToken);
+
     void AddOccurrence(RecurrenceOccurrence occurrence);
 
     void RemoveOccurrence(RecurrenceOccurrence occurrence);

@@ -41,6 +41,14 @@ public sealed class ProjectedRecurrence
 
     public DateOnly? EndsOn { get; set; }
 
+    /// <summary>RJT-8 (ADR-0010, decisao 8): mes do aniversario do reajuste; nulo = sem reajuste.</summary>
+    public int? AdjustmentMonth { get; set; }
+
+    /// <summary>RJT-8: taxa (%) que a previsao usa no aniversario ainda nao aplicado; nula = sem estimativa.</summary>
+    public decimal? AdjustmentEstimatedRate { get; set; }
+
+    public bool AdjustmentNoReduction { get; set; }
+
     /// <summary>Sequencia do ultimo evento do feed aplicado a esta linha.</summary>
     public long LastEventSequence { get; set; }
 }

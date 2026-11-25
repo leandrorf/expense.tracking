@@ -37,7 +37,8 @@ public sealed class IndexFetchWorker(
                 var result = await scope.ServiceProvider.GetRequiredService<FetchEconomicIndexesJob>().RunAsync(stoppingToken);
                 foreach (var (index, count) in result.Added.Where(a => a.Value > 0))
                 {
-                    logger.LogInformation("Indices: {Count} meses novos do {Index} guardados.", count, index);
+                    logger.LogInformation("Indices: {Count} meses novos do {Index} guardados; {Rules} regras republicadas com a taxa estimada nova.",
+                        count, index, result.Republished?.GetValueOrDefault(index) ?? 0);
                 }
 
                 foreach (var (index, reason) in result.Failed)

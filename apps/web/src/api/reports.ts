@@ -111,6 +111,8 @@ export interface MonthFlow {
   recurringIncome: number;
   recurringExpense: number;
   recurringInvoices: number;
+  /** RJT-8: quanto da parte recorrente é reajuste estimado, ainda não confirmado (entradas e saídas somadas). */
+  estimatedRecurring: number;
 }
 
 export interface ForecastMonth {
