@@ -12,6 +12,17 @@ public sealed record NextOccurrenceDto(string Period, DateOnly ScheduledOn, deci
 /// <summary>RJT-2: uma vigencia do valor.</summary>
 public sealed record RecurrenceAmountDto(string FromPeriod, decimal Amount);
 
+/// <summary>RJT-4 (ADR-0010, decisao 3): o reajuste anual configurado.</summary>
+public sealed record RecurrenceAdjustmentDto(int AnniversaryMonth, string Kind, string? Index, decimal? Rate, bool NoReduction)
+{
+    public static RecurrenceAdjustmentDto? From(RecurrenceAdjustment? a) => a is null
+        ? null
+        : new(a.AnniversaryMonth, a.Kind.ToString(), a.Index?.ToString(), a.Rate, a.NoReduction);
+}
+
+/// <summary>RJT-4 (ADR-0010, decisao 5): reajuste do aniversario ainda nao aplicado, com a sugestao quando ha.</summary>
+public sealed record PendingAdjustmentDto(int Year, string Period, decimal CurrentAmount, decimal? Rate, decimal? SuggestedAmount);
+
 public sealed record RecurrenceDto(
     Guid Id,
     Guid AccountId,
@@ -29,7 +40,9 @@ public sealed record RecurrenceDto(
     int Version,
     NextOccurrenceDto? NextOccurrence,
     DateTimeOffset CreatedAtUtc,
-    IReadOnlyList<RecurrenceAmountDto> Amounts)
+    IReadOnlyList<RecurrenceAmountDto> Amounts,
+    RecurrenceAdjustmentDto? Adjustment,
+    PendingAdjustmentDto? PendingAdjustment)
 {
     /// <summary>Quantas datas a frente procurar a proxima em aberto (cobre 50 anos da anual).</summary>
     private const int MaxLookAheadYears = 50;
@@ -43,7 +56,11 @@ public sealed record RecurrenceDto(
         // RJT-2: "amount" e o valor vigente hoje (o mesmo que o PUT corrige); as vigencias vem em "amounts".
         return new(r.Id, r.AccountId, r.Type.ToString(), r.PaymentMethod.ToString(), r.CreditCardId, r.Description,
             r.Category, r.AmountFor(r.PeriodOf(today)), r.Currency, r.Notes, r.Frequency.ToString(), r.StartsOn, r.EndsOn,
-            r.Version, next, r.CreatedAtUtc, r.Amounts.Select(a => new RecurrenceAmountDto(a.FromPeriod, a.Amount)).ToList());
+            r.Version, next, r.CreatedAtUtc, r.Amounts.Select(a => new RecurrenceAmountDto(a.FromPeriod, a.Amount)).ToList(),
+            RecurrenceAdjustmentDto.From(r.Adjustment),
+            r.PendingAdjustment(today) is { } p
+                ? new PendingAdjustmentDto(p.Year, p.Period, p.CurrentAmount, p.Rate, p.SuggestedAmount)
+                : null);
     }
 }
 
@@ -59,7 +76,8 @@ public sealed record RecurrenceFields(
     string? Notes,
     RecurrenceFrequency Frequency,
     DateOnly StartsOn,
-    DateOnly? EndsOn);
+    DateOnly? EndsOn,
+    RecurrenceAdjustmentSpec? Adjustment = null);
 
 /// <param name="FromTransactionId">REC-10: lancamento que vira a ocorrencia do proprio periodo ("repetir todo mes").</param>
 public sealed record CreateRecurrenceCommand(Guid OwnerUserId, Guid AccountId, RecurrenceFields Fields, Guid? FromTransactionId = null);
@@ -92,7 +110,8 @@ public sealed class CreateRecurrenceHandler(
     {
         var f = command.Fields;
         var created = Recurrence.Create(command.OwnerUserId, command.AccountId, f.Type, f.PaymentMethod, f.CreditCardId,
-            f.Description, f.Category, f.Amount, f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow());
+            f.Description, f.Category, f.Amount, f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(),
+            f.Adjustment);
         if (created.IsFailure)
         {
             return Result.Failure<RecurrenceDto>(created.Error);
@@ -209,7 +228,7 @@ public sealed class UpdateRecurrenceHandler(
         // RJT-2 (ADR-0010, decisao 2): o valor do PUT corrige a vigencia de hoje.
         var currentPeriod = recurrence.PeriodOf(calendar.Today(timeProvider));
         var edited = recurrence.Edit(f.Type, f.PaymentMethod, f.CreditCardId, f.Description, f.Category, f.Amount,
-            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(), currentPeriod);
+            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(), currentPeriod, f.Adjustment);
         if (edited.IsFailure)
         {
             return Result.Failure<RecurrenceDto>(edited.Error);

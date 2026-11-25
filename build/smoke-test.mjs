@@ -496,6 +496,31 @@ async function main() {
       + `relancar ${relaunch}, periodo invalido ${badPeriod}); excluida volta +${afterDelete.recurring}; pulada ${skipStatus} → +${afterSkip.recurring}`);
   if (rule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${rule.id}`, { method: 'DELETE', headers: auth });
 
+  // 24b) Reajuste anual (RJT-4): regra de um ano atras com aniversario neste mes; aplicado uma vez so.
+  const nowDate = new Date();
+  const thisMonth = isoDay(nowDate).slice(0, 7);
+  const adjRes = await fetch(`${GATEWAY}/api/transactions/recurrences`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: account.id, type: 'Expense', paymentMethod: 'Boleto', description: 'Smoke reajuste',
+      category: 'Smoke reajuste', amount: 1000, currency: 'BRL', frequency: 'Monthly',
+      startsOn: `${nowDate.getFullYear() - 1}-${thisMonth.slice(5)}-01`,
+      adjustment: { anniversaryMonth: nowDate.getMonth() + 1, kind: 'Fixed', rate: 10 } }),
+  });
+  const adjRule = adjRes.status === 201 ? await adjRes.json() : {};
+  const adjustUrl = `${GATEWAY}/api/transactions/recurrences/${adjRule.id}/adjustments`;
+  const appliedRes = await fetch(adjustUrl, {
+    method: 'POST', headers: auth, body: JSON.stringify({ year: nowDate.getFullYear(), rate: 10, version: adjRule.version }),
+  });
+  const applied = appliedRes.status === 200 ? await appliedRes.json() : {};
+  const reapply = (await fetch(adjustUrl, {
+    method: 'POST', headers: auth, body: JSON.stringify({ year: nowDate.getFullYear(), rate: 10, version: applied.version }),
+  })).status;
+  const adjusted = applied.amounts?.find((a) => a.fromPeriod === thisMonth)?.amount;
+  ok(adjRes.status === 201 && adjRule.pendingAdjustment?.suggestedAmount === 1100 && appliedRes.status === 200
+    && adjusted === 1100 && applied.pendingAdjustment === null && reapply === 409,
+    `reajuste: regra ${adjRes.status} sugere ${adjRule.pendingAdjustment?.suggestedAmount}; aplicado ${appliedRes.status} → ${adjusted} desde ${thisMonth}; de novo ${reapply}`);
+  if (adjRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${adjRule.id}`, { method: 'DELETE', headers: auth });
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

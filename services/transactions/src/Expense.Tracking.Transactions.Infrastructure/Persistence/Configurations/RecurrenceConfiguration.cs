@@ -47,6 +47,31 @@ internal sealed class RecurrenceConfiguration : IEntityTypeConfiguration<Recurre
             a.HasKey("RecurrenceId", nameof(RecurrenceAmount.FromPeriod));
         });
         builder.Navigation("_laterAmounts").AutoInclude();
+
+        // RJT-4 (ADR-0010, decisoes 3 e 4): reajuste anual na propria regra e os aniversarios aplicados.
+        builder.Ignore(r => r.Adjustment);
+        builder.Ignore(r => r.AppliedAdjustments);
+        builder.Property<int?>("AdjustmentMonth").HasColumnName("adjustment_month");
+        builder.Property<RecurrenceAdjustmentKind?>("AdjustmentKind").HasColumnName("adjustment_kind")
+            .HasConversion<string>().HasMaxLength(16);
+        builder.Property<EconomicIndex?>("AdjustmentIndex").HasColumnName("adjustment_index")
+            .HasConversion<string>().HasMaxLength(8);
+        builder.Property<decimal?>("AdjustmentRate").HasColumnName("adjustment_rate").HasPrecision(9, 4);
+        builder.Property<bool>("AdjustmentNoReduction").HasColumnName("adjustment_no_reduction").IsRequired();
+        builder.OwnsMany<RecurrenceAdjustmentApplied>("_appliedAdjustments", a =>
+        {
+            a.ToTable("recurrence_adjustments");
+            a.WithOwner().HasForeignKey("RecurrenceId");
+            a.Property<Guid>("RecurrenceId").HasColumnName("recurrence_id");
+            a.Property(x => x.Year).HasColumnName("year").ValueGeneratedNever();
+            a.Property(x => x.FromPeriod).HasColumnName("from_period").HasMaxLength(7).IsRequired();
+            a.Property(x => x.PreviousAmount).HasColumnName("previous_amount").HasPrecision(18, 2).IsRequired();
+            a.Property(x => x.NewAmount).HasColumnName("new_amount").HasPrecision(18, 2).IsRequired();
+            a.Property(x => x.Rate).HasColumnName("rate").HasPrecision(9, 4);
+            a.Property(x => x.AppliedAtUtc).HasColumnName("applied_at_utc").IsRequired();
+            a.HasKey("RecurrenceId", nameof(RecurrenceAdjustmentApplied.Year));
+        });
+        builder.Navigation("_appliedAdjustments").AutoInclude();
     }
 }
 

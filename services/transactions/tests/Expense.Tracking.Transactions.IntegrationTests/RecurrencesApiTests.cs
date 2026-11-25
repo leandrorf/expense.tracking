@@ -28,8 +28,9 @@ public sealed class RecurrencesApiTests(TransactionsApiFactory factory) : IClass
 
     internal static object Rule(Guid accountId, string startsOn = "2030-01-15", decimal amount = 2000m, string? endsOn = null,
         int? version = null, string method = "Boleto", Guid? cardId = null, string type = "Expense", string frequency = "Monthly",
-        string description = "Aluguel") => new
+        string description = "Aluguel", object? adjustment = null) => new
     {
+        adjustment,
         accountId,
         type,
         paymentMethod = method,

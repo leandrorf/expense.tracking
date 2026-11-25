@@ -409,6 +409,29 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("AdjustmentIndex")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("adjustment_index");
+
+                    b.Property<string>("AdjustmentKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("adjustment_kind");
+
+                    b.Property<int?>("AdjustmentMonth")
+                        .HasColumnType("int")
+                        .HasColumnName("adjustment_month");
+
+                    b.Property<bool>("AdjustmentNoReduction")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("adjustment_no_reduction");
+
+                    b.Property<decimal?>("AdjustmentRate")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("decimal(9,4)")
+                        .HasColumnName("adjustment_rate");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")
@@ -720,6 +743,49 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.Recurrence", b =>
                 {
+                    b.OwnsMany("Expense.Tracking.Transactions.Domain.Recurrences.RecurrenceAdjustmentApplied", "_appliedAdjustments", b1 =>
+                        {
+                            b1.Property<Guid>("RecurrenceId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("recurrence_id");
+
+                            b1.Property<int>("Year")
+                                .HasColumnType("int")
+                                .HasColumnName("year");
+
+                            b1.Property<DateTime>("AppliedAtUtc")
+                                .HasColumnType("datetime(6)")
+                                .HasColumnName("applied_at_utc");
+
+                            b1.Property<string>("FromPeriod")
+                                .IsRequired()
+                                .HasMaxLength(7)
+                                .HasColumnType("varchar(7)")
+                                .HasColumnName("from_period");
+
+                            b1.Property<decimal>("NewAmount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("new_amount");
+
+                            b1.Property<decimal>("PreviousAmount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("previous_amount");
+
+                            b1.Property<decimal?>("Rate")
+                                .HasPrecision(9, 4)
+                                .HasColumnType("decimal(9,4)")
+                                .HasColumnName("rate");
+
+                            b1.HasKey("RecurrenceId", "Year");
+
+                            b1.ToTable("recurrence_adjustments", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("RecurrenceId");
+                        });
+
                     b.OwnsMany("Expense.Tracking.Transactions.Domain.Recurrences.RecurrenceAmount", "_laterAmounts", b1 =>
                         {
                             b1.Property<Guid>("RecurrenceId")
@@ -743,6 +809,8 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                             b1.WithOwner()
                                 .HasForeignKey("RecurrenceId");
                         });
+
+                    b.Navigation("_appliedAdjustments");
 
                     b.Navigation("_laterAmounts");
                 });

@@ -2156,7 +2156,22 @@ CI.
   - *Dado* um `RecurrenceSaved` v1 antigo no feed, *quando* o reporting o lê, *então* ele vira uma regra
     com uma vigência só.
   - Estimativa: 3 · **Must** · Dependências: RJT-2
-- 🔵 **RJT-4** Reajuste anual configurado e aplicado à mão.
+- ✅ **RJT-4** Reajuste anual configurado e aplicado à mão. → `adjustment` na regra, `POST .../adjustments`.
+  - Feito assim: o corpo da regra (criar e `PUT`) ganha `adjustment` (`{ anniversaryMonth?, kind: Index|Fixed,
+    index?: IPCA|INPC|IGPM, rate?, noReduction? }`; nulo = sem reajuste; mês padrão = o do início, na anual
+    tem de ser o dela; "não reduzir" padrão ligado), guardado em colunas `adjustment_*` da regra; erros
+    `recurrence.adjustment_kind_invalid`, `_index_invalid`, `_month_invalid`, `_rate_invalid` (acima de
+    -100%, até 1000%, 4 casas). `POST /transactions/recurrences/{id}/adjustments` (`{ year, rate | amount,
+    version }`) cria a vigência no período do aniversário sobre o valor vigente antes dele (meio para cima;
+    "não reduzir" vale para o percentual, o valor informado vale como está) e registra o aniversário em
+    `recurrence_adjustments` (migration `RecurrenceAdjustments`): de novo = 409
+    `recurrence.adjustment_already_applied`; aniversário no início da regra, antes ou depois dela = 400
+    `recurrence.adjustment_year_invalid`; um e só um de `rate`/`amount` (400 `_value_required`); regra sem
+    reajuste = 400 `_not_configured`. Remover a vigência do aniversário libera aplicá-lo de novo. A leitura
+    traz `adjustment` e `pendingAdjustment` (`{ year, period, currentAmount, rate, suggestedAmount }`, do mês
+    do aniversário até 11 meses depois; sugestão só no percentual fixo até a RJT-7). `RecurrenceSaved` v2
+    leva `adjustment` com `estimatedRate` (o percentual fixo; o do índice vem na RJT-8). Smoke passo 24b
+    (sugere, aplica, 409; 48 passos).
   - *Dado* uma regra, *quando* configuro reajuste anual em março por percentual fixo de 5% (ou por índice),
     *então* a regra guarda o aniversário, o índice ou percentual e o "não reduzir".
   - *Dado* o mês do aniversário, *quando* confirmo o reajuste informando o percentual ou o valor novo,

@@ -23,6 +23,19 @@ public abstract record RecurrenceEvent(Guid RecurrenceId, Guid OwnerUserId)
 public sealed record RecurrenceAmountPayload(string FromPeriod, decimal Amount);
 
 /// <summary>
+/// RJT-4 (ADR-0010, decisao 7): o reajuste configurado no payload. <see cref="EstimatedRate"/> e a taxa que a
+/// previsao usa para o aniversario ainda nao aplicado: o percentual fixo, ou (RJT-8) o ultimo acumulado do indice.
+/// </summary>
+public sealed record RecurrenceAdjustmentPayload(
+    int AnniversaryMonth, string Kind, string? Index, decimal? Rate, bool NoReduction, decimal? EstimatedRate)
+{
+    public static RecurrenceAdjustmentPayload? From(RecurrenceAdjustment? a) => a is null
+        ? null
+        : new(a.AnniversaryMonth, a.Kind.ToString(), a.Index?.ToString(), a.Rate, a.NoReduction,
+            a.Kind == RecurrenceAdjustmentKind.Fixed ? a.Rate : null);
+}
+
+/// <summary>
 /// Uma regra foi criada ou corrigida: estado completo, com o escopo PF/PJ da conta (a conta nao muda).
 /// <see cref="RecurrenceVersion"/> e a versao da regra, nao a <see cref="TransactionEvent.Version"/> do
 /// formato do evento.
@@ -49,7 +62,7 @@ public sealed record RecurrenceSaved(
     DateOnly? EndsOn,
     int RecurrenceVersion,
     IReadOnlyList<RecurrenceAmountPayload> Amounts,
-    object? Adjustment = null)
+    RecurrenceAdjustmentPayload? Adjustment = null)
     : RecurrenceEvent(RecurrenceId, OwnerUserId)
 {
     public const string Name = "RecurrenceSaved";
@@ -79,7 +92,8 @@ public sealed record RecurrenceSaved(
         recurrence.StartsOn,
         recurrence.EndsOn,
         recurrence.Version,
-        recurrence.Amounts.Select(a => new RecurrenceAmountPayload(a.FromPeriod, a.Amount)).ToList());
+        recurrence.Amounts.Select(a => new RecurrenceAmountPayload(a.FromPeriod, a.Amount)).ToList(),
+        RecurrenceAdjustmentPayload.From(recurrence.Adjustment));
 }
 
 /// <summary>Uma regra foi excluida: as ocorrencias em aberto saem da previsao; os lancamentos ficam.</summary>

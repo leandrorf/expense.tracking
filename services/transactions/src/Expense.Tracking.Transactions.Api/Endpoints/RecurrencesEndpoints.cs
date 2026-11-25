@@ -24,7 +24,17 @@ public sealed record RecurrenceRequest(
     DateOnly? StartsOn,
     DateOnly? EndsOn,
     int? Version = null,
-    Guid? FromTransactionId = null);
+    Guid? FromTransactionId = null,
+    RecurrenceAdjustmentRequest? Adjustment = null);
+
+/// <summary>
+/// RJT-4 (ADR-0010, decisao 3): reajuste anual. <c>kind</c> = <c>Index</c> (com <c>index</c> IPCA, INPC ou
+/// IGPM) ou <c>Fixed</c> (com <c>rate</c> em %); mes padrao = o do inicio; "nao reduzir" padrao ligado.
+/// </summary>
+public sealed record RecurrenceAdjustmentRequest(int? AnniversaryMonth, string? Kind, string? Index, decimal? Rate, bool? NoReduction);
+
+/// <summary>RJT-4 (ADR-0010, decisao 4): aplicar o reajuste de um ano pelo percentual ou pelo valor novo.</summary>
+public sealed record ApplyAdjustmentRequest(int? Year, decimal? Rate, decimal? Amount, int? Version);
 
 /// <summary>RJT-2: valor a partir de um periodo, com a versao lida da regra.</summary>
 public sealed record RecurrenceAmountRequest(string? FromPeriod, decimal Amount, int? Version);
@@ -153,6 +163,31 @@ public static class RecurrencesEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        // RJT-4 (ADR-0010, decisao 4): confirma o reajuste de um aniversario.
+        group.MapPost("/{id:guid}/adjustments", async (
+            Guid id, ApplyAdjustmentRequest request, HttpContext http, ApplyRecurrenceAdjustmentHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (request.Version is not { } version)
+            {
+                return HttpResults.Problem(Error.Validation("recurrence.version_required", "Informe a versao da recorrencia que voce leu."));
+            }
+
+            if (request.Year is not { } year)
+            {
+                return HttpResults.Problem(Error.Validation("recurrence.adjustment_year_invalid", "Informe o ano do reajuste."));
+            }
+
+            var result = await handler.HandleAsync(
+                new ApplyRecurrenceAdjustmentCommand(id, owner.Value, year, request.Rate, request.Amount, version), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         // REC-3 (ADR-0008, decisoes 7 e 8): "a lancar", lancar, pular e desfazer o pulo de um periodo.
         group.MapGet("/due", async (HttpContext http, ListDueOccurrencesHandler handler, CancellationToken ct) =>
         {
@@ -231,7 +266,43 @@ public static class RecurrencesEndpoints
             return Result.Failure<RecurrenceFields>(Error.Validation("recurrence.starts_on_required", "Informe a data de inicio da recorrencia."));
         }
 
+        var adjustment = ParseAdjustment(request.Adjustment);
+        if (adjustment.IsFailure)
+        {
+            return Result.Failure<RecurrenceFields>(adjustment.Error);
+        }
+
         return new RecurrenceFields(type, paymentMethod, request.CreditCardId, request.Description, request.Category,
-            request.Amount, request.Currency, request.Notes, frequency, startsOn, request.EndsOn);
+            request.Amount, request.Currency, request.Notes, frequency, startsOn, request.EndsOn, adjustment.Value);
+    }
+
+    private static Result<RecurrenceAdjustmentSpec?> ParseAdjustment(RecurrenceAdjustmentRequest? request)
+    {
+        if (request is null)
+        {
+            return Result.Success<RecurrenceAdjustmentSpec?>(null);
+        }
+
+        if (!Enum.TryParse<RecurrenceAdjustmentKind>(request.Kind, ignoreCase: true, out var kind) || !Enum.IsDefined(kind)
+            || int.TryParse(request.Kind, out _))
+        {
+            return Result.Failure<RecurrenceAdjustmentSpec?>(Error.Validation(
+                "recurrence.adjustment_kind_invalid", "Tipo de reajuste invalido: use 'Index' ou 'Fixed'."));
+        }
+
+        EconomicIndex? index = null;
+        if (kind == RecurrenceAdjustmentKind.Index)
+        {
+            if (!Enum.TryParse<EconomicIndex>(request.Index, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed)
+                || int.TryParse(request.Index, out _))
+            {
+                return Result.Failure<RecurrenceAdjustmentSpec?>(Error.Validation(
+                    "recurrence.adjustment_index_invalid", "Informe o indice do reajuste: IPCA, INPC ou IGPM."));
+            }
+
+            index = parsed;
+        }
+
+        return new RecurrenceAdjustmentSpec(request.AnniversaryMonth, kind, index, request.Rate, request.NoReduction ?? true);
     }
 }

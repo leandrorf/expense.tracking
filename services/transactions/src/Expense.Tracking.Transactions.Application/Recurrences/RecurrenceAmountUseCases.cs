@@ -79,6 +79,45 @@ public sealed class RemoveRecurrenceAmountHandler(
     }
 }
 
+public sealed record ApplyRecurrenceAdjustmentCommand(Guid Id, Guid OwnerUserId, int Year, decimal? Rate, decimal? Amount, int Version);
+
+/// <summary>
+/// RJT-4 (ADR-0010, decisao 4): confirma o reajuste de um aniversario pelo percentual ou pelo valor novo.
+/// Cria a vigencia no periodo do aniversario; o mesmo aniversario duas vezes = 409.
+/// </summary>
+public sealed class ApplyRecurrenceAdjustmentHandler(
+    IRecurrenceRepository recurrences,
+    IAccountsClient accountsClient,
+    IEventOutbox outbox,
+    IUnitOfWork unitOfWork,
+    LocalCalendar calendar,
+    TimeProvider timeProvider)
+{
+    public async Task<Result<RecurrenceDto>> HandleAsync(ApplyRecurrenceAdjustmentCommand command, CancellationToken cancellationToken)
+    {
+        var recurrence = await recurrences.GetAsync(command.Id, command.OwnerUserId, cancellationToken);
+        if (recurrence is null)
+        {
+            return Result.Failure<RecurrenceDto>(RecurrenceErrors.NotFound);
+        }
+
+        if (command.Version != recurrence.Version)
+        {
+            return Result.Failure<RecurrenceDto>(RecurrenceErrors.ConcurrencyConflict);
+        }
+
+        var closed = (await recurrences.ListClosedPeriodsAsync(command.OwnerUserId, [recurrence.Id], cancellationToken))
+            .GetValueOrDefault(recurrence.Id) ?? new HashSet<string>();
+        var applied = recurrence.ApplyAdjustment(command.Year, command.Rate, command.Amount, closed, timeProvider.GetUtcNow());
+        if (applied.IsFailure)
+        {
+            return Result.Failure<RecurrenceDto>(applied.Error);
+        }
+
+        return await RecurrenceAmountSave.SaveAsync(recurrence, closed, accountsClient, outbox, unitOfWork, calendar, timeProvider, cancellationToken);
+    }
+}
+
 internal static class RecurrenceAmountSave
 {
     /// <summary>Publica o estado novo da regra e grava (conflito de versao entre leitura e gravacao = 409).</summary>

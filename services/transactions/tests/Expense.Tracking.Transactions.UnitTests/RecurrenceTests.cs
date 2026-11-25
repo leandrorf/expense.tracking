@@ -163,4 +163,132 @@ public sealed class RecurrenceTests
         Assert.True(changed.Value);
         Assert.Equal((2100m, new DateOnly(2026, 12, 12), 2, Now.AddHours(1)), (rule.Amount, rule.StartsOn, rule.Version, rule.UpdatedAtUtc));
     }
+
+    // ---------- RJT-4 (ADR-0010, decisoes 3 a 5): reajuste anual ----------
+
+    private static readonly RecurrenceAdjustmentSpec FivePercentInMarch = new(3, RecurrenceAdjustmentKind.Fixed, null, 5m);
+
+    private static Recurrence Adjusted(RecurrenceAdjustmentSpec? adjustment, decimal amount = 2000m, string frequency = "Monthly",
+        DateOnly? startsOn = null) => Recurrence.Create(
+        Owner, AccountId, TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia", amount, null, null,
+        Enum.Parse<RecurrenceFrequency>(frequency), startsOn ?? new DateOnly(2030, 1, 10), null, Now, adjustment).Value;
+
+    [Fact]
+    public void Adjustment_IsKeptOnTheRule_WithTheStartMonthAsDefault()
+    {
+        Assert.Equal(new RecurrenceAdjustment(3, RecurrenceAdjustmentKind.Fixed, null, 5m, true), Adjusted(FivePercentInMarch).Adjustment);
+        Assert.Equal(new RecurrenceAdjustment(1, RecurrenceAdjustmentKind.Index, EconomicIndex.IGPM, null, false),
+            Adjusted(new RecurrenceAdjustmentSpec(null, RecurrenceAdjustmentKind.Index, EconomicIndex.IGPM, 7m, NoReduction: false)).Adjustment);
+        Assert.Null(Adjusted(null).Adjustment);
+    }
+
+    [Theory]
+    [InlineData(13, RecurrenceAdjustmentKind.Fixed, null, 5.0, "Monthly", "recurrence.adjustment_month_invalid")]
+    [InlineData(3, RecurrenceAdjustmentKind.Fixed, null, 5.0, "Yearly", "recurrence.adjustment_month_invalid")] // anual: o mes dela
+    [InlineData(3, RecurrenceAdjustmentKind.Index, null, null, "Monthly", "recurrence.adjustment_index_invalid")]
+    [InlineData(3, RecurrenceAdjustmentKind.Fixed, null, null, "Monthly", "recurrence.adjustment_rate_invalid")]
+    [InlineData(3, RecurrenceAdjustmentKind.Fixed, null, -100.0, "Monthly", "recurrence.adjustment_rate_invalid")]
+    [InlineData(3, RecurrenceAdjustmentKind.Fixed, null, 1.23456, "Monthly", "recurrence.adjustment_rate_invalid")]
+    public void Adjustment_RefusesInvalidConfigurations(
+        int month, RecurrenceAdjustmentKind kind, EconomicIndex? index, double? rate, string frequency, string code)
+    {
+        var created = Recurrence.Create(Owner, AccountId, TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia",
+            2000m, null, null, Enum.Parse<RecurrenceFrequency>(frequency), new DateOnly(2030, 1, 10), null, Now,
+            new RecurrenceAdjustmentSpec(month, kind, index, (decimal?)rate));
+
+        Assert.Equal(code, created.Error.Code);
+    }
+
+    [Fact]
+    public void ApplyAdjustment_CreatesTheAmountFromTheAnniversary_OnlyOncePerYear()
+    {
+        var rule = Adjusted(FivePercentInMarch);
+        var none = new HashSet<string>();
+
+        Assert.True(rule.ApplyAdjustment(2030, 4.5m, null, none, Now).IsSuccess);
+        Assert.Equal((2000m, 2090m, 2), (rule.AmountFor("2030-02"), rule.AmountFor("2030-03"), rule.Version));
+        Assert.Equal("recurrence.adjustment_already_applied", rule.ApplyAdjustment(2030, 5m, null, none, Now).Error.Code);
+
+        // O ano seguinte parte do valor vigente antes dele; o valor novo informado vale como esta.
+        Assert.True(rule.ApplyAdjustment(2031, null, 2150m, none, Now).IsSuccess);
+        Assert.Equal(2150m, rule.AmountFor("2031-03"));
+        Assert.Equal([(2030, 2000m, 2090m), (2031, 2090m, 2150m)],
+            rule.AppliedAdjustments.Select(a => (a.Year, a.PreviousAmount, a.NewAmount)));
+    }
+
+    [Fact]
+    public void ApplyAdjustment_RefusesYearsOutsideTheRule_MissingValues_ClosedPeriods_AndUnconfiguredRules()
+    {
+        var rule = Adjusted(FivePercentInMarch);
+        var none = new HashSet<string>();
+
+        Assert.Equal("recurrence.adjustment_year_invalid", rule.ApplyAdjustment(2029, 5m, null, none, Now).Error.Code);
+        Assert.Equal("recurrence.adjustment_value_required", rule.ApplyAdjustment(2030, null, null, none, Now).Error.Code);
+        Assert.Equal("recurrence.adjustment_value_required", rule.ApplyAdjustment(2030, 5m, 2100m, none, Now).Error.Code);
+        Assert.Equal("recurrence.amount_period_invalid", rule.ApplyAdjustment(2030, 5m, null, new HashSet<string> { "2030-03" }, Now).Error.Code);
+        Assert.Equal("recurrence.adjustment_not_configured", Adjusted(null).ApplyAdjustment(2030, 5m, null, none, Now).Error.Code);
+        Assert.Equal(1, rule.Version);
+
+        // No aniversario do inicio nao ha reajuste (o contrato acabou de comecar).
+        var marchStart = Adjusted(FivePercentInMarch, startsOn: new DateOnly(2030, 3, 10));
+        Assert.Equal("recurrence.adjustment_year_invalid", marchStart.ApplyAdjustment(2030, 5m, null, none, Now).Error.Code);
+    }
+
+    [Fact]
+    public void ApplyAdjustment_RoundsHalfUp_AndNoReductionKeepsThePreviousAmount()
+    {
+        var rounded = Adjusted(FivePercentInMarch, amount: 1000.05m);
+        rounded.ApplyAdjustment(2030, 10m, null, new HashSet<string>(), Now);
+        Assert.Equal(1100.06m, rounded.AmountFor("2030-03")); // 1100,055
+
+        var kept = Adjusted(FivePercentInMarch);
+        kept.ApplyAdjustment(2030, -2m, null, new HashSet<string>(), Now);
+        Assert.Equal(2000m, kept.AmountFor("2030-03"));
+
+        var reduced = Adjusted(FivePercentInMarch with { NoReduction = false });
+        reduced.ApplyAdjustment(2030, -2m, null, new HashSet<string>(), Now);
+        Assert.Equal(1960m, reduced.AmountFor("2030-03"));
+    }
+
+    [Fact]
+    public void PendingAdjustment_ShowsTheLatestAnniversary_UntilItIsApplied()
+    {
+        var rule = Adjusted(FivePercentInMarch);
+
+        Assert.Null(rule.PendingAdjustment(new DateOnly(2030, 2, 20))); // aniversario anterior (2029-03) fora da regra
+        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, 5m, 2100m), rule.PendingAdjustment(new DateOnly(2030, 3, 1)));
+        Assert.Equal(2030, rule.PendingAdjustment(new DateOnly(2031, 2, 28))!.Year); // ate 11 meses depois
+
+        rule.ApplyAdjustment(2030, 5m, null, new HashSet<string>(), Now);
+        Assert.Null(rule.PendingAdjustment(new DateOnly(2030, 3, 1)));
+        Assert.Equal(new RecurrencePendingAdjustment(2031, "2031-03", 2100m, 5m, 2205m), rule.PendingAdjustment(new DateOnly(2031, 3, 1)));
+
+        // Pelo indice, a sugestao fica para quando houver indices (RJT-7).
+        var byIndex = Adjusted(new RecurrenceAdjustmentSpec(3, RecurrenceAdjustmentKind.Index, EconomicIndex.IPCA, null));
+        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, null, null), byIndex.PendingAdjustment(new DateOnly(2030, 3, 1)));
+
+        // Anual: o periodo e o ano.
+        var yearly = Adjusted(new RecurrenceAdjustmentSpec(null, RecurrenceAdjustmentKind.Fixed, null, 10m), amount: 1200m, frequency: "Yearly");
+        Assert.Equal(new RecurrencePendingAdjustment(2031, "2031", 1200m, 10m, 1320m), yearly.PendingAdjustment(new DateOnly(2031, 1, 10)));
+    }
+
+    [Fact]
+    public void RemovingTheAdjustedAmount_AllowsApplyingAgain_AndEditingTheAdjustmentBumpsTheVersion()
+    {
+        var rule = Adjusted(FivePercentInMarch);
+        rule.ApplyAdjustment(2030, 5m, null, new HashSet<string>(), Now);
+        rule.RemoveAmountFrom("2030-03", "2030-01", Now);
+        Assert.True(rule.ApplyAdjustment(2030, 6m, null, new HashSet<string>(), Now).IsSuccess);
+        Assert.Equal(2120m, rule.AmountFor("2030-03"));
+
+        var version = rule.Version;
+        var same = rule.Edit(TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia", 2000m, "BRL", null,
+            RecurrenceFrequency.Monthly, new DateOnly(2030, 1, 10), null, Now, "2030-01", FivePercentInMarch);
+        Assert.False(same.Value);
+
+        var removed = rule.Edit(TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia", 2000m, "BRL", null,
+            RecurrenceFrequency.Monthly, new DateOnly(2030, 1, 10), null, Now, "2030-01", adjustment: null);
+        Assert.True(removed.Value);
+        Assert.Equal((version + 1, (RecurrenceAdjustment?)null), (rule.Version, rule.Adjustment));
+    }
 }

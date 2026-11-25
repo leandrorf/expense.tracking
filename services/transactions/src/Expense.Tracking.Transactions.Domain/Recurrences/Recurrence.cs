@@ -22,6 +22,9 @@ public sealed class Recurrence
     // RJT-2 (ADR-0010, decisao 1): vigencias depois da primeira. A primeira e o Amount da regra, no periodo do inicio.
     private readonly List<RecurrenceAmount> _laterAmounts = [];
 
+    // RJT-4 (ADR-0010, decisao 4): aniversarios ja aplicados, um por ano.
+    private readonly List<RecurrenceAdjustmentApplied> _appliedAdjustments = [];
+
     private Recurrence()
     {
         Description = string.Empty;
@@ -77,6 +80,36 @@ public sealed class Recurrence
     /// <summary>Ultima data possivel da agenda (inclusiva); nulo = sem fim.</summary>
     public DateOnly? EndsOn { get; private set; }
 
+    /// <summary>RJT-4 (ADR-0010, decisao 3): reajuste anual configurado; nulo = sem reajuste.</summary>
+    public RecurrenceAdjustment? Adjustment
+    {
+        get => AdjustmentMonth is { } month && AdjustmentKind is { } kind
+            ? new RecurrenceAdjustment(month, kind, AdjustmentIndex, AdjustmentRate, AdjustmentNoReduction)
+            : null;
+        private set
+        {
+            AdjustmentMonth = value?.AnniversaryMonth;
+            AdjustmentKind = value?.Kind;
+            AdjustmentIndex = value?.Index;
+            AdjustmentRate = value?.Rate;
+            AdjustmentNoReduction = value?.NoReduction ?? false;
+        }
+    }
+
+    /// <summary>Aniversarios ja aplicados, em ordem de ano.</summary>
+    public IReadOnlyList<RecurrenceAdjustmentApplied> AppliedAdjustments => _appliedAdjustments.OrderBy(a => a.Year).ToList();
+
+    // Colunas do reajuste (mapeadas pelo EF; o dominio usa Adjustment).
+    private int? AdjustmentMonth { get; set; }
+
+    private RecurrenceAdjustmentKind? AdjustmentKind { get; set; }
+
+    private EconomicIndex? AdjustmentIndex { get; set; }
+
+    private decimal? AdjustmentRate { get; set; }
+
+    private bool AdjustmentNoReduction { get; set; }
+
     /// <summary>Concorrencia otimista, como o lancamento (ADR-0007).</summary>
     public int Version { get; private set; } = 1;
 
@@ -87,8 +120,15 @@ public sealed class Recurrence
     public static Result<Recurrence> Create(
         Guid ownerUserId, Guid accountId, TransactionType type, PaymentMethod paymentMethod, Guid? creditCardId,
         string? description, string? category, decimal amount, string? currency, string? notes,
-        RecurrenceFrequency frequency, DateOnly startsOn, DateOnly? endsOn, DateTimeOffset nowUtc)
+        RecurrenceFrequency frequency, DateOnly startsOn, DateOnly? endsOn, DateTimeOffset nowUtc,
+        RecurrenceAdjustmentSpec? adjustment = null)
     {
+        var normalized = RecurrenceAdjustment.Normalize(adjustment, frequency, startsOn);
+        if (normalized.IsFailure)
+        {
+            return Result.Failure<Recurrence>(normalized.Error);
+        }
+
         var recurrence = new Recurrence
         {
             Id = Guid.NewGuid(),
@@ -96,6 +136,7 @@ public sealed class Recurrence
             AccountId = accountId,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc,
+            Adjustment = normalized.Value,
         };
 
         var applied = recurrence.Apply(type, paymentMethod, creditCardId, description, category, amount, currency, notes,
@@ -108,13 +149,22 @@ public sealed class Recurrence
     /// (a versao sobe); sem mudanca, nada e tocado. So os periodos em aberto sentem a mudanca: os
     /// fechados (lancados ou pulados) sao guardados a parte. RJT-2 (ADR-0010, decisao 2): o
     /// <paramref name="amount"/> corrige a vigencia que vale em <paramref name="currentPeriod"/> (hoje), sem
-    /// criar vigencia; as vigencias seguintes precisam continuar na agenda nova.
+    /// criar vigencia; as vigencias seguintes precisam continuar na agenda nova. RJT-4: o
+    /// <paramref name="adjustment"/> e o reajuste inteiro (nulo tira o reajuste), como o resto do corpo.
     /// </summary>
     public Result<bool> Edit(
         TransactionType type, PaymentMethod paymentMethod, Guid? creditCardId, string? description, string? category,
         decimal amount, string? currency, string? notes, RecurrenceFrequency frequency, DateOnly startsOn,
-        DateOnly? endsOn, DateTimeOffset nowUtc, string? currentPeriod = null)
+        DateOnly? endsOn, DateTimeOffset nowUtc, string? currentPeriod = null, RecurrenceAdjustmentSpec? adjustment = null)
     {
+        var normalized = RecurrenceAdjustment.Normalize(adjustment, frequency, startsOn);
+        if (normalized.IsFailure)
+        {
+            return Result.Failure<bool>(normalized.Error);
+        }
+
+        var adjustmentChanged = normalized.Value != Adjustment;
+
         var target = currentPeriod is null ? null : LaterAmounts.LastOrDefault(a => string.CompareOrdinal(a.FromPeriod, currentPeriod) <= 0);
         var baseAmount = target is null ? amount : Amount;
         var amountChanged = target is not null && target.Amount != amount;
@@ -128,7 +178,7 @@ public sealed class Recurrence
         }
 
         var applied = Apply(type, paymentMethod, creditCardId, description, category, baseAmount, currency, notes, frequency,
-            startsOn, endsOn, nowUtc, dryRun: true, forceChanged: amountChanged);
+            startsOn, endsOn, nowUtc, dryRun: true, forceChanged: amountChanged || adjustmentChanged);
         if (applied.IsFailure || !applied.Value)
         {
             return applied;
@@ -148,8 +198,97 @@ public sealed class Recurrence
             _laterAmounts.Add(new RecurrenceAmount(target!.FromPeriod, amount));
         }
 
+        Adjustment = normalized.Value;
         return true;
     }
+
+    /// <summary>
+    /// RJT-4 (ADR-0010, decisao 4): aplica o reajuste do aniversario de <paramref name="year"/>, pelo
+    /// percentual (<paramref name="rate"/>) ou pelo valor novo (<paramref name="amount"/>), um dos dois. Cria a
+    /// vigencia no periodo do aniversario sobre o valor vigente antes dele; "nao reduzir" vale para o
+    /// percentual (o valor informado e o que o usuario decidiu).
+    /// </summary>
+    public Result ApplyAdjustment(int year, decimal? rate, decimal? amount, IReadOnlySet<string> closedPeriods, DateTimeOffset nowUtc)
+    {
+        if (Adjustment is not { } adjustment)
+        {
+            return Result.Failure(Error.Validation(
+                "recurrence.adjustment_not_configured", "Configure o reajuste anual da recorrencia antes de aplica-lo."));
+        }
+
+        if ((rate is null) == (amount is null))
+        {
+            return Result.Failure(Error.Validation(
+                "recurrence.adjustment_value_required", "Informe o percentual ou o valor novo do reajuste (um dos dois)."));
+        }
+
+        if (_appliedAdjustments.Any(a => a.Year == year))
+        {
+            return Result.Failure(Error.Conflict(
+                "recurrence.adjustment_already_applied", "O reajuste desse aniversario ja foi aplicado."));
+        }
+
+        var period = year is < 1 or > 9999 ? string.Empty : adjustment.PeriodOf(year, Frequency);
+        if (ScheduledOn(period) is null || string.CompareOrdinal(period, FirstPeriod) <= 0)
+        {
+            return Result.Failure(Error.Validation(
+                "recurrence.adjustment_year_invalid", "Esse aniversario fica fora da recorrencia (antes do primeiro reajuste ou depois do fim)."));
+        }
+
+        var previous = AmountBefore(period);
+        decimal next;
+        if (rate is not null)
+        {
+            var valid = RecurrenceAdjustment.ValidateRate(rate);
+            if (valid.IsFailure)
+            {
+                return Result.Failure(valid.Error);
+            }
+
+            next = adjustment.Apply(previous, valid.Value);
+        }
+        else
+        {
+            next = amount!.Value;
+        }
+
+        var set = SetAmountFrom(period, next, closedPeriods, nowUtc);
+        if (set.IsFailure)
+        {
+            return set;
+        }
+
+        _appliedAdjustments.Add(new RecurrenceAdjustmentApplied(year, period, previous, AmountFor(period), rate, nowUtc));
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// RJT-4 (ADR-0010, decisao 5): o reajuste do aniversario mais recente (do mes dele ate 11 meses
+    /// depois), se ainda nao aplicado e dentro da agenda. A sugestao vem quando da para calcular.
+    /// </summary>
+    public RecurrencePendingAdjustment? PendingAdjustment(DateOnly today)
+    {
+        if (Adjustment is not { } adjustment)
+        {
+            return null;
+        }
+
+        var year = today.Month >= adjustment.AnniversaryMonth ? today.Year : today.Year - 1;
+        var period = adjustment.PeriodOf(year, Frequency);
+        if (_appliedAdjustments.Any(a => a.Year == year) || ScheduledOn(period) is null
+            || string.CompareOrdinal(period, FirstPeriod) <= 0)
+        {
+            return null;
+        }
+
+        var current = AmountBefore(period);
+        var rate = adjustment.Kind == RecurrenceAdjustmentKind.Fixed ? adjustment.Rate : null;
+        return new RecurrencePendingAdjustment(year, period, current, rate, rate is { } r ? adjustment.Apply(current, r) : null);
+    }
+
+    /// <summary>Valor vigente no periodo anterior a <paramref name="period"/>.</summary>
+    private decimal AmountBefore(string period) =>
+        LaterAmounts.LastOrDefault(a => string.CompareOrdinal(a.FromPeriod, period) < 0)?.Amount ?? Amount;
 
     /// <summary>
     /// RJT-2 (ADR-0010, decisao 1): o valor passa a <paramref name="amount"/> a partir de
@@ -193,6 +332,8 @@ public sealed class Recurrence
         }
 
         _laterAmounts.Remove(amount);
+        // RJT-4: sem a vigencia, o reajuste daquele aniversario pode ser aplicado de novo.
+        _appliedAdjustments.RemoveAll(a => a.FromPeriod == fromPeriod);
         UpdatedAtUtc = nowUtc;
         Version++;
         return Result.Success();
