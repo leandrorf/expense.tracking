@@ -340,6 +340,96 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("projected_transactions", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Reminders.ReminderDismissal", b =>
+                {
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("reminder_key");
+
+                    b.Property<DateTimeOffset>("DismissedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("dismissed_at_utc");
+
+                    b.HasKey("OwnerUserId", "Key");
+
+                    b.ToTable("reminder_dismissals", (string)null);
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Reminders.ReminderSettings", b =>
+                {
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<bool>("Budgets")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("budgets");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("varchar(254)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset?>("EmailConfirmedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("email_confirmed_at_utc");
+
+                    b.Property<bool>("EmailEnabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("email_enabled");
+
+                    b.Property<DateTimeOffset?>("EmailTokenExpiresAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("email_token_expires_at_utc");
+
+                    b.Property<string>("EmailTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("email_token_hash");
+
+                    b.Property<bool>("Invoices")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("invoices");
+
+                    b.Property<string>("LastSentKeys")
+                        .HasColumnType("text")
+                        .HasColumnName("last_sent_keys");
+
+                    b.Property<DateTime?>("LastSentOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("last_sent_on");
+
+                    b.Property<int>("LeadDays")
+                        .HasColumnType("int")
+                        .HasColumnName("lead_days");
+
+                    b.Property<bool>("Recurrences")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("recurrences");
+
+                    b.Property<int>("SendHour")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(8)
+                        .HasColumnName("send_hour");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("OwnerUserId");
+
+                    b.HasIndex("EmailEnabled")
+                        .HasDatabaseName("ix_reminder_settings_email_enabled");
+
+                    b.ToTable("reminder_settings", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Infrastructure.Persistence.ProjectionCheckpoint", b =>
                 {
                     b.Property<string>("Feed")

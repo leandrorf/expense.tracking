@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- NTF-8 (ADR-0009, decisao 6): envio SMTP. Licenca MIT. -->
+    <PackageReference Include="MailKit" />
   </ItemGroup>
 
   <ItemGroup>

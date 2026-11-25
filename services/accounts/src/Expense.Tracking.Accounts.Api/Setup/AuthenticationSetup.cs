@@ -11,6 +11,10 @@ public static class AuthenticationSetup
     public const string AccountScopesReadPolicy = "AccountScopesRead";
     public const string AccountScopesReadScope = "accounts.scopes.read";
 
+    /// <summary>NTF-7: cartoes de um dono para servicos (o job de avisos do reporting).</summary>
+    public const string AccountCardsReadPolicy = "AccountCardsRead";
+    public const string AccountCardsReadScope = "accounts.cards.read";
+
     public static IServiceCollection AddAccountsAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         var authority = configuration["Jwt:Authority"] ?? "http://localhost:5080";
@@ -51,7 +55,9 @@ public static class AuthenticationSetup
                 .RequireAssertion(ctx => HasScope(ctx.User, "expenses.write")))
             // EVT-4: endpoint interno, so para tokens de servico (client credentials).
             .AddPolicy(AccountScopesReadPolicy, p => p.RequireAuthenticatedUser()
-                .RequireAssertion(ctx => HasScope(ctx.User, AccountScopesReadScope)));
+                .RequireAssertion(ctx => HasScope(ctx.User, AccountScopesReadScope)))
+            .AddPolicy(AccountCardsReadPolicy, p => p.RequireAuthenticatedUser()
+                .RequireAssertion(ctx => HasScope(ctx.User, AccountCardsReadScope)));
 
         return services;
     }

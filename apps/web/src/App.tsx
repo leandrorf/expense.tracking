@@ -14,6 +14,11 @@ import { CardsView } from './views/CardsView';
 import { ForecastView } from './views/ForecastView';
 import { ImportView } from './views/ImportView';
 import { RecurrencesView } from './views/RecurrencesView';
+import { RemindersBell } from './views/RemindersBell';
+import { remindersApi, type Reminder } from './api/reminders';
+
+/** NTF-8: token do link de confirmação do e-mail, guardado até o login terminar. */
+const PENDING_EMAIL_TOKEN = 'expense.pendingEmailToken';
 import type { Transaction } from './api/types';
 import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
@@ -28,6 +33,22 @@ export function App() {
   const [tab, setTab] = useState<Tab>('summary');
   // REC-10: lançamento escolhido em "repetir todo mês", que abre a aba Recorrências preenchida.
   const [repeatFrom, setRepeatFrom] = useState<Transaction | null>(null);
+  // NTF-3: fatura que um aviso pediu para abrir na aba Cartões.
+  const [invoiceTarget, setInvoiceTarget] = useState<{ cardId: string; dueMonth: string } | null>(null);
+  // NTF-8: resultado da confirmação do e-mail dos avisos (link do e-mail).
+  const [emailConfirmation, setEmailConfirmation] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /** NTF-3 (ADR-0009, decisão 7): cada aviso leva aonde se resolve. */
+  function openReminder(r: Reminder) {
+    if ((r.kind === 'InvoiceDue' || r.kind === 'InvoiceOverdue') && r.cardId && r.dueMonth) {
+      setInvoiceTarget({ cardId: r.cardId, dueMonth: r.dueMonth });
+      setTab('cards');
+    } else if (r.kind === 'Budget') {
+      setTab('budgets');
+    } else {
+      setTab('recurrences');
+    }
+  }
 
   useEffect(() => {
     void bootstrap();
@@ -36,6 +57,13 @@ export function App() {
 
   async function bootstrap() {
     try {
+      // NTF-8: o link do e-mail abre /confirm-email?token=...; o token espera o login, se preciso.
+      if (window.location.pathname === '/confirm-email') {
+        const token = new URLSearchParams(window.location.search).get('token');
+        if (token) sessionStorage.setItem(PENDING_EMAIL_TOKEN, token);
+        window.history.replaceState({}, '', '/');
+      }
+
       if (window.location.pathname === '/callback') {
         await completeLogin();
         window.history.replaceState({}, '', '/');
@@ -44,12 +72,25 @@ export function App() {
       if (isAuthenticated()) {
         setUser(await getUserInfo());
         setStatus('authenticated');
+        void confirmPendingEmail();
       } else {
         setStatus('anonymous');
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Erro inesperado.');
       setStatus('error');
+    }
+  }
+
+  async function confirmPendingEmail() {
+    const token = sessionStorage.getItem(PENDING_EMAIL_TOKEN);
+    if (!token) return;
+    sessionStorage.removeItem(PENDING_EMAIL_TOKEN);
+    try {
+      const confirmed = await remindersApi.confirmEmail(token);
+      setEmailConfirmation({ ok: true, text: `E-mail ${confirmed.email} confirmado: o resumo diário dos avisos vai para ele.` });
+    } catch (err) {
+      setEmailConfirmation({ ok: false, text: err instanceof Error ? err.message : 'Não foi possível confirmar o e-mail.' });
     }
   }
 
@@ -112,6 +153,7 @@ export function App() {
           </button>
         </nav>
         <div className="user">
+          <RemindersBell refreshKey={tab} onOpen={openReminder} />
           <span data-cy="session-active" title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
           <button data-cy="logout" className="ghost" onClick={() => logout()}>
             Sair
@@ -120,6 +162,18 @@ export function App() {
       </header>
 
       <main className="content">
+        {emailConfirmation && (
+          <p
+            className={`notice${emailConfirmation.ok ? '' : ' warning'}`}
+            data-cy="email-confirmation"
+            data-ok={emailConfirmation.ok}
+          >
+            {emailConfirmation.text}{' '}
+            <button type="button" className="link" onClick={() => setEmailConfirmation(null)}>
+              fechar
+            </button>
+          </p>
+        )}
         {tab === 'summary' && <SummaryView />}
         {tab === 'forecast' && <ForecastView />}
         {tab === 'transactions' && (
@@ -134,7 +188,7 @@ export function App() {
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
-        {tab === 'cards' && <CardsView />}
+        {tab === 'cards' && <CardsView openInvoice={invoiceTarget} onInvoiceOpened={() => setInvoiceTarget(null)} />}
         {tab === 'accounting' && <AccountingExportView />}
       </main>
     </div>

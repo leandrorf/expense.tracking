@@ -1810,7 +1810,7 @@ REC-10 (2 pts). Total: 36 pts.
 **Ordem sugerida:** REC-1 → REC-2 → REC-3 → REC-4 (com o `reporting` implantado antes do `transactions`
 que publica os eventos novos) → REC-5 → REC-6 → REC-7 (fecha o Must) → REC-8 → REC-9 → REC-10.
 
-## 🔵 EPIC NTF — Lembretes de vencimento  · *To Do*
+## 🟢 EPIC NTF — Lembretes de vencimento  · *Done*
 **Problema:** o produto já sabe o que vai vencer (a fatura de cada cartão com a situação dela, as
 ocorrências recorrentes e o que está "a lançar"), mas só mostra isso a quem abre a aba certa e procura. Fatura
 fechada que ninguém olha vira fatura vencida, com juros no banco; boleto do aluguel cadastrado como
@@ -1843,7 +1843,7 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
 - **Já existe worker no reporting** (`ProjectionWorker`) e "hoje" no fuso configurado (`Reports:TimeZone`).
 - **Os orçamentos já calculam Atenção e Estourado** (BDG-4) no reporting, mas não avisam.
 
-**Decisões em aberto (para a ADR-0009, NTF-1; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0009](adr/0009-lembretes-de-vencimento.md), NTF-1; ficou a recomendação de cada uma, com os refinamentos da NTF-1):**
 1. **Canal.** Opções: (a) **avisos no app**: um sino no topo com o número de avisos e um painel, calculados
    na consulta com o token do usuário; (b) **e-mail diário**, enviado por um job; (c) **push do navegador**.
    *Recomendação:* (a) no Must, porque resolve a maior parte do problema sem infraestrutura nova; (b) no
@@ -1881,12 +1881,21 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
 7. **Atalhos.** *Recomendação:* cada aviso leva aonde se resolve: fatura → aba Cartões com aquela fatura
    aberta; ocorrência ou "a lançar" → aba Recorrências; orçamento → aba Orçamentos.
 
-- 🔵 **NTF-1** ADR: lembretes de vencimento.
+- ✅ **NTF-1** ADR: lembretes de vencimento. → [ADR-0009](adr/0009-lembretes-de-vencimento.md), Aceita.
   - *Dado* as decisões em aberto 1 a 7 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0009 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: tipos `InvoiceDue`, `InvoiceOverdue`,
+    `RecurrenceDue`, `RecurrencesToLaunch` e `Budget`, cada um com chave estável e urgência (`Overdue` >
+    `Today` > `Soon`); a fatura "a vencer" e a "vencida" têm chaves diferentes (dispensar uma não esconde a
+    outra) e o "a lançar" volta quando entra pendência nova. Tabelas `reminder_settings` (sem linha = padrão)
+    e `reminder_dismissals` (limpas depois de 120 dias). E-mail: token de confirmação de uso único, 24 h,
+    guardado como hash; o link abre a SPA logada, que confirma por rota autenticada (nada de rota anônima);
+    job de hora em hora, na hora escolhida (padrão 8h), uma vez por dia e só com aviso novo desde o último
+    envio; sem `Smtp:Host`, não envia. Escopo de serviço `accounts.cards.read` na semente do identity deste
+    repositório; `/api/internal/**` já é bloqueado no gateway.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **NTF-2** API de avisos.
+- ✅ **NTF-2** API de avisos. → `GET /reports/reminders`.
   - *Dado* um cartão com fatura Fechada de R$ 800 que vence em 2 dias, *quando* consulto
     `GET /reports/reminders`, *então* recebo um aviso de fatura com cartão, vencimento e R$ 800 a pagar;
     *e* com pagamento parcial de R$ 300, o aviso mostra R$ 500.
@@ -1896,36 +1905,81 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     *então* recebo o aviso; *dado* um salário (receita), *então* não.
   - *Dado* ocorrências "a lançar", *quando* consulto, *então* recebo um aviso só, com a quantidade.
   - *Dado* uma fatura paga ou uma ocorrência lançada ou pulada, *quando* consulto, *então* o aviso sumiu.
+  - Feito assim: regra pura `ReminderCalculator` (Domain/Reminders) sobre as faturas de todos os cartões do
+    usuário (`CardInvoiceSource`, ciclo lido no accounts com o token dele) e as recorrências projetadas
+    (agenda da REC-4): `InvoiceDue` (Fechada ou Parcialmente paga, falta pagar, vence de hoje até 3 dias;
+    `Today` se vence hoje), `InvoiceOverdue` (Vencida, até 30 dias), `RecurrenceDue` (ocorrência em aberto de
+    gasto de hoje até 3 dias) e um `RecurrencesToLaunch` com a quantidade (em aberto de 60 dias atrás até
+    ontem, gasto ou receita; chave pela data mais recente). Cada aviso traz chave, urgência, data, valor,
+    título e o destino do atalho (cartão e mês, ou regra e período); a lista vem por urgência, data e
+    título, com `overdue` (quantos vencidos) e `leadDays`. Smoke passo 25 (aviso aparece e some ao pular;
+    47 passos).
   - Estimativa: 5 · **Must** · Dependências: NTF-1
-- 🔵 **NTF-3** Sino e painel de avisos na SPA.
+- ✅ **NTF-3** Sino e painel de avisos na SPA. → `RemindersBell` no topo.
   - *Dado* avisos pendentes, *quando* abro o app, *então* o topo mostra um sino com o número de avisos
     (vencidos em destaque) e, ao clicar, um painel do mais urgente para o menos urgente.
   - *Dado* um aviso de fatura, *quando* clico nele, *então* vou para Cartões com aquela fatura aberta; *e*
     um aviso de ocorrência ou "a lançar" leva a Recorrências.
   - *Dado* que resolvi um aviso em outra aba do app, *quando* volto ao painel, *então* ele está
     atualizado (o painel relê ao abrir e quando a janela volta ao foco).
+  - Feito assim: `RemindersBell` no topo (`reminders-bell`, com `reminders-count` e a classe `has-overdue`
+    quando há vencido) relê os avisos ao montar, a cada troca de aba, ao abrir o painel e quando a janela
+    volta ao foco; falha na leitura só deixa o sino sem número. O painel (`reminders-panel`, fixo no canto
+    da janela, fecha ao clicar fora) lista `reminder-item` com `data-kind`/`data-urgency`, título e o
+    detalhe ("venceu em", "vence hoje", "vence em", "pendentes desde"). Fatura abre a aba Cartões direto na
+    fatura do aviso (`CardsView.openInvoice`, `InvoicesView.initialDueMonth`); ocorrência e "a lançar" levam
+    a Recorrências. Cypress `reminders.cy.ts` (fatura vencida de um cartão que fecha no dia da compra e
+    vence 5 dias depois, com a compra de 15 a 25 dias atrás, e aluguel de amanhã).
   - Estimativa: 5 · **Must** · Dependências: NTF-2
-- 🔵 **NTF-4** E2E Cypress: aviso, resolver, aviso some.
+- ✅ **NTF-4** E2E Cypress: aviso, resolver, aviso some. → `reminders-journey.cy.ts`.
   - *Dado* um cartão com fatura fechada a vencer e um aluguel recorrente a vencer, *quando* abro o app,
     *então* o sino mostra os dois; *quando* pago a fatura pelo atalho e lanço o aluguel, *então* os dois
     avisos somem.
+  - Feito assim: tudo pela SPA, achando os avisos pelo título (único por execução: o demo acumula dados).
+    Fatura vencida de um cartão que fecha no dia da compra e vence 5 dias depois (compra de 15 a 25 dias
+    atrás, escolhida para os dois dias existirem em todo mês) e aluguel recorrente de amanhã. A fatura é
+    aberta pelo aviso e paga pelo valor sugerido (fica "Paga"); o aluguel é lançado pela aba Recorrências;
+    os dois avisos somem sem dispensar nada.
   - Estimativa: 3 · **Must** · Dependências: NTF-3
-- 🔵 **NTF-5** Dispensar aviso.
+- ✅ **NTF-5** Dispensar aviso. → `POST /reports/reminders/dismissals`.
   - *Dado* um aviso de fatura "vence em 3 dias", *quando* o dispenso, *então* ele some; *e* volta se a
     fatura vencer sem pagamento.
   - *Dado* um aviso de ocorrência, *quando* o dispenso, *então* ele não volta para aquele período.
+  - Feito assim: `POST /reports/reminders/dismissals` com `{ key }` (`expenses.write`; chave vazia, longa
+    demais ou de prefixo desconhecido = 400 `reminders.key_invalid`; a mesma chave duas vezes = 204 sem
+    duplicar) grava em `reminder_dismissals` (dono + chave, migração `ReminderDismissals`) e apaga as
+    dispensas do usuário com mais de 120 dias. `GET /reports/reminders` esconde as chaves dispensadas; como
+    a fatura "a vencer" e a "vencida" têm chaves diferentes, a vencida volta. Na SPA, cada aviso tem
+    "dispensar" (`reminder-dismiss`), que o tira na hora e relê. Cypress: segundo caso do `reminders.cy.ts`
+    (dispensado continua fora depois de recarregar a página).
   - Estimativa: 3 · **Should** · Dependências: NTF-3
-- 🔵 **NTF-6** Preferências dos avisos.
+- ✅ **NTF-6** Preferências dos avisos. → `GET/PUT /reports/reminder-settings`.
   - *Dado* as preferências, *quando* mudo a antecedência para 7 dias e desligo os avisos de recorrência,
     *então* o painel passa a mostrar faturas que vencem em até 7 dias e nenhuma recorrência.
   - *Dado* uma antecedência fora de 0 a 15, *quando* salvo, *então* recebo 400.
+  - Feito assim: `reminder_settings` (uma linha por usuário, criada na primeira gravação; migração
+    `ReminderSettings`) com antecedência e os tipos ligados (faturas, recorrências e orçamentos, este para a
+    NTF-9). `GET /reports/reminder-settings` devolve os padrões (3 dias, tudo ligado) quando não há linha;
+    `PUT` (`expenses.write`) recusa antecedência fora de 0 a 15 com 400 `reminders.lead_days_invalid`. A
+    lista de avisos usa a antecedência gravada e nem lê os cartões quando as faturas estão desligadas. Na
+    SPA, "preferências" no painel do sino (`reminders-settings`: dias, faturas, recorrências, orçamentos);
+    o campo de dias guarda o texto digitado (apagar para redigitar não vira "0"). Cypress: terceiro caso do
+    `reminders.cy.ts`, que devolve os padrões no fim (as preferências do demo valem para todos os specs).
+    O primeiro caso passou a dispensar o aviso da fatura vencida que cria, para não acumular no demo.
   - Estimativa: 3 · **Should** · Dependências: NTF-2
-- 🔵 **NTF-7** Ciclo dos cartões para o serviço.
+- ✅ **NTF-7** Ciclo dos cartões para o serviço. → `GET /internal/credit-cards` no accounts.
   - *Dado* o `reporting` com token de serviço e o escopo `accounts.cards.read`, *quando* consulta
     `GET /internal/credit-cards?ownerUserId=...` no `accounts`, *então* recebe os cartões do dono com
     ciclo, conta e escopo; *e* pelo gateway a rota é bloqueada, e sem o escopo dá 403.
+  - Feito assim: `GetOwnerCardsForServiceHandler` no accounts devolve os cartões do dono (ativos ou não:
+    cartão desativado ainda pode ter fatura) com os campos que o reporting já lê do `/credit-cards` mais o
+    `accountScope`; política `AccountCardsRead` (escopo `accounts.cards.read`), sem `ownerUserId` = 400
+    `service_cards.owner_required`. O escopo entrou na semente do identity (`infra/identity/`), e o
+    identity já em execução o concede ao cliente de serviço depois de reiniciar (a semente atualiza
+    cliente existente). Conferido no stack real: com o escopo, 275 cartões do demo; sem ele, 403; pelo
+    gateway, 404. Documentado em `docs/architecture.md`.
   - Estimativa: 3 · **Should** · Dependências: NTF-1
-- 🔵 **NTF-8** Resumo diário por e-mail.
+- ✅ **NTF-8** Resumo diário por e-mail. → `ReminderDigestWorker`, confirmação por link, MailKit + Mailpit.
   - *Dado* que ativei o e-mail e confirmei o endereço pelo link, *quando* chega o horário do resumo e
     tenho aviso novo desde o último envio, *então* recebo um e-mail com os avisos e um link para o app;
     *e* sem aviso novo, nada é enviado.
@@ -1933,10 +1987,36 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     nada é enviado.
   - *Dado* o compose de desenvolvimento, *quando* o resumo sai, *então* ele aparece no Mailpit (o E2E
     confere por lá).
+  - Feito assim: `reminder_settings` ganhou endereço, liga/desliga, hora (0 a 23, padrão 8), confirmação
+    (hash SHA-256 do token de uso único, validade de 24 h) e o registro do último envio (dia e chaves);
+    migração `ReminderEmail`. `PUT /reports/reminder-settings/email` grava e, quando o endereço muda, zera a
+    confirmação e o último envio e manda o link `/confirm-email?token=` (400 `reminders.email_invalid`,
+    `email_required`, `send_hour_invalid`); `POST .../email/confirm` (logado; token errado, vencido, de outro
+    usuário ou reusado = 400 `reminders.email_token_invalid`) e `POST .../email/resend` (token novo, o antigo
+    deixa de valer). O `PUT` das preferências continua só com os tipos (um corpo sem e-mail não apaga o
+    endereço). O cálculo dos avisos foi para o `ReminderComposer`, usado pela API (cartões com o token do
+    usuário) e pelo `SendReminderDigestsJob` (cartões pelo `/internal/credit-cards`, NTF-7), que o
+    `ReminderDigestWorker` roda a cada `Reminders:Digest:IntervalSeconds` (padrão 1 h; 20 s no compose).
+    Envio com MailKit 4.18.2 (MIT; a 5.0 recém-lançada ficou de fora); sem `Smtp:Host`, nada sai. Compose:
+    Mailpit `v1.33.1` (8025), `App__PublicUrl`, `Smtp__*` e o escopo `accounts.cards.read` no reporting. Na
+    SPA, seção "Resumo diário por e-mail" nas preferências do sino (endereço, ligado, hora, situação e
+    "reenviar link"), e a rota `/confirm-email` guarda o token até o login e confirma com a sessão
+    (`email-confirmation`). **Dois defeitos achados pelos testes:** o formato `pt-BR` não existe com
+    `InvariantGlobalization` (o resumo quebraria no container; o dinheiro e a data são formatados à mão) e
+    trocar o endereço não liberava o resumo do dia para o endereço novo. Cypress `reminders-email.cy.ts`
+    (link lido pela API do Mailpit, resumo com o aviso de amanhã; desliga o e-mail do demo e apaga as regras
+    no fim, mesmo se falhar).
   - Estimativa: 8 · **Should** · Dependências: NTF-6, NTF-7
-- 🔵 **NTF-9** Aviso de orçamento.
+- ✅ **NTF-9** Aviso de orçamento. → aviso `Budget` em Atenção ou Estourado.
   - *Dado* um orçamento em Atenção ou Estourado no mês corrente, *quando* olho o painel, *então* vejo o
     aviso com o consumido e o limite, levando a Orçamentos.
+  - Feito assim: o `ReminderComposer` calcula a situação dos orçamentos do mês corrente com o mesmo
+    `BudgetStatusCalculator` da aba Orçamentos (BDG-4) quando o tipo "orçamentos" está ligado; Estourado vira
+    aviso urgente e Atenção, "em breve", com vencimento no fim do mês, o consumido em `amount` e o limite em
+    `limit`. A chave leva a situação (`budget:{id}:{yyyy-MM}:warning|exceeded`): dispensar o de Atenção não
+    esconde o de Estourado. Na SPA: "estourou: R$ 150,00 de R$ 100,00" ou "85% de R$ 1.000,00 gastos", e o
+    clique leva a Orçamentos; o resumo por e-mail ganha a mesma linha. Cypress: quarto caso do
+    `reminders.cy.ts` (dispensa o aviso no fim).
   - Estimativa: 2 · **Could** · Dependências: NTF-3
 
 **Fora do escopo (Won't, nesta versão):** push do navegador e app móvel; SMS e WhatsApp; aviso por

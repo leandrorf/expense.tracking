@@ -69,7 +69,7 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
         return rules
             .Select(r => new RecurrenceRecord(r.RecurrenceId, r.AccountId, r.AccountScope, r.TransactionType, r.PaymentMethod,
                 r.CreditCardId, r.Amount, r.Frequency, r.StartsOn, r.EndsOn,
-                closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>()))
+                closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>(), r.Description))
             .ToList();
     }
 

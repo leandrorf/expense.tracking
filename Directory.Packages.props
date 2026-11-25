@@ -30,6 +30,8 @@
   <ItemGroup Label="Importacao (IMP)">
     <!-- IMP-3 (ADR-0004): leitura de CSV. Licenca MS-PL OR Apache-2.0. -->
     <PackageVersion Include="CsvHelper" Version="34.0.0" />
+    <!-- NTF-8: e-mail SMTP (MIT). A 5.0 e uma versao maior recem-lancada; fica a 4.x estavel. -->
+    <PackageVersion Include="MailKit" Version="4.18.2" />
   </ItemGroup>
 
   <ItemGroup Label="Gateway">

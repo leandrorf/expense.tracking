@@ -1,11 +1,13 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Budgets;
 using Expense.Tracking.Reporting.Application.Forecast;
+using Expense.Tracking.Reporting.Application.Reminders;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Application.Projection;
 using Expense.Tracking.Reporting.Application.Reports;
 using Expense.Tracking.Reporting.Infrastructure.Auth;
 using Expense.Tracking.Reporting.Infrastructure.Clients;
+using Expense.Tracking.Reporting.Infrastructure.Email;
 using Expense.Tracking.Reporting.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +40,35 @@ public static class DependencyInjection
         services.AddScoped<GetCardInvoicesHandler>();
         services.AddScoped<GetCardLimitsHandler>();
         services.AddScoped<GetCashForecastHandler>();
+        services.AddScoped<GetRemindersHandler>();
+        services.AddScoped<IReminderStore, ReminderStore>();
+        services.AddScoped<DismissReminderHandler>();
+        services.AddScoped<GetReminderSettingsHandler>();
+        services.AddScoped<UpdateReminderSettingsHandler>();
+
+        // NTF-8 (ADR-0009, decisao 6): resumo por e-mail.
+        services.AddScoped<ReminderComposer>();
+        services.AddScoped<UpdateReminderEmailHandler>();
+        services.AddScoped<ResendReminderEmailConfirmationHandler>();
+        services.AddScoped<ConfirmReminderEmailHandler>();
+        services.AddScoped<SendReminderDigestsJob>();
+        services.AddSingleton(new AppLinks(ToBaseUri(configuration["App:PublicUrl"] ?? "http://localhost:5173/")));
+        var smtp = new SmtpOptions(
+            configuration["Smtp:Host"],
+            configuration.GetValue("Smtp:Port", 25),
+            configuration["Smtp:From"] ?? "avisos@expense.local",
+            configuration["Smtp:User"],
+            configuration["Smtp:Password"],
+            configuration.GetValue("Smtp:UseTls", false));
+        services.AddSingleton(smtp);
+        if (string.IsNullOrWhiteSpace(smtp.Host))
+        {
+            services.AddSingleton<IEmailSender, DisabledEmailSender>();
+        }
+        else
+        {
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        }
         services.AddSingleton(new InvoiceOptions(ResolveTimeZone(configuration["Reports:TimeZone"])));
         services.AddSingleton<ProjectionStatus>();
 
@@ -60,7 +91,8 @@ public static class DependencyInjection
             TokenEndpoint: new Uri(configuration["ServiceAuth:TokenEndpoint"] ?? "http://localhost:5080/oauth/token"),
             ClientId: configuration["ServiceAuth:ClientId"] ?? "expense-tracking-service",
             ClientSecret: secret ?? string.Empty,
-            Scope: configuration["ServiceAuth:Scope"] ?? "events.read"));
+            // NTF-8: o job do resumo tambem le os cartoes no endpoint interno do accounts.
+            Scope: configuration["ServiceAuth:Scope"] ?? "events.read accounts.cards.read"));
         services.TryAddSingleton(TimeProvider.System);
         services.AddHttpClient(ClientCredentialsTokenProvider.HttpClientName);
         services.AddSingleton<IServiceTokenProvider, ClientCredentialsTokenProvider>();
@@ -75,6 +107,11 @@ public static class DependencyInjection
         var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
         services.AddHttpClient<ICardDirectory, AccountsCardDirectory>(client =>
             client.BaseAddress = ToBaseUri(accountsBaseUrl));
+
+        // NTF-8: os mesmos cartoes, sem usuario, pelo endpoint interno (token de servico).
+        services.AddHttpClient<IServiceCardDirectory, AccountsServiceCardDirectory>(client =>
+            client.BaseAddress = ToBaseUri(accountsBaseUrl))
+            .AddHttpMessageHandler<ServiceTokenHandler>();
 
         return services;
     }

@@ -95,3 +95,27 @@ public sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now;
 }
+
+/// <summary>NTF-8: o endpoint interno do accounts nos testes: todos os cartoes do dono, sem token de usuario.</summary>
+public sealed class FakeServiceCardDirectory(CardRegistry registry) : Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory
+{
+    public Task<IReadOnlyList<CardInfo>> ListForOwnerAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<CardInfo>>(registry.ListOf(ownerUserId).Select(c => c.Card).ToList());
+}
+
+/// <summary>NTF-8: guarda os e-mails em vez de enviar.</summary>
+public sealed class RecordingEmailSender : Expense.Tracking.Reporting.Application.Reminders.IEmailSender
+{
+    private readonly ConcurrentQueue<Expense.Tracking.Reporting.Application.Reminders.EmailMessage> _sent = new();
+
+    public IReadOnlyList<Expense.Tracking.Reporting.Application.Reminders.EmailMessage> Sent => [.. _sent];
+
+    public IReadOnlyList<Expense.Tracking.Reporting.Application.Reminders.EmailMessage> To(string address) =>
+        _sent.Where(m => m.To == address).ToList();
+
+    public Task SendAsync(Expense.Tracking.Reporting.Application.Reminders.EmailMessage message, CancellationToken cancellationToken)
+    {
+        _sent.Enqueue(message);
+        return Task.CompletedTask;
+    }
+}

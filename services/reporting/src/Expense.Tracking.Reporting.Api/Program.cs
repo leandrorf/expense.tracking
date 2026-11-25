@@ -19,6 +19,9 @@ builder.Services.AddReportingInfrastructure(builder.Configuration);
 if (builder.Configuration.GetValue("Projection:Enabled", true))
 {
     builder.Services.AddHostedService<ProjectionWorker>();
+    // NTF-8: resumo diario de avisos por e-mail.
+    builder.Services.AddSingleton(ReminderDigestOptions.From(builder.Configuration));
+    builder.Services.AddHostedService<ReminderDigestWorker>();
 }
 builder.Services.AddReportingAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
@@ -51,6 +54,7 @@ app.MapReportsEndpoints();
 app.MapBudgetsEndpoints();
 app.MapInvoicesEndpoints();
 app.MapForecastEndpoints();
+app.MapRemindersEndpoints();
 
 await InitializeDatabaseAsync(app);
 

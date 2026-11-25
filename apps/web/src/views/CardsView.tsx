@@ -5,7 +5,14 @@ import { invoicesApi, type CardLimit } from '../api/reports';
 import type { Account, CreditCard } from '../api/types';
 import { InvoicesView } from './InvoicesView';
 
-export function CardsView() {
+/**
+ * `openInvoice` (NTF-3): fatura que um aviso pediu para abrir; a aba vai direto para ela depois de
+ * carregar os cartões.
+ */
+export function CardsView({
+  openInvoice = null,
+  onInvoiceOpened,
+}: { openInvoice?: { cardId: string; dueMonth: string } | null; onInvoiceOpened?: () => void } = {}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   // INV-10: limite disponível por cartão (vem do reporting; sem ele, a lista continua funcionando).
@@ -23,6 +30,18 @@ export function CardsView() {
   const [submitting, setSubmitting] = useState(false);
   // INV-7: cartão cujas faturas estão abertas (a aba mostra a lista ou as faturas).
   const [invoicesOf, setInvoicesOf] = useState<CreditCard | null>(null);
+  const [initialDueMonth, setInitialDueMonth] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!openInvoice || cards.length === 0) return;
+    const card = cards.find((c) => c.id === openInvoice.cardId);
+    if (card) {
+      setInitialDueMonth(openInvoice.dueMonth);
+      setInvoicesOf(card);
+    }
+    onInvoiceOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openInvoice, cards]);
 
   async function load() {
     setLoading(true);
@@ -82,10 +101,13 @@ export function CardsView() {
     // Ao voltar, recarrega: um pagamento feito na fatura muda o limite disponível.
     return (
       <InvoicesView
+        key={`${invoicesOf.id}:${initialDueMonth ?? ''}`}
         card={invoicesOf}
         accounts={accounts}
+        initialDueMonth={initialDueMonth}
         onBack={() => {
           setInvoicesOf(null);
+          setInitialDueMonth(undefined);
           void load();
         }}
       />

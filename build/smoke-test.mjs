@@ -496,6 +496,32 @@ async function main() {
       + `relancar ${relaunch}, periodo invalido ${badPeriod}); excluida volta +${afterDelete.recurring}; pulada ${skipStatus} → +${afterSkip.recurring}`);
   if (rule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${rule.id}`, { method: 'DELETE', headers: auth });
 
+  // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
+  const tomorrow = isoDay(new Date(Date.now() + 86400000));
+  const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: account.id, type: 'Expense', paymentMethod: 'Boleto', description: 'Smoke aviso',
+      category: 'Smoke aviso', amount: 321, currency: 'BRL', frequency: 'Monthly', startsOn: tomorrow }),
+  })).json();
+  const reminderKey = `recurrence:${dueRule.id}:${tomorrow.slice(0, 7)}`;
+  const hasReminder = async () => {
+    const r = await fetch(`${GATEWAY}/api/reports/reminders`, { headers: auth });
+    return r.status === 200 && (await r.json()).items.some((i) => i.key === reminderKey);
+  };
+  let reminderShown = false;
+  for (let i = 0; i < 30 && !reminderShown; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    reminderShown = await hasReminder();
+  }
+  await fetch(`${GATEWAY}/api/transactions/recurrences/${dueRule.id}/occurrences/${tomorrow.slice(0, 7)}/skip`, { method: 'POST', headers: auth });
+  let reminderGone = false;
+  for (let i = 0; i < 30 && !reminderGone; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    reminderGone = !(await hasReminder());
+  }
+  ok(reminderShown && reminderGone, `GET /api/reports/reminders avisa a saida recorrente de amanha (${reminderShown}) e some ao pular (${reminderGone})`);
+  if (dueRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${dueRule.id}`, { method: 'DELETE', headers: auth });
+
   // O gateway responde antes de receber o arquivo inteiro e fecha a conexao; o fetch do Node as
   // vezes reporta isso como erro de rede em vez de entregar a resposta. Os dois sao recusa.
   const big = await upload(new Uint8Array(6 * 1024 * 1024).fill(97), 'grande.ofx')

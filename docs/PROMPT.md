@@ -97,3 +97,4 @@ documento** como fonte de requisito e delegam execução técnica aos agents esp
 | 2026-11-21 | Épico BDG (orçamentos por categoria e escopo, ADR-0002) concluído; `reporting` passa a ter dado escrito pelo usuário. Épico IMP (importação CSV/OFX) refinado no backlog. | épicos BDG/IMP |
 | 2026-11-21 | Iniciativa de levar o `identity` para um repositório próprio (épico IDX): o projeto segue microserviços também no versionamento, começando pela autenticação. | pedido do usuário |
 | 2026-11-21 | `identity` sai do monorepo: vive em `leandrorf/expense-identity` e entra pela imagem `ghcr.io/leandrorf/expense-identity` com versão fixada; o monorepo declara os clientes OAuth em `infra/identity/` (ADR-0003, épico IDX). | épico IDX |
+| 2026-11-23 | Épico NTF (lembretes de vencimento, ADR-0009) em andamento: avisos no app calculados no `reporting`; novo escopo de serviço `accounts.cards.read` para o job do e-mail diário ler o ciclo dos cartões. | épico NTF |
