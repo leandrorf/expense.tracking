@@ -74,4 +74,37 @@ describe('Recorrencias: valores e reajuste', () => {
     ruleRow().find('[data-cy=rec-remove]').click();
     cy.contains('[data-cy=rec-row]', rent).should('not.exist');
   });
+
+  // RJT-7: pelo indice, o resumo traz o IPCA (com a sugestao do acumulado, ou aguardando o mes que falta,
+  // conforme o que o job ja buscou) e o reajuste pode ser confirmado com o percentual digitado.
+  it('reajuste pelo indice: mostra o indice e aceita o percentual digitado', () => {
+    const [account, school] = [`E2E Reajuste Indice ${stamp}`, `Escola ${stamp}`];
+    const ruleRow = () => cy.contains('[data-cy=rec-row]', school);
+
+    cy.get('[data-cy=tab-accounts]').click();
+    cy.get('[data-cy=account-name]').type(account);
+    cy.get('[data-cy=account-submit]').click();
+    cy.get('[data-cy=accounts-table]').contains('td', account).should('be.visible');
+
+    cy.get('[data-cy=tab-recurrences]').click();
+    cy.get('[data-cy=rec-account]').select(account);
+    cy.get('[data-cy=rec-payment-method]').select('Boleto');
+    cy.get('[data-cy=rec-description]').type(school);
+    cy.get('[data-cy=rec-category]').type(`Educacao ${stamp}`);
+    cy.get('[data-cy=rec-amount]').type('1000');
+    cy.get('[data-cy=rec-starts-on]').clear().type(startedOn);
+    cy.get('[data-cy=rec-adjust-kind]').select('Index');
+    cy.get('[data-cy=rec-adjust-index]').select('IPCA');
+    cy.get('[data-cy=rec-submit]').click();
+    ruleRow().find('[data-cy=rec-adjustment]').should('contain', 'pelo IPCA');
+
+    ruleRow().find('[data-cy=rec-adjust-pending]').click();
+    cy.get('[data-cy=rec-adjust-summary]').should('contain', 'IPCA').and('contain', '1.000,00');
+    cy.get('[data-cy=rec-adjust-value]').clear().type('4');
+    cy.get('[data-cy=rec-adjust-confirm]').click();
+    ruleRow().find('[data-cy=rec-value]').should('contain', '1.040,00');
+
+    ruleRow().find('[data-cy=rec-remove]').click();
+    cy.contains('[data-cy=rec-row]', school).should('not.exist');
+  });
 });

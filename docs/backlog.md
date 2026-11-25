@@ -2209,7 +2209,18 @@ CI.
   - *Dado* o job desligado, *quando* o sistema roda, *então* nada sai para a internet e o reajuste
     continua manual.
   - Estimativa: 5 · **Should** · Dependências: RJT-1
-- 🔵 **RJT-7** Reajuste sugerido pelo índice.
+- ✅ **RJT-7** Reajuste sugerido pelo índice. → `pendingAdjustment` com o acumulado ou `waitingFor`.
+  - Feito assim: no reajuste pelo índice, o `pendingAdjustment` usa os 12 meses que terminam no mês
+    anterior ao aniversário (`RecurrenceAdjustment.IndexWindow`), lidos de `economic_indexes`
+    (`PendingAdjustmentRates` carrega só os índices que as regras usam, dos últimos 24 meses): `rate` =
+    `Π(1 + r/100) − 1` em % com 4 casas (aceito de volta pelo `POST .../adjustments`) e `suggestedAmount`
+    com o arredondamento e o "não reduzir" do reajuste (acumulado negativo com "não reduzir" = valor
+    atual). Faltando algum mês, `rate`/`suggestedAmount` vêm nulos e `waitingFor` traz o mês mais recente
+    que falta; o reajuste continua confirmável com o percentual digitado. Na SPA, o resumo mostra
+    "R$ X → R$ Y (IPCA Z%)" ou "aguardando o IPCA de <mês>; informe o percentual ou o valor novo", e o
+    percentual sugerido vem preenchido. Smoke passo 24c (49 passos); conferido com o IPCA real
+    (nov/2025–out/2026 = 4,6284%). E2E em `recurrence-values.cy.ts` confirma pelo índice com percentual
+    digitado (o resultado do job varia).
   - *Dado* um aluguel com reajuste por IGP-M em março e as variações de março do ano anterior a fevereiro
     deste ano guardadas, *quando* abro a regra em março, *então* vejo o valor sugerido (acumulado de 12
     meses, 2 casas) e confirmo com um clique; *e* com acumulado negativo e "não reduzir", a sugestão é o

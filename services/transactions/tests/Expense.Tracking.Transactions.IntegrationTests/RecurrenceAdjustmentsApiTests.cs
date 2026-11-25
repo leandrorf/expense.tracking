@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Expense.Tracking.Transactions.Application.Abstractions;
+using Expense.Tracking.Transactions.Domain.Recurrences;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Expense.Tracking.Transactions.IntegrationTests;
 
@@ -80,6 +83,46 @@ public sealed class RecurrenceAdjustmentsApiTests(TransactionsApiFactory factory
         Assert.Equal((HttpStatusCode.BadRequest, "recurrence.adjustment_not_configured"), (notConfigured.StatusCode, await TitleAsync(notConfigured)));
         Assert.Equal((HttpStatusCode.BadRequest, "recurrence.adjustment_year_invalid"), (noYear.StatusCode, await TitleAsync(noYear)));
         Assert.Equal(JsonValueKind.Null, plain.GetProperty("adjustment").ValueKind);
+    }
+
+    [Fact]
+    public async Task PendingAdjustment_ByIndex_UsesTheStoredMonths_OrSaysWhichOneIsMissing()
+    {
+        // RJT-7: reajuste pelo INPC neste mes; os 12 meses anteriores guardados com 0,5% (o ultimo so depois).
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var anniversary = new DateOnly(today.Year, today.Month, 1);
+        var lastMonth = anniversary.AddMonths(-1).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var indexes = scope.ServiceProvider.GetRequiredService<IEconomicIndexRepository>();
+            for (var back = 2; back <= 12; back++)
+            {
+                indexes.Add(EconomicIndexValue.Create(EconomicIndex.INPC,
+                    anniversary.AddMonths(-back).ToString("yyyy-MM", CultureInfo.InvariantCulture), 0.5m, DateTimeOffset.UtcNow));
+            }
+
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        var client = AuthenticatedAs(Guid.NewGuid().ToString());
+        var rule = await Json(await client.PostAsJsonAsync("/transactions/recurrences", RecurrencesApiTests.Rule(Guid.NewGuid(),
+            startsOn: anniversary.AddYears(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            adjustment: new { anniversaryMonth = today.Month, kind = "Index", index = "INPC" })));
+        var waiting = rule.GetProperty("pendingAdjustment");
+        Assert.Equal((lastMonth, JsonValueKind.Null), (waiting.GetProperty("waitingFor").GetString(), waiting.GetProperty("suggestedAmount").ValueKind));
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<IEconomicIndexRepository>()
+                .Add(EconomicIndexValue.Create(EconomicIndex.INPC, lastMonth, 0.5m, DateTimeOffset.UtcNow));
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        var pending = (await client.GetFromJsonAsync<JsonElement>($"/transactions/recurrences/{rule.GetProperty("id").GetGuid()}"))
+            .GetProperty("pendingAdjustment");
+        // 1,005^12 - 1 = 6,1678%; 2.000 x 1,061678 = 2.123,36.
+        Assert.Equal((6.1678m, 2123.36m, JsonValueKind.Null), (pending.GetProperty("rate").GetDecimal(),
+            pending.GetProperty("suggestedAmount").GetDecimal(), pending.GetProperty("waitingFor").ValueKind));
     }
 
     [Fact]

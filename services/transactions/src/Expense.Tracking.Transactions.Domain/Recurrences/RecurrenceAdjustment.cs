@@ -91,6 +91,26 @@ public sealed record RecurrenceAdjustment(
         return NoReduction && adjusted < previous ? previous : adjusted;
     }
 
+    /// <summary>
+    /// RJT-7 (ADR-0010, decisao 5): os 12 meses (<c>yyyy-MM</c>, em ordem) cujo acumulado reajusta o
+    /// aniversario de <paramref name="year"/>: os que terminam no mes anterior ao do aniversario.
+    /// </summary>
+    public IReadOnlyList<string> IndexWindow(int year)
+    {
+        var anniversary = new DateOnly(year, AnniversaryMonth, 1);
+        return Enumerable.Range(1, 12)
+            .Select(back => anniversary.AddMonths(-back).ToString("yyyy-MM", CultureInfo.InvariantCulture))
+            .Reverse()
+            .ToList();
+    }
+
+    /// <summary>RJT-7: acumulado das variacoes mensais (<c>Π(1 + r/100) − 1</c>), em %, com 4 casas.</summary>
+    public static decimal Accumulate(IEnumerable<decimal> monthlyRates)
+    {
+        var factor = monthlyRates.Aggregate(1m, (acc, r) => acc * (1m + r / 100m));
+        return decimal.Round((factor - 1m) * 100m, 4, MidpointRounding.AwayFromZero);
+    }
+
     /// <summary>Periodo do aniversario de um ano: <c>yyyy-MM</c> na mensal, <c>yyyy</c> na anual.</summary>
     public string PeriodOf(int year, RecurrenceFrequency frequency) => frequency == RecurrenceFrequency.Yearly
         ? year.ToString("0000", CultureInfo.InvariantCulture)
@@ -103,6 +123,11 @@ public sealed record RecurrenceAdjustmentApplied(
 
 /// <summary>
 /// RJT-4 (ADR-0010, decisao 5): reajuste do aniversario mais recente ainda nao aplicado. <see cref="Rate"/> e
-/// <see cref="SuggestedAmount"/> vem quando da para calcular (percentual fixo; o indice chega na RJT-7).
+/// <see cref="SuggestedAmount"/> vem quando da para calcular: sempre no percentual fixo; pelo indice (RJT-7),
+/// quando ha os 12 meses. Faltando algum, <see cref="WaitingFor"/> e o mes de indice mais recente que falta.
 /// </summary>
-public sealed record RecurrencePendingAdjustment(int Year, string Period, decimal CurrentAmount, decimal? Rate, decimal? SuggestedAmount);
+public sealed record RecurrencePendingAdjustment(
+    int Year, string Period, decimal CurrentAmount, decimal? Rate, decimal? SuggestedAmount, string? WaitingFor = null);
+
+/// <summary>RJT-7: variacao mensal guardada de um indice num mes (<c>yyyy-MM</c>), ou nulo se ainda nao saiu.</summary>
+public delegate decimal? IndexRateLookup(EconomicIndex index, string month);

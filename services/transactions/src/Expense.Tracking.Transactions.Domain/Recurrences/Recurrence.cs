@@ -264,9 +264,10 @@ public sealed class Recurrence
 
     /// <summary>
     /// RJT-4 (ADR-0010, decisao 5): o reajuste do aniversario mais recente (do mes dele ate 11 meses
-    /// depois), se ainda nao aplicado e dentro da agenda. A sugestao vem quando da para calcular.
+    /// depois), se ainda nao aplicado e dentro da agenda. A sugestao vem quando da para calcular: pelo
+    /// indice (RJT-7), com o acumulado dos 12 meses anteriores ao aniversario em <paramref name="indexRates"/>.
     /// </summary>
-    public RecurrencePendingAdjustment? PendingAdjustment(DateOnly today)
+    public RecurrencePendingAdjustment? PendingAdjustment(DateOnly today, IndexRateLookup? indexRates = null)
     {
         if (Adjustment is not { } adjustment)
         {
@@ -282,8 +283,22 @@ public sealed class Recurrence
         }
 
         var current = AmountBefore(period);
-        var rate = adjustment.Kind == RecurrenceAdjustmentKind.Fixed ? adjustment.Rate : null;
-        return new RecurrencePendingAdjustment(year, period, current, rate, rate is { } r ? adjustment.Apply(current, r) : null);
+        if (adjustment.Kind == RecurrenceAdjustmentKind.Fixed)
+        {
+            var fixedRate = adjustment.Rate!.Value;
+            return new RecurrencePendingAdjustment(year, period, current, fixedRate, adjustment.Apply(current, fixedRate));
+        }
+
+        var window = adjustment.IndexWindow(year);
+        var monthly = window.Select(month => indexRates?.Invoke(adjustment.Index!.Value, month)).ToList();
+        if (monthly.Any(r => r is null))
+        {
+            var missing = window.Where((_, i) => monthly[i] is null).Last();
+            return new RecurrencePendingAdjustment(year, period, current, null, null, missing);
+        }
+
+        var rate = RecurrenceAdjustment.Accumulate(monthly.Select(r => r!.Value));
+        return new RecurrencePendingAdjustment(year, period, current, rate, adjustment.Apply(current, rate));
     }
 
     /// <summary>Valor vigente no periodo anterior a <paramref name="period"/>.</summary>

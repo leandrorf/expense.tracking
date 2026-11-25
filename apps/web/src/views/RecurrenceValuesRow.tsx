@@ -68,6 +68,8 @@ export function RecurrenceValuesRow({
       currency: rule.currency,
     });
   const now = currentPeriod(rule.frequency);
+  // RJT-7: no reajuste pelo índice, o nome dele acompanha o percentual sugerido.
+  const indexName = rule.adjustment?.kind === 'Index' && rule.adjustment.index ? INDEX_LABEL[rule.adjustment.index] : null;
 
   async function run(action: () => Promise<unknown>, message: string): Promise<boolean> {
     setSaving(true);
@@ -129,8 +131,10 @@ export function RecurrenceValuesRow({
             <span data-cy="rec-adjust-summary">
               Reajuste de {periodLabel(pending.period)}: {money(pending.currentAmount)}
               {pending.suggestedAmount != null && pending.rate != null
-                ? ` → ${money(pending.suggestedAmount)} (${percentLabel(pending.rate)})`
-                : ' → informe o percentual ou o valor novo'}
+                ? ` → ${money(pending.suggestedAmount)} (${indexName ? `${indexName} ` : ''}${percentLabel(pending.rate)})`
+                : pending.waitingFor
+                  ? ` → aguardando o ${indexName ?? 'índice'} de ${periodLabel(pending.waitingFor)}; informe o percentual ou o valor novo`
+                  : ' → informe o percentual ou o valor novo'}
             </span>
             <select
               data-cy="rec-adjust-by"

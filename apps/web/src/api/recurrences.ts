@@ -30,6 +30,8 @@ export interface PendingAdjustment {
   currentAmount: number;
   rate: number | null;
   suggestedAmount: number | null;
+  /** RJT-7: mês do índice (`yyyy-MM`) que falta para sugerir; dá para confirmar à mão assim mesmo. */
+  waitingFor: string | null;
 }
 
 /** REC-2: campos da regra (criar e editar). O início é a âncora da agenda (dia, e mês na anual). */

@@ -521,6 +521,21 @@ async function main() {
     `reajuste: regra ${adjRes.status} sugere ${adjRule.pendingAdjustment?.suggestedAmount}; aplicado ${appliedRes.status} → ${adjusted} desde ${thisMonth}; de novo ${reapply}`);
   if (adjRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${adjRule.id}`, { method: 'DELETE', headers: auth });
 
+  // 24c) Reajuste pelo indice (RJT-7): sugere pelo acumulado de 12 meses guardado ou diz qual mes falta.
+  const idxRes = await fetch(`${GATEWAY}/api/transactions/recurrences`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ accountId: account.id, type: 'Expense', paymentMethod: 'Boleto', description: 'Smoke reajuste indice',
+      category: 'Smoke reajuste', amount: 1000, currency: 'BRL', frequency: 'Monthly',
+      startsOn: `${nowDate.getFullYear() - 1}-${thisMonth.slice(5)}-01`,
+      adjustment: { anniversaryMonth: nowDate.getMonth() + 1, kind: 'Index', index: 'IPCA' } }),
+  });
+  const idxRule = idxRes.status === 201 ? await idxRes.json() : {};
+  const idxPending = idxRule.pendingAdjustment ?? {};
+  ok(idxRes.status === 201 && ((idxPending.rate != null && idxPending.suggestedAmount != null) || idxPending.waitingFor != null),
+    `reajuste pelo IPCA: regra ${idxRes.status}, ${idxPending.rate != null
+      ? `sugere ${idxPending.suggestedAmount} (${idxPending.rate}%)` : `aguardando o indice de ${idxPending.waitingFor}`}`);
+  if (idxRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${idxRule.id}`, { method: 'DELETE', headers: auth });
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

@@ -263,9 +263,9 @@ public sealed class RecurrenceTests
         Assert.Null(rule.PendingAdjustment(new DateOnly(2030, 3, 1)));
         Assert.Equal(new RecurrencePendingAdjustment(2031, "2031-03", 2100m, 5m, 2205m), rule.PendingAdjustment(new DateOnly(2031, 3, 1)));
 
-        // Pelo indice, a sugestao fica para quando houver indices (RJT-7).
+        // Pelo indice, sem os meses guardados, aguarda o mais recente que falta (RJT-7).
         var byIndex = Adjusted(new RecurrenceAdjustmentSpec(3, RecurrenceAdjustmentKind.Index, EconomicIndex.IPCA, null));
-        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, null, null), byIndex.PendingAdjustment(new DateOnly(2030, 3, 1)));
+        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, null, null, "2030-02"), byIndex.PendingAdjustment(new DateOnly(2030, 3, 1)));
 
         // Anual: o periodo e o ano.
         var yearly = Adjusted(new RecurrenceAdjustmentSpec(null, RecurrenceAdjustmentKind.Fixed, null, 10m), amount: 1200m, frequency: "Yearly");
@@ -290,5 +290,54 @@ public sealed class RecurrenceTests
             RecurrenceFrequency.Monthly, new DateOnly(2030, 1, 10), null, Now, "2030-01", adjustment: null);
         Assert.True(removed.Value);
         Assert.Equal((version + 1, (RecurrenceAdjustment?)null), (rule.Version, rule.Adjustment));
+    }
+
+    // ---------- RJT-7 (ADR-0010, decisao 5): sugestao pelo indice ----------
+
+    private static readonly RecurrenceAdjustmentSpec IgpmInMarch = new(3, RecurrenceAdjustmentKind.Index, EconomicIndex.IGPM, null);
+
+    /// <summary>Variacoes do IGP-M de mar/2029 a fev/2030 (as que reajustam marco de 2030).</summary>
+    private static IndexRateLookup Igpm(decimal monthly, params string[] missing) => (index, month) =>
+        index == EconomicIndex.IGPM && string.CompareOrdinal(month, "2029-03") >= 0 && string.CompareOrdinal(month, "2030-02") <= 0
+            && !missing.Contains(month)
+            ? monthly
+            : null;
+
+    [Fact]
+    public void IndexWindow_IsTheTwelveMonthsBeforeTheAnniversary_AndAccumulateCompoundsThem()
+    {
+        var adjustment = new RecurrenceAdjustment(3, RecurrenceAdjustmentKind.Index, EconomicIndex.IGPM, null, true);
+
+        Assert.Equal(["2029-03", "2029-04", "2029-05", "2029-06", "2029-07", "2029-08", "2029-09", "2029-10", "2029-11", "2029-12",
+            "2030-01", "2030-02"], adjustment.IndexWindow(2030));
+        Assert.Equal(12.6825m, RecurrenceAdjustment.Accumulate(Enumerable.Repeat(1m, 12))); // 1,01^12 - 1
+        Assert.Equal(-1.1965m, RecurrenceAdjustment.Accumulate([-0.5m, -0.7m]));
+    }
+
+    [Fact]
+    public void PendingAdjustment_ByIndex_SuggestsTheAccumulated_OrWaitsForTheMissingMonth()
+    {
+        var rule = Adjusted(IgpmInMarch);
+        var march = new DateOnly(2030, 3, 5);
+
+        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, 12.6825m, 2253.65m), rule.PendingAdjustment(march, Igpm(1m)));
+        Assert.Equal(new RecurrencePendingAdjustment(2030, "2030-03", 2000m, null, null, "2030-02"),
+            rule.PendingAdjustment(march, Igpm(1m, "2030-02")));
+        Assert.Equal("2029-07", rule.PendingAdjustment(march, Igpm(1m, "2029-05", "2029-07"))!.WaitingFor);
+
+        // A sugestao pode ser confirmada como veio.
+        var pending = rule.PendingAdjustment(march, Igpm(1m))!;
+        Assert.True(rule.ApplyAdjustment(pending.Year, pending.Rate, null, new HashSet<string>(), Now).IsSuccess);
+        Assert.Equal(2253.65m, rule.AmountFor("2030-03"));
+    }
+
+    [Fact]
+    public void PendingAdjustment_ByIndex_WithANegativeAccumulated_KeepsTheAmountUnlessReductionIsAllowed()
+    {
+        var march = new DateOnly(2030, 3, 5);
+
+        Assert.Equal(2000m, Adjusted(IgpmInMarch).PendingAdjustment(march, Igpm(-0.2m))!.SuggestedAmount);
+        var reduced = Adjusted(IgpmInMarch with { NoReduction = false }).PendingAdjustment(march, Igpm(-0.2m))!;
+        Assert.Equal((-2.3738m, 1952.52m), (reduced.Rate!.Value, reduced.SuggestedAmount!.Value));
     }
 }
