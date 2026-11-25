@@ -2031,12 +2031,166 @@ painel usável no dia a dia; o e-mail entrega o lembrete a quem não abre o app,
 
 **Ordem sugerida:** NTF-1 → NTF-2 → NTF-3 → NTF-4 (fecha o Must) → NTF-5 → NTF-6 → NTF-7 → NTF-8 → NTF-9.
 
+## 🔵 EPIC RJT — Reajuste das recorrências  · *To Do*
+**Problema:** aluguel, condomínio, escola, plano de saúde e contratos de serviço são reajustados uma vez
+por ano, quase sempre por um índice (IGP-M, IPCA, INPC) ou por um percentual combinado. A recorrência
+(REC) só conhece um valor: o usuário precisa lembrar de editar a regra no mês certo, e a edição muda todos
+os períodos em aberto de uma vez, inclusive os anteriores ao reajuste (ADR-0008, decisão 6). A previsão
+de caixa e o saldo projetado dos próximos 12 meses ficam com o valor velho depois do aniversário do
+contrato, e não há registro de quanto a conta valia antes.
+**Objetivo (outcome):** a recorrência passa a ter valor com vigência (o reajuste vale a partir de um
+período, sem mudar os anteriores), sabe quando e como reajusta, e no aniversário o app sugere o valor novo
+pelo índice oficial para o usuário confirmar. A previsão já conta com o reajuste, marcado como estimado
+até ser confirmado.
+**Métricas de sucesso:** (1) reajustar o aluguel a partir de março não muda janeiro e fevereiro (lançados
+ou em aberto); (2) no mês do aniversário, o valor sugerido bate com o índice acumulado de 12 meses
+publicado pelo Banco Central (até 2 casas); (3) a previsão de 12 meses de um aluguel com reajuste em março
+mostra o valor estimado de março em diante; (4) a jornada "configurar, reajustar, conferir" passa no E2E do
+CI.
+**Rastreabilidade:** `docs/PROMPT.md` → previsão e controle de gastos fixos; Won't do épico REC
+("reajuste automático do valor (IGP-M, IPCA)"); ideia de produto promovida a pedido do dono do produto
+(2026-11-25).
+
+**Achados no código que moldam o épico:**
+- **A regra tem um valor só.** `Recurrence.Amount` é o valor estimado de todas as ocorrências; editar a
+  regra (REC-2) muda todos os períodos em aberto. Os fechados (lançados ou pulados) não mudam, mas não há
+  como dizer "de março em diante".
+- **O padrão de vigência já existe nos orçamentos** (ADR-0002, decisão 1): `Budget` guarda limites com
+  `EffectiveFrom` e `LimitFor(month)` acha o vigente. Mudar o valor cria vigência nova sem mexer nos meses
+  anteriores.
+- **O valor viaja no `RecurrenceSaved` v1** (estado completo da regra, com um `amount`). O reporting
+  projeta a regra e a previsão usa esse valor para todos os períodos (REC-4). Valores por período exigem
+  mudar o contrato do evento, com o `reporting` lendo v1 e v2 lado a lado, como no `TransactionRegistered`
+  (ADR-0005, decisão 2).
+- **Lançar, "a lançar", importação e avisos usam o valor da regra:** o lançamento pré-preenchido (REC-3),
+  a lista "a lançar", o casamento da importação (REC-9, 10% de tolerância sobre o valor estimado) e o aviso
+  de saída recorrente (NTF-2). Todos precisam do valor vigente no período, não de um valor só.
+- **Nenhum serviço acessa a internet.** Todos os clientes HTTP falam com serviços internos. Buscar índices
+  oficiais seria a primeira dependência externa do sistema: rede de saída do container, falha da fonte e
+  dado que chega com atraso (o IPCA de um mês sai no meio do mês seguinte).
+- **Fonte pública dos índices:** a API de séries temporais do Banco Central (SGS) publica a variação mensal
+  do IPCA (série 433), do INPC (188) e do IGP-M (189), sem autenticação.
+- **"Hoje" e fuso já existem nos dois serviços** (`TimeZone`, ADR-0008, decisão 8), e o `transactions` já
+  tem workers em segundo plano.
+
+**Decisões em aberto (para a ADR-0010, RJT-1; recomendação do PO em cada uma):**
+1. **Modelo do valor.** Opções: (a) **valor com vigência**: a regra guarda uma lista de valores, cada um
+   válido a partir de um período; o reajuste cria uma vigência nova; (b) continuar editando o valor único.
+   *Recomendação: (a)*, no mesmo padrão do limite dos orçamentos. A vigência de um período já fechado não
+   muda o lançamento feito (só o estimado dos períodos em aberto).
+2. **Como a regra reajusta.** *Recomendação:* a regra ganha um **reajuste anual opcional**: mês de
+   aniversário (padrão: o mês do início), índice (`IPCA`, `INPC`, `IGPM`) ou percentual fixo, e "não
+   reduzir" (ligado por padrão: índice negativo, como o IGP-M de 2023, mantém o valor). Sem reajuste
+   configurado, tudo continua como hoje.
+3. **Quem aplica o reajuste.** Opções: (a) o sistema aplica sozinho no aniversário; (b) o sistema
+   **sugere** e o usuário confirma (ou digita outro valor). *Recomendação: (b).* Contratos usam defasagens
+   diferentes, arredondam e às vezes são renegociados; aplicar sozinho mudaria a previsão com um valor que
+   o usuário não reconhece. Confirmar cria a vigência nova.
+4. **Fonte dos índices.** Opções: (a) **API do Banco Central (SGS)**, lida por um job diário no
+   `transactions`, que guarda a variação mensal de cada índice; (b) o usuário digita o percentual no
+   aniversário; (c) tabela mantida à mão no repositório. *Recomendação: (a) com (b) sempre disponível.* O job
+   é desligável (`Indexes:Fetch:Enabled`), tolera a fonte fora do ar (tenta no dia seguinte) e nunca
+   bloqueia nada: sem o índice do período, a sugestão fica "aguardando o índice" e o usuário pode informar o
+   percentual. É a primeira saída para a internet, então a ADR registra o host liberado
+   (`api.bcb.gov.br`) e que nenhum dado do usuário vai na chamada.
+5. **Qual período do índice.** *Recomendação:* acumulado dos 12 meses que terminam no **mês anterior** ao
+   aniversário (o mais comum nos contratos de aluguel); defasagem de 2 meses fica como Could. O acumulado é
+   o produto das variações mensais, e o valor novo é arredondado a centavos (meio para cima).
+6. **Na previsão.** *Recomendação:* do aniversário em diante, sem reajuste confirmado, a previsão usa o
+   valor **estimado** com o último acumulado de 12 meses conhecido (ou o percentual fixo), e marca a parte
+   estimada. O `RecurrenceSaved` passa à **v2**, com a lista de vigências e o reajuste configurado (com a
+   taxa estimada calculada pelo `transactions`); o `reporting` lê v1 (uma vigência só, sem reajuste) e v2.
+   Implantar o `reporting` antes do `transactions`.
+7. **Onde o valor vigente vale.** *Recomendação:* em tudo o que hoje usa o valor da regra: lançamento
+   pré-preenchido, "a lançar", casamento da importação, aviso de saída recorrente, previsão e saldo
+   projetado.
+8. **Aviso de reajuste.** *Recomendação (Could):* no mês do aniversário, um aviso novo no sino e no resumo
+   por e-mail (NTF): "Reajuste do aluguel: R$ 2.000,00 → R$ 2.084,00 (IPCA 4,2%)", levando à regra para
+   confirmar.
+
+- 🔵 **RJT-1** ADR: reajuste das recorrências.
+  - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
+    *então* a ADR-0010 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
+    ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **RJT-2** Valor com vigência na regra.
+  - *Dado* um aluguel de R$ 2.000 desde janeiro, *quando* informo R$ 2.100 a partir de março, *então*
+    janeiro e fevereiro continuam R$ 2.000 (em aberto ou lançados) e março em diante passam a R$ 2.100; *e*
+    a vigência não pode começar antes do início da regra nem num período já fechado.
+  - *Dado* períodos com valores diferentes, *quando* lanço uma ocorrência, consulto "a lançar" ou importo um
+    extrato, *então* o valor pré-preenchido, o da lista e o do casamento são os do período.
+  - *Dado* uma vigência nova, *quando* ela é gravada, *então* um `RecurrenceSaved` v2 sai no outbox com a
+    lista de vigências.
+  - Estimativa: 5 · **Must** · Dependências: RJT-1
+- 🔵 **RJT-3** Previsão usa o valor vigente.
+  - *Dado* um aluguel de R$ 2.000 com R$ 2.100 a partir de março, *quando* consulto a previsão de 6 meses
+    em janeiro, *então* janeiro e fevereiro têm R$ 2.000 e março em diante R$ 2.100, inclusive no saldo
+    projetado e no aviso de saída recorrente.
+  - *Dado* um `RecurrenceSaved` v1 antigo no feed, *quando* o reporting o lê, *então* ele vira uma regra
+    com uma vigência só.
+  - Estimativa: 3 · **Must** · Dependências: RJT-2
+- 🔵 **RJT-4** Reajuste anual configurado e aplicado à mão.
+  - *Dado* uma regra, *quando* configuro reajuste anual em março por percentual fixo de 5% (ou por índice),
+    *então* a regra guarda o aniversário, o índice ou percentual e o "não reduzir".
+  - *Dado* o mês do aniversário, *quando* confirmo o reajuste informando o percentual ou o valor novo,
+    *então* nasce a vigência a partir daquele período, com o valor arredondado a centavos; confirmar duas
+    vezes o mesmo aniversário responde 409.
+  - Estimativa: 3 · **Must** · Dependências: RJT-2
+- 🔵 **RJT-5** Vigências e reajuste na SPA.
+  - *Dado* a aba Recorrências, *quando* abro uma regra, *então* vejo as vigências (valor e "a partir de"),
+    configuro o reajuste anual e, no mês do aniversário, confirmo o reajuste com o percentual ou o valor
+    novo.
+  - Estimativa: 5 · **Must** · Dependências: RJT-4
+- 🔵 **RJT-6** Índices oficiais do Banco Central.
+  - *Dado* o job diário ligado, *quando* ele roda, *então* busca na API do SGS as variações mensais do
+    IPCA, INPC e IGP-M que ainda não tem e as guarda (mês, índice, variação); *e* com a fonte fora do ar,
+    registra no log e tenta no dia seguinte, sem afetar o resto.
+  - *Dado* o job desligado, *quando* o sistema roda, *então* nada sai para a internet e o reajuste
+    continua manual.
+  - Estimativa: 5 · **Should** · Dependências: RJT-1
+- 🔵 **RJT-7** Reajuste sugerido pelo índice.
+  - *Dado* um aluguel com reajuste por IGP-M em março e as variações de março do ano anterior a fevereiro
+    deste ano guardadas, *quando* abro a regra em março, *então* vejo o valor sugerido (acumulado de 12
+    meses, 2 casas) e confirmo com um clique; *e* com acumulado negativo e "não reduzir", a sugestão é o
+    valor atual.
+  - *Dado* que o índice do último mês ainda não saiu, *quando* abro a regra, *então* vejo "aguardando o
+    índice de fevereiro" e posso informar o percentual à mão.
+  - Estimativa: 3 · **Should** · Dependências: RJT-4, RJT-6
+- 🔵 **RJT-8** Previsão estima o reajuste futuro.
+  - *Dado* um aluguel com reajuste por IPCA no mês que vem ainda não confirmado, *quando* consulto a
+    previsão de 12 meses, *então* do mês que vem em diante o valor é o estimado pelo último acumulado de 12
+    meses conhecido, e a tela mostra a parte estimada.
+  - Estimativa: 3 · **Should** · Dependências: RJT-3, RJT-6
+- 🔵 **RJT-9** Aviso de reajuste pendente.
+  - *Dado* uma regra com reajuste no mês corrente ainda não confirmado, *quando* olho o sino (ou recebo o
+    resumo por e-mail), *então* vejo "Reajuste de <regra>: R$ X → R$ Y (<índice> Z%)", que leva à regra; *e*
+    confirmar tira o aviso.
+  - Estimativa: 2 · **Could** · Dependências: RJT-7
+- 🔵 **RJT-10** E2E Cypress: vigência, reajuste e previsão.
+  - *Dado* um aluguel cadastrado, *quando* configuro reajuste anual por percentual fixo e confirmo o
+    reajuste a partir do mês que vem pela SPA, *então* a previsão mostra o valor antigo neste mês e o novo
+    nos seguintes, e o lançamento do mês que vem vem pré-preenchido com o valor novo.
+  - Estimativa: 3 · **Must** · Dependências: RJT-5, RJT-3
+
+**Fora do escopo (Won't, nesta versão):** reajuste aplicado sem confirmação; índices além de IPCA, INPC e
+IGP-M (IGP-DI, IPC-Fipe, IVAR); defasagem do índice diferente de 1 mês (fica Could da ADR); reajuste em
+outra periodicidade que não a anual; reajuste de lançamento comum ou de compra parcelada; histórico de
+índices na tela; recalcular lançamentos já feitos.
+
+**Priorização (MoSCoW):** Must = RJT-1 a RJT-5 e RJT-10 (21 pts): valor com vigência, reajuste
+configurado e confirmado à mão, previsão com o valor certo de cada período, provados ponta a ponta. Should
+= RJT-6 a RJT-8 (11 pts): índices oficiais, sugestão pelo índice e a previsão estimando o reajuste que
+ainda não veio. Could = RJT-9 (2 pts). Total: 34 pts.
+
+**Ordem sugerida:** RJT-1 → RJT-2 → RJT-3 (com o `reporting` implantado antes do `transactions` que publica
+o `RecurrenceSaved` v2) → RJT-4 → RJT-5 → RJT-10 (fecha o Must) → RJT-6 → RJT-7 → RJT-8 → RJT-9.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
 - (Receita e edição de lançamentos viraram o épico LNC, em 2026-11-22.)
 - (Lançamentos recorrentes viraram o épico REC, em 2026-11-22.)
 - (Lembretes de vencimento viraram o épico NTF, em 2026-11-23.)
-- Reajuste automático de recorrências por índice (IGP-M, IPCA): aluguel e contratos (Won't do REC).
+- (Reajuste das recorrências virou o épico RJT, em 2026-11-25.)
 - Conciliação da fatura calculada com a fatura importada do banco (Won't do INV).
 - Editar o ciclo do cartão (hoje é criar outro cartão; ADR-0005, decisão 3, pede reabrir a decisão).
