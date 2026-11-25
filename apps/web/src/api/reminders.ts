@@ -1,6 +1,12 @@
 import { apiFetch } from './client';
 
-export type ReminderKind = 'InvoiceDue' | 'InvoiceOverdue' | 'RecurrenceDue' | 'RecurrencesToLaunch' | 'Budget';
+export type ReminderKind =
+  | 'InvoiceDue'
+  | 'InvoiceOverdue'
+  | 'RecurrenceDue'
+  | 'RecurrencesToLaunch'
+  | 'Budget'
+  | 'RecurrenceAdjustment';
 export type ReminderUrgency = 'Overdue' | 'Today' | 'Soon';
 
 /** NTF-2 (ADR-0009): um aviso, calculado na hora pelo reporting. */
@@ -23,6 +29,10 @@ export interface Reminder {
   count: number;
   /** NTF-9, orçamento: o limite do mês (`amount` é o consumido). */
   limit: number;
+  /** RJT-9, reajuste: valor atual (`amount` é o estimado), taxa (nula = aguardando o índice) e índice. */
+  previousAmount: number | null;
+  rate: number | null;
+  index: string | null;
 }
 
 export interface Reminders {

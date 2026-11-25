@@ -98,6 +98,22 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(r => r.EndsOn).HasColumnName("ends_on");
             b.Property(r => r.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             b.HasIndex(r => r.OwnerUserId).HasDatabaseName("ix_projected_recurrences_owner");
+            // RJT-8 (ADR-0010, decisao 8): reajuste anual e a taxa estimada.
+            b.Property(r => r.AdjustmentMonth).HasColumnName("adjustment_month");
+            b.Property(r => r.AdjustmentEstimatedRate).HasColumnName("adjustment_estimated_rate").HasPrecision(9, 4);
+            b.Property(r => r.AdjustmentNoReduction).HasColumnName("adjustment_no_reduction").IsRequired();
+            b.Property(r => r.AdjustmentIndex).HasColumnName("adjustment_index").HasMaxLength(8);
+            // RJT-3 (ADR-0010): vigencias da regra, trocadas inteiras a cada RecurrenceSaved.
+            b.OwnsMany(r => r.Amounts, a =>
+            {
+                a.ToTable("projected_recurrence_amounts");
+                a.WithOwner().HasForeignKey("RecurrenceId");
+                a.Property<Guid>("RecurrenceId").HasColumnName("recurrence_id");
+                a.Property(x => x.FromPeriod).HasColumnName("from_period").HasMaxLength(7);
+                a.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+                a.HasKey("RecurrenceId", nameof(ProjectedRecurrenceAmount.FromPeriod));
+            });
+            b.Navigation(r => r.Amounts).AutoInclude();
         });
 
         modelBuilder.Entity<ProjectedRecurrenceOccurrence>(b =>

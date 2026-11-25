@@ -72,4 +72,25 @@ public sealed class ReminderEmailTests
         Assert.Contains("Aluguel: vence em 23/11, R$ 2.000,00", email.TextBody);
         Assert.Contains("<li>Aluguel: vence em 23/11, R$ 2.000,00</li>", email.HtmlBody);
     }
+
+    [Fact]
+    public void Digest_DescribesThePendingAdjustment_WithTheIndex_OrWaitingForIt()
+    {
+        // RJT-9 (ADR-0010, decisao 10).
+        Reminder[] reminders =
+        [
+            new(ReminderKind.RecurrenceAdjustment, "a1", ReminderUrgency.Soon, new DateOnly(2026, 11, 1), 2084m, "Reajuste de Aluguel",
+                PreviousAmount: 2000m, Rate: 4.2m, Index: "IGPM"),
+            new(ReminderKind.RecurrenceAdjustment, "a2", ReminderUrgency.Soon, new DateOnly(2026, 11, 1), 900m, "Reajuste de Escola",
+                PreviousAmount: 900m, Index: "IPCA"),
+            new(ReminderKind.RecurrenceAdjustment, "a3", ReminderUrgency.Soon, new DateOnly(2026, 11, 1), 525m, "Reajuste de Seguro",
+                PreviousAmount: 500m, Rate: 5m),
+        ];
+
+        var email = ReminderEmails.Digest("pessoa@exemplo.com", reminders, "http://app/");
+
+        Assert.Contains("Reajuste de Aluguel: R$ 2.000,00 → R$ 2.084,00 (IGP-M 4,2%)", email.TextBody);
+        Assert.Contains("Reajuste de Escola: aguardando o IPCA; confirme na recorrência", email.TextBody);
+        Assert.Contains("Reajuste de Seguro: R$ 500,00 → R$ 525,00 (5%)", email.TextBody);
+    }
 }

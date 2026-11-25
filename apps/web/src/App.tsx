@@ -38,6 +38,9 @@ export function App() {
   // NTF-8: resultado da confirmação do e-mail dos avisos (link do e-mail).
   const [emailConfirmation, setEmailConfirmation] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // RJT-9: regra cujo reajuste pendente o aviso abriu.
+  const [adjustTarget, setAdjustTarget] = useState<string | null>(null);
+
   /** NTF-3 (ADR-0009, decisão 7): cada aviso leva aonde se resolve. */
   function openReminder(r: Reminder) {
     if ((r.kind === 'InvoiceDue' || r.kind === 'InvoiceOverdue') && r.cardId && r.dueMonth) {
@@ -45,6 +48,10 @@ export function App() {
       setTab('cards');
     } else if (r.kind === 'Budget') {
       setTab('budgets');
+    } else if (r.kind === 'RecurrenceAdjustment' && r.recurrenceId) {
+      // RJT-9: abre os valores da regra, onde o reajuste e confirmado.
+      setAdjustTarget(r.recurrenceId);
+      setTab('recurrences');
     } else {
       setTab('recurrences');
     }
@@ -184,7 +191,14 @@ export function App() {
             }}
           />
         )}
-        {tab === 'recurrences' && <RecurrencesView template={repeatFrom} onTemplateUsed={() => setRepeatFrom(null)} />}
+        {tab === 'recurrences' && (
+          <RecurrencesView
+            template={repeatFrom}
+            onTemplateUsed={() => setRepeatFrom(null)}
+            focusValuesOf={adjustTarget}
+            onFocusUsed={() => setAdjustTarget(null)}
+          />
+        )}
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}

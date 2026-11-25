@@ -19,10 +19,32 @@ public abstract record RecurrenceEvent(Guid RecurrenceId, Guid OwnerUserId)
     }
 }
 
+/// <summary>Uma vigencia do valor no payload: valor a partir de um periodo.</summary>
+public sealed record RecurrenceAmountPayload(string FromPeriod, decimal Amount);
+
+/// <summary>
+/// RJT-4 (ADR-0010, decisao 7): o reajuste configurado no payload. <see cref="EstimatedRate"/> e a taxa que a
+/// previsao usa para o aniversario ainda nao aplicado: o percentual fixo, ou (RJT-8) o ultimo acumulado do indice.
+/// </summary>
+public sealed record RecurrenceAdjustmentPayload(
+    int AnniversaryMonth, string Kind, string? Index, decimal? Rate, bool NoReduction, decimal? EstimatedRate)
+{
+    /// <param name="estimatedRate">RJT-8: taxa estimada; sem ela, o percentual fixo (no indice, nula).</param>
+    public static RecurrenceAdjustmentPayload? From(RecurrenceAdjustment? a, decimal? estimatedRate = null) => a is null
+        ? null
+        : new(a.AnniversaryMonth, a.Kind.ToString(), a.Index?.ToString(), a.Rate, a.NoReduction,
+            estimatedRate ?? (a.Kind == RecurrenceAdjustmentKind.Fixed ? a.Rate : null));
+}
+
 /// <summary>
 /// Uma regra foi criada ou corrigida: estado completo, com o escopo PF/PJ da conta (a conta nao muda).
 /// <see cref="RecurrenceVersion"/> e a versao da regra, nao a <see cref="TransactionEvent.Version"/> do
 /// formato do evento.
+/// <para>
+/// Versao 2 (RJT-2, ADR-0010, decisao 7): <see cref="Amount"/> passa a ser o valor vigente no dia do evento,
+/// e <see cref="Amounts"/> traz todas as vigencias (a primeira inclusive). <see cref="Adjustment"/> (RJT-4)
+/// e o reajuste anual configurado, nulo sem reajuste. Os eventos v1 ja gravados continuam no feed.
+/// </para>
 /// </summary>
 public sealed record RecurrenceSaved(
     Guid RecurrenceId,
@@ -39,15 +61,24 @@ public sealed record RecurrenceSaved(
     string Frequency,
     DateOnly StartsOn,
     DateOnly? EndsOn,
-    int RecurrenceVersion)
+    int RecurrenceVersion,
+    IReadOnlyList<RecurrenceAmountPayload> Amounts,
+    RecurrenceAdjustmentPayload? Adjustment = null)
     : RecurrenceEvent(RecurrenceId, OwnerUserId)
 {
     public const string Name = "RecurrenceSaved";
 
+    public const int CurrentVersion = 2;
+
     [JsonIgnore]
     public override string EventType => Name;
 
-    public static RecurrenceSaved From(Recurrence recurrence, string? accountScope) => new(
+    [JsonIgnore]
+    public override int Version => CurrentVersion;
+
+    /// <param name="currentPeriod">Periodo de hoje: o <c>amount</c> do payload e o valor vigente nele.</param>
+    /// <param name="estimatedRate">RJT-8: taxa estimada do reajuste ainda nao aplicado (ver <see cref="RecurrenceAdjustmentPayload"/>).</param>
+    public static RecurrenceSaved From(Recurrence recurrence, string? accountScope, string currentPeriod, decimal? estimatedRate = null) => new(
         recurrence.Id,
         recurrence.OwnerUserId,
         recurrence.AccountId,
@@ -57,12 +88,14 @@ public sealed record RecurrenceSaved(
         recurrence.CreditCardId,
         recurrence.Description,
         recurrence.Category,
-        recurrence.Amount,
+        recurrence.AmountFor(currentPeriod),
         recurrence.Currency,
         recurrence.Frequency.ToString(),
         recurrence.StartsOn,
         recurrence.EndsOn,
-        recurrence.Version);
+        recurrence.Version,
+        recurrence.Amounts.Select(a => new RecurrenceAmountPayload(a.FromPeriod, a.Amount)).ToList(),
+        RecurrenceAdjustmentPayload.From(recurrence.Adjustment, estimatedRate));
 }
 
 /// <summary>Uma regra foi excluida: as ocorrencias em aberto saem da previsao; os lancamentos ficam.</summary>

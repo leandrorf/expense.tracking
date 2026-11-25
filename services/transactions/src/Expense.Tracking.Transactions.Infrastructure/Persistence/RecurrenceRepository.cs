@@ -16,6 +16,11 @@ internal sealed class RecurrenceRepository(TransactionsDbContext dbContext) : IR
             .ThenBy(r => r.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Recurrence>> ListByAdjustmentIndexAsync(EconomicIndex index, CancellationToken cancellationToken) =>
+        await dbContext.Recurrences
+            .Where(r => EF.Property<EconomicIndex?>(r, "AdjustmentIndex") == index)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(Recurrence recurrence, CancellationToken cancellationToken) =>
         await dbContext.Recurrences.AddAsync(recurrence, cancellationToken);
 

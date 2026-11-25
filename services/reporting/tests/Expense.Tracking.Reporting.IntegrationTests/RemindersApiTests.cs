@@ -176,6 +176,50 @@ public sealed class RemindersApiTests(InvoicesApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task RecurrenceReminder_ShowsTheAmountOfItsPeriod()
+    {
+        // RJT-3: comeca em 23/10 com R$ 2.000 e passa a R$ 2.100 em novembro; o aviso de 23/11 traz R$ 2.100.
+        var owner = Guid.NewGuid();
+        var rule = Guid.NewGuid();
+        _factory.EventFeed.RecurrenceSaved(rule, owner, 2100m, "2026-10-23", amounts: [("2026-10", 2000m), ("2026-11", 2100m)]);
+        _factory.EventFeed.OccurrenceClosed(rule, owner, "2026-10", Guid.NewGuid());
+        await _factory.DrainFeedAsync();
+
+        var item = Assert.Single((await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray());
+
+        Assert.Equal(("RecurrenceDue", 2100m), (item.GetProperty("kind").GetString(), item.GetProperty("amount").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task PendingAdjustment_IsAReminder_UntilTheAnniversaryAmountArrives()
+    {
+        // RJT-9: comecou ha um ano, com reajuste de 5% estimado neste mes e ainda nao confirmado.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = new DateOnly(today.Year - 1, today.Month, 1);
+        var (owner, rule) = (Guid.NewGuid(), Guid.NewGuid());
+        var startsOn = start.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var period = today.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+        var adjustment = new { anniversaryMonth = today.Month, kind = "Index", index = "IGPM", rate = (decimal?)null, noReduction = true, estimatedRate = 5m };
+        _factory.EventFeed.RecurrenceSaved(rule, owner, 2000m, startsOn, adjustment: adjustment);
+        await _factory.DrainFeedAsync();
+
+        async Task<JsonElement[]> AdjustmentsAsync() =>
+            (await ClientFor(owner).GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray()
+            .Where(i => i.GetProperty("kind").GetString() == "RecurrenceAdjustment").ToArray();
+
+        var item = Assert.Single(await AdjustmentsAsync());
+        Assert.Equal(($"adjustment:{rule}:{period}", 2000m, 2100m, 5m, "IGPM"), (item.GetProperty("key").GetString(),
+            item.GetProperty("previousAmount").GetDecimal(), item.GetProperty("amount").GetDecimal(), item.GetProperty("rate").GetDecimal(),
+            item.GetProperty("index").GetString()));
+
+        // Confirmado (a vigencia do aniversario chega no evento), o aviso sai.
+        _factory.EventFeed.RecurrenceSaved(rule, owner, 2100m, startsOn,
+            amounts: [(start.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture), 2000m), (period, 2100m)], adjustment: adjustment);
+        await _factory.DrainFeedAsync();
+        Assert.Empty(await AdjustmentsAsync());
+    }
+
+    [Fact]
     public async Task Reminders_DisappearWhenResolved_AndRequireAToken()
     {
         var owner = Guid.NewGuid();

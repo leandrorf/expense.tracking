@@ -254,9 +254,10 @@ public sealed class ProjectionProcessorTests
 
     // ---------- REC-4 (ADR-0008): regras e periodos fechados ----------
 
-    private static FeedEvent RecurrenceSaved(Feed feed, Guid rule, decimal amount, int version = 1) =>
+    private static FeedEvent RecurrenceSaved(Feed feed, Guid rule, decimal amount, int version = 1, object[]? amounts = null) =>
         feed.Raw(FeedEventTypes.RecurrenceSaved, version, new
         {
+            amounts,
             recurrenceId = rule,
             ownerUserId = Guid.Empty,
             accountId = Guid.Empty,
@@ -308,6 +309,29 @@ public sealed class ProjectionProcessorTests
     }
 
     [Fact]
+    public async Task RecurrenceSaved_V1BecomesOneAmount_AndV2ReplacesTheAmounts()
+    {
+        // RJT-3 (ADR-0010, decisao 7).
+        var feed = new Feed();
+        var store = new Store();
+        var rule = Guid.NewGuid();
+        RecurrenceSaved(feed, rule, 2000m);
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+        Assert.Equal([("2026-12", 2000m)], store.Recurrences[rule].Amounts.Select(a => (a.FromPeriod, a.Amount)));
+
+        RecurrenceSaved(feed, rule, 2100m, version: 2, amounts:
+        [
+            new { fromPeriod = "2027-03", amount = 2100m },
+            new { fromPeriod = "2026-12", amount = 2000m },
+        ]);
+        await Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None);
+
+        var row = store.Recurrences[rule];
+        Assert.Equal(2000m, row.Amount); // a primeira vigencia
+        Assert.Equal([("2026-12", 2000m), ("2027-03", 2100m)], row.Amounts.Select(a => (a.FromPeriod, a.Amount)));
+    }
+
+    [Fact]
     public async Task DeletingARecurrence_RemovesItAndItsClosedPeriods_AndANewerVersionStopsTheBatch()
     {
         var feed = new Feed();
@@ -322,7 +346,7 @@ public sealed class ProjectionProcessorTests
         Assert.Empty(store.Recurrences);
         Assert.Empty(store.Occurrences);
 
-        RecurrenceSaved(feed, Guid.NewGuid(), 10m, version: 2);
+        RecurrenceSaved(feed, Guid.NewGuid(), 10m, version: 3);
         await Assert.ThrowsAsync<UnsupportedEventVersionException>(() => Processor(feed, store).ProcessNextBatchAsync(CancellationToken.None));
     }
 

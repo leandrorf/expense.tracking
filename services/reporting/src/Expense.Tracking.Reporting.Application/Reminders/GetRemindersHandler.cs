@@ -25,11 +25,14 @@ public sealed record ReminderDto(
     Guid? RecurrenceId,
     string? Period,
     int Count,
-    decimal Limit)
+    decimal Limit,
+    decimal? PreviousAmount,
+    decimal? Rate,
+    string? Index)
 {
     public static ReminderDto From(Reminder r) => new(
         r.Kind.ToString(), r.Key, r.Urgency.ToString(), r.DueOn, r.Amount, r.Title, r.CardId, r.DueMonth, r.RecurrenceId,
-        r.Period, r.Count, r.Limit);
+        r.Period, r.Count, r.Limit, r.PreviousAmount, r.Rate, r.Index);
 }
 
 /// <param name="Overdue">Quantos avisos sao de algo ja vencido (o sino os destaca).</param>

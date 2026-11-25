@@ -3,6 +3,7 @@ using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Reports;
+using Expense.Tracking.Reporting.Domain.Forecast;
 using Microsoft.EntityFrameworkCore;
 
 namespace Expense.Tracking.Reporting.Infrastructure.Persistence;
@@ -69,7 +70,11 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
         return rules
             .Select(r => new RecurrenceRecord(r.RecurrenceId, r.AccountId, r.AccountScope, r.TransactionType, r.PaymentMethod,
                 r.CreditCardId, r.Amount, r.Frequency, r.StartsOn, r.EndsOn,
-                closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>(), r.Description))
+                closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>(), r.Description,
+                r.Amounts.Select(a => new RecurrenceAmountFrom(a.FromPeriod, a.Amount)).ToList(),
+                r.AdjustmentMonth is { } month
+                    ? new RecurrenceAdjustmentEstimate(month, r.AdjustmentEstimatedRate, r.AdjustmentNoReduction, r.AdjustmentIndex)
+                    : null))
             .ToList();
     }
 

@@ -18,6 +18,13 @@ function detailOf(r: Reminder, money: (v: number) => string): string {
       return `${r.urgency === 'Today' ? 'vence hoje' : `vence em ${shortDate(r.dueOn)}`} · ${money(r.amount)}`;
     case 'RecurrencesToLaunch':
       return `pendentes desde ${shortDate(r.dueOn)}: lance ou pule`;
+    case 'RecurrenceAdjustment': {
+      // RJT-9: "R$ 2.000,00 → R$ 2.084,00 (IGP-M 4,2%)", ou aguardando o índice.
+      const index = r.index === 'IGPM' ? 'IGP-M' : r.index;
+      if (r.rate === null) return `aguardando o ${index ?? 'índice'}: confirme na recorrência`;
+      const rate = `${r.rate.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`;
+      return `${money(r.previousAmount ?? r.amount)} → ${money(r.amount)} (${index ? `${index} ` : ''}${rate})`;
+    }
     case 'Budget':
       return r.urgency === 'Overdue'
         ? `estourou: ${money(r.amount)} de ${money(r.limit)}`

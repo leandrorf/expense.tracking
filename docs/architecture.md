@@ -204,6 +204,16 @@ o banco de outro serviço. Nos testes, a porta é substituída por um fake.
   falha (accounts ou identity fora do ar), tenta de novo com espera crescente até 5 min e para ao
   concluir. `Events:LegacyScopeBackfill:Enabled=false` desliga.
 
+**Índices oficiais (RJT-6, [ADR-0010](adr/0010-reajuste-das-recorrencias.md), decisão 6)**: o
+`IndexFetchWorker` busca uma vez por dia (primeira rodada 30 s depois da subida) as variações mensais
+do IPCA, INPC e IGP-M na API SGS do Banco Central (séries 433, 188 e 189; porta `IEconomicIndexSource`,
+adaptador `BcbSgsIndexSource`) e grava os meses que faltam em `economic_indexes` (índice, mês, variação
+em %). Começa em `Indexes:Fetch:Since` (`yyyy-MM`; padrão 24 meses atrás) e depois segue do último mês
+guardado. É a **única saída do sistema para a internet**: só vão o código da série e as datas, nenhum
+dado de usuário. Vem **desligado** por padrão (`Indexes:Fetch:Enabled`); o compose liga
+(`INDEXES_FETCH_ENABLED=false` desliga) e o host fica em `Indexes:Fetch:BaseUrl`. Fonte fora do ar ou
+resposta fora do formato: aviso no log por índice e nova tentativa no dia seguinte, sem afetar o resto.
+
 ## Serviço `reporting` — implementado
 
 Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco próprio
@@ -301,7 +311,10 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
 - `GET /reports/reminders` calcula na hora (nada guardado) os avisos do usuário: fatura a vencer
   (até a antecedência, padrão 3 dias) ou vencida (até 30 dias), saída recorrente a vencer e o "a
   lançar" agrupado (regra pura `ReminderCalculator`; montagem em `ReminderComposer`). Cada aviso tem
-  chave estável, urgência e o destino do atalho na SPA.
+  chave estável, urgência e o destino do atalho na SPA. Reajuste anual chegado e ainda sem a vigência
+  do aniversário vira `RecurrenceAdjustment` (RJT-9, [ADR-0010](adr/0010-reajuste-das-recorrencias.md),
+  decisão 10; chave `adjustment:{regra}:{período}`), com o valor atual, o estimado pela taxa do
+  `RecurrenceSaved` e o índice; sem taxa, "aguardando o índice". Some quando a vigência chega.
 - Gravados pelo usuário: dispensas (`reminder_dismissals`, `POST /reports/reminders/dismissals`) e
   preferências (`reminder_settings`, `GET/PUT /reports/reminder-settings`).
 - **Resumo diário por e-mail**: opt-in, com endereço confirmado por link de uso único (24 h, só o hash

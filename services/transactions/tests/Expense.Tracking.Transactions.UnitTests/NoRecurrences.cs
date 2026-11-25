@@ -25,6 +25,12 @@ internal sealed class NoRecurrences : IRecurrenceRepository
     public Task<RecurrenceOccurrence?> FindOccurrenceByTransactionAsync(Guid transactionId, CancellationToken cancellationToken) =>
         Task.FromResult<RecurrenceOccurrence?>(null);
 
+    /// <summary>RJT-8: regras devolvidas por <see cref="ListByAdjustmentIndexAsync"/> (as do indice pedido).</summary>
+    public List<Recurrence> Adjusted { get; } = [];
+
+    public Task<IReadOnlyList<Recurrence>> ListByAdjustmentIndexAsync(EconomicIndex index, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Recurrence>>(Adjusted.Where(r => r.Adjustment?.Index == index).ToList());
+
     public void AddOccurrence(RecurrenceOccurrence occurrence)
     {
     }

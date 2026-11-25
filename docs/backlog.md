@@ -2031,7 +2031,7 @@ painel usável no dia a dia; o e-mail entrega o lembrete a quem não abre o app,
 
 **Ordem sugerida:** NTF-1 → NTF-2 → NTF-3 → NTF-4 (fecha o Must) → NTF-5 → NTF-6 → NTF-7 → NTF-8 → NTF-9.
 
-## 🔵 EPIC RJT — Reajuste das recorrências  · *To Do*
+## 🟢 EPIC RJT — Reajuste das recorrências  · *Done*
 **Problema:** aluguel, condomínio, escola, plano de saúde e contratos de serviço são reajustados uma vez
 por ano, quase sempre por um índice (IGP-M, IPCA, INPC) ou por um percentual combinado. A recorrência
 (REC) só conhece um valor: o usuário precisa lembrar de editar a regra no mês certo, e a edição muda todos
@@ -2073,7 +2073,7 @@ CI.
 - **"Hoje" e fuso já existem nos dois serviços** (`TimeZone`, ADR-0008, decisão 8), e o `transactions` já
   tem workers em segundo plano.
 
-**Decisões em aberto (para a ADR-0010, RJT-1; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0010](adr/0010-reajuste-das-recorrencias.md), RJT-1; ficou a recomendação de cada uma, com os refinamentos da RJT-1):**
 1. **Modelo do valor.** Opções: (a) **valor com vigência**: a regra guarda uma lista de valores, cada um
    válido a partir de um período; o reajuste cria uma vigência nova; (b) continuar editando o valor único.
    *Recomendação: (a)*, no mesmo padrão do limite dos orçamentos. A vigência de um período já fechado não
@@ -2108,12 +2108,25 @@ CI.
    por e-mail (NTF): "Reajuste do aluguel: R$ 2.000,00 → R$ 2.084,00 (IPCA 4,2%)", levando à regra para
    confirmar.
 
-- 🔵 **RJT-1** ADR: reajuste das recorrências.
+- ✅ **RJT-1** ADR: reajuste das recorrências. → [ADR-0010](adr/0010-reajuste-das-recorrencias.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0010 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: vigências em `recurrence_amounts` por
+    **período** (como a identidade da ocorrência), a primeira sempre existe, a nova começa num período da
+    agenda, depois do primeiro e ainda não fechado (400 `recurrence.amount_period_invalid`); rotas
+    `POST/DELETE /transactions/recurrences/{id}/amounts`; o `amount` do `PUT` da regra passa a corrigir a
+    **vigência atual** (não cria vigência). Reajuste aplicado por
+    `POST .../adjustments` com `{ year, rate }` ou `{ year, amount }` (409
+    `recurrence.adjustment_already_applied`), sobre o valor vigente antes do aniversário, meio para cima.
+    A leitura da regra traz `pendingAdjustment` do aniversário até 11 meses depois (com `waitingFor` quando
+    falta mês de índice). Índices em `economic_indexes`, `IndexFetchWorker` diário com
+    `Indexes:Fetch:Enabled` (padrão desligado; o compose liga) e host em configuração. `RecurrenceSaved` v2
+    com `amounts` e `adjustment` (inclui `estimatedRate`), republicado quando sai mês novo do índice; a
+    previsão estima só o próximo aniversário (`estimatedRecurring`). Aviso `RecurrenceAdjustment` com chave
+    `adjustment:{regra}:{período}`.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **RJT-2** Valor com vigência na regra.
+- ✅ **RJT-2** Valor com vigência na regra. → `recurrence_amounts`, `POST/DELETE .../amounts`, `RecurrenceSaved` v2.
   - *Dado* um aluguel de R$ 2.000 desde janeiro, *quando* informo R$ 2.100 a partir de março, *então*
     janeiro e fevereiro continuam R$ 2.000 (em aberto ou lançados) e março em diante passam a R$ 2.100; *e*
     a vigência não pode começar antes do início da regra nem num período já fechado.
@@ -2121,34 +2134,93 @@ CI.
     extrato, *então* o valor pré-preenchido, o da lista e o do casamento são os do período.
   - *Dado* uma vigência nova, *quando* ela é gravada, *então* um `RecurrenceSaved` v2 sai no outbox com a
     lista de vigências.
+  - Feito assim: a coluna `amount` da regra continua sendo o valor da **primeira vigência** (sem migração de
+    dados) e as seguintes ficam em `recurrence_amounts` (regra + período, migração `RecurrenceAmounts`);
+    `AmountFor(período)` devolve a última com início até ele. `POST /transactions/recurrences/{id}/amounts`
+    (`{ fromPeriod, amount, version }`) cria ou troca a vigência (período fora da agenda, o primeiro ou já
+    fechado = 400 `recurrence.amount_period_invalid`; versão antiga = 409); `DELETE .../amounts/{período}?version=`
+    tira uma que ainda não começou (400 `recurrence.amount_already_started`, 404 `recurrence.amount_not_found`).
+    O `amount` do `PUT` passa a corrigir a vigência de hoje; mudar início, fim ou frequência que deixe uma
+    vigência fora da agenda = 400 `recurrence.amounts_outside_schedule`. O DTO traz `amount` (vigente hoje),
+    `amounts` e o valor da próxima ocorrência. Lançar sem valor, "a lançar" e o casamento da importação usam o
+    valor do período. `RecurrenceSaved` v2 com `amounts` (e `amount` = vigente no dia do evento).
   - Estimativa: 5 · **Must** · Dependências: RJT-1
-- 🔵 **RJT-3** Previsão usa o valor vigente.
+- ✅ **RJT-3** Previsão usa o valor vigente.
+  - Feito assim: o `ProjectionProcessor` lê o `RecurrenceSaved` v1 e v2 (v1 vira uma vigência só, no período
+    do início) e guarda as vigências em `projected_recurrence_amounts` (migration
+    `ProjectedRecurrenceAmounts`), trocadas inteiras a cada evento. A previsão (caixa, conta e fatura do
+    cartão) e o aviso `RecurrenceDue` usam `AmountFor(período)` de cada ocorrência.
   - *Dado* um aluguel de R$ 2.000 com R$ 2.100 a partir de março, *quando* consulto a previsão de 6 meses
     em janeiro, *então* janeiro e fevereiro têm R$ 2.000 e março em diante R$ 2.100, inclusive no saldo
     projetado e no aviso de saída recorrente.
   - *Dado* um `RecurrenceSaved` v1 antigo no feed, *quando* o reporting o lê, *então* ele vira uma regra
     com uma vigência só.
   - Estimativa: 3 · **Must** · Dependências: RJT-2
-- 🔵 **RJT-4** Reajuste anual configurado e aplicado à mão.
+- ✅ **RJT-4** Reajuste anual configurado e aplicado à mão. → `adjustment` na regra, `POST .../adjustments`.
+  - Feito assim: o corpo da regra (criar e `PUT`) ganha `adjustment` (`{ anniversaryMonth?, kind: Index|Fixed,
+    index?: IPCA|INPC|IGPM, rate?, noReduction? }`; nulo = sem reajuste; mês padrão = o do início, na anual
+    tem de ser o dela; "não reduzir" padrão ligado), guardado em colunas `adjustment_*` da regra; erros
+    `recurrence.adjustment_kind_invalid`, `_index_invalid`, `_month_invalid`, `_rate_invalid` (acima de
+    -100%, até 1000%, 4 casas). `POST /transactions/recurrences/{id}/adjustments` (`{ year, rate | amount,
+    version }`) cria a vigência no período do aniversário sobre o valor vigente antes dele (meio para cima;
+    "não reduzir" vale para o percentual, o valor informado vale como está) e registra o aniversário em
+    `recurrence_adjustments` (migration `RecurrenceAdjustments`): de novo = 409
+    `recurrence.adjustment_already_applied`; aniversário no início da regra, antes ou depois dela = 400
+    `recurrence.adjustment_year_invalid`; um e só um de `rate`/`amount` (400 `_value_required`); regra sem
+    reajuste = 400 `_not_configured`. Remover a vigência do aniversário libera aplicá-lo de novo. A leitura
+    traz `adjustment` e `pendingAdjustment` (`{ year, period, currentAmount, rate, suggestedAmount }`, do mês
+    do aniversário até 11 meses depois; sugestão só no percentual fixo até a RJT-7). `RecurrenceSaved` v2
+    leva `adjustment` com `estimatedRate` (o percentual fixo; o do índice vem na RJT-8). Smoke passo 24b
+    (sugere, aplica, 409; 48 passos).
   - *Dado* uma regra, *quando* configuro reajuste anual em março por percentual fixo de 5% (ou por índice),
     *então* a regra guarda o aniversário, o índice ou percentual e o "não reduzir".
   - *Dado* o mês do aniversário, *quando* confirmo o reajuste informando o percentual ou o valor novo,
     *então* nasce a vigência a partir daquele período, com o valor arredondado a centavos; confirmar duas
     vezes o mesmo aniversário responde 409.
   - Estimativa: 3 · **Must** · Dependências: RJT-2
-- 🔵 **RJT-5** Vigências e reajuste na SPA.
+- ✅ **RJT-5** Vigências e reajuste na SPA. → `RecurrenceValuesRow`, `recurrence-values.cy.ts`.
+  - Feito assim: o formulário da regra ganha "Sem reajuste anual / por percentual / pelo índice", com o mês
+    (padrão o do início; travado na anual), o percentual ou o índice (IPCA, INPC, IGP-M) e "não reduzir";
+    editar traz o reajuste e o manda de volta no `PUT` (antes a edição o apagava). Na lista, a regra mostra
+    o reajuste configurado e, quando há, o link "reajuste de <mês> pendente". O link "valores" abre uma
+    linha com as vigências ("desde … (início)", "a partir de …"; as que ainda não começaram podem ser
+    removidas), o formulário de valor novo a partir de um mês (ou ano, na anual) e, com reajuste pendente,
+    o resumo "R$ X → R$ Y (Z%)" e a confirmação pelo percentual ou pelo valor novo. Lançar a próxima usa o
+    valor do período dela. E2E: cadastra com 5% no mês corrente, confirma o pendente (1.000 → 1.050), põe e
+    tira um valor futuro e edita mantendo o reajuste.
   - *Dado* a aba Recorrências, *quando* abro uma regra, *então* vejo as vigências (valor e "a partir de"),
     configuro o reajuste anual e, no mês do aniversário, confirmo o reajuste com o percentual ou o valor
     novo.
   - Estimativa: 5 · **Must** · Dependências: RJT-4
-- 🔵 **RJT-6** Índices oficiais do Banco Central.
+- ✅ **RJT-6** Índices oficiais do Banco Central. → `IndexFetchWorker`, `economic_indexes`.
+  - Feito assim: `FetchEconomicIndexesJob` pede ao SGS (`BcbSgsIndexSource`, séries 433/188/189,
+    `dataInicial`/`dataFinal`; 404 = sem dados) os meses de cada índice desde o último guardado (ou
+    `Indexes:Fetch:Since`, padrão 24 meses atrás) até hoje e grava os novos em `economic_indexes`
+    (migration `EconomicIndexes`, chave índice + mês). A falha de um índice (rede, HTTP, resposta fora
+    do formato) descarta o que ficou pela metade, vai para o log e não impede os outros. O
+    `IndexFetchWorker` roda 30 s depois da subida e a cada 24 h, só com `Indexes:Fetch:Enabled`
+    (padrão desligado; o compose liga com `INDEXES_FETCH_ENABLED`, host em `INDEXES_FETCH_BASE_URL`).
+    Conferido no Docker: 24 meses de cada índice gravados da API real; com host inválido, um aviso por
+    índice e o serviço segue de pé. A republicação das regras quando chega mês novo fica com a RJT-8,
+    que é quem usa a taxa estimada.
   - *Dado* o job diário ligado, *quando* ele roda, *então* busca na API do SGS as variações mensais do
     IPCA, INPC e IGP-M que ainda não tem e as guarda (mês, índice, variação); *e* com a fonte fora do ar,
     registra no log e tenta no dia seguinte, sem afetar o resto.
   - *Dado* o job desligado, *quando* o sistema roda, *então* nada sai para a internet e o reajuste
     continua manual.
   - Estimativa: 5 · **Should** · Dependências: RJT-1
-- 🔵 **RJT-7** Reajuste sugerido pelo índice.
+- ✅ **RJT-7** Reajuste sugerido pelo índice. → `pendingAdjustment` com o acumulado ou `waitingFor`.
+  - Feito assim: no reajuste pelo índice, o `pendingAdjustment` usa os 12 meses que terminam no mês
+    anterior ao aniversário (`RecurrenceAdjustment.IndexWindow`), lidos de `economic_indexes`
+    (`PendingAdjustmentRates` carrega só os índices que as regras usam, dos últimos 24 meses): `rate` =
+    `Π(1 + r/100) − 1` em % com 4 casas (aceito de volta pelo `POST .../adjustments`) e `suggestedAmount`
+    com o arredondamento e o "não reduzir" do reajuste (acumulado negativo com "não reduzir" = valor
+    atual). Faltando algum mês, `rate`/`suggestedAmount` vêm nulos e `waitingFor` traz o mês mais recente
+    que falta; o reajuste continua confirmável com o percentual digitado. Na SPA, o resumo mostra
+    "R$ X → R$ Y (IPCA Z%)" ou "aguardando o IPCA de <mês>; informe o percentual ou o valor novo", e o
+    percentual sugerido vem preenchido. Smoke passo 24c (49 passos); conferido com o IPCA real
+    (nov/2025–out/2026 = 4,6284%). E2E em `recurrence-values.cy.ts` confirma pelo índice com percentual
+    digitado (o resultado do job varia).
   - *Dado* um aluguel com reajuste por IGP-M em março e as variações de março do ano anterior a fevereiro
     deste ano guardadas, *quando* abro a regra em março, *então* vejo o valor sugerido (acumulado de 12
     meses, 2 casas) e confirmo com um clique; *e* com acumulado negativo e "não reduzir", a sugestão é o
@@ -2156,17 +2228,45 @@ CI.
   - *Dado* que o índice do último mês ainda não saiu, *quando* abro a regra, *então* vejo "aguardando o
     índice de fevereiro" e posso informar o percentual à mão.
   - Estimativa: 3 · **Should** · Dependências: RJT-4, RJT-6
-- 🔵 **RJT-8** Previsão estima o reajuste futuro.
+- ✅ **RJT-8** Previsão estima o reajuste futuro. → `estimatedRate` no evento, `estimatedRecurring` na previsão.
+  - Feito assim: o `transactions` põe no `RecurrenceSaved` v2 a `estimatedRate` (percentual fixo, ou o
+    último acumulado de 12 meses seguidos do índice; sem eles, nula) ao criar, editar, mudar vigência e
+    aplicar reajuste; quando o job grava mês novo de um índice, republica no mesmo commit as regras que
+    reajustam por ele (escopo pelo `/internal/account-scopes` com token de serviço; regra sem escopo
+    conhecido fica de fora; falha = nada gravado, nova tentativa no dia seguinte). O `reporting` guarda
+    mês, taxa estimada e "não reduzir" (migration `ProjectedRecurrenceAdjustment`) e estima um reajuste
+    só: o do aniversário mais recente sem vigência (pendente) ou, se já aplicado, o próximo; nunca o do
+    período do início. Do aniversário em diante, até começar uma vigência posterior, a ocorrência usa o
+    valor vigente antes dele reajustado pela taxa (centavos, meio para cima, "não reduzir"), e o fluxo do
+    mês traz `estimatedRecurring` (quanto disso é reajuste estimado). A Previsão mostra "inclui R$ X de
+    reajuste estimado" no resultado do mês. A jornada da RJT-10 passou a conferir o estimado antes da
+    confirmação (R$ 1.050 marcado). Conferido no Docker que a consulta das regras por índice roda no MySQL.
   - *Dado* um aluguel com reajuste por IPCA no mês que vem ainda não confirmado, *quando* consulto a
     previsão de 12 meses, *então* do mês que vem em diante o valor é o estimado pelo último acumulado de 12
     meses conhecido, e a tela mostra a parte estimada.
   - Estimativa: 3 · **Should** · Dependências: RJT-3, RJT-6
-- 🔵 **RJT-9** Aviso de reajuste pendente.
+- ✅ **RJT-9** Aviso de reajuste pendente. → aviso `RecurrenceAdjustment` no sino e no resumo por e-mail.
+  - Feito assim: o `reporting` passa a guardar também o índice do reajuste (migration
+    `ProjectedRecurrenceAdjustmentIndex`) e o `ReminderCalculator` avisa o aniversário mais recente (do
+    mês dele até 11 meses depois) que ainda não virou vigência, dentro da regra e depois do período do
+    início (mesma regra do reajuste pendente da previsão, `RecurrenceAmounts.Pending`), com chave
+    `adjustment:{regra}:{período}`, valor atual (`previousAmount`), valor estimado pela taxa do evento
+    (`amount`), `rate` e `index`; sem taxa, `rate` nulo. Vale para gasto e receita e segue a preferência
+    "recorrências" dos avisos; dispensar funciona como nos outros. O sino mostra "R$ 2.000,00 → R$ 2.084,00
+    (IGP-M 4,2%)" ou "aguardando o IPCA: confirme na recorrência", e o atalho abre a linha "valores" da
+    regra; o e-mail traz a mesma linha. Confirmar cria a vigência, e o aviso some. A jornada da RJT-10
+    confirma o reajuste a partir do aviso.
   - *Dado* uma regra com reajuste no mês corrente ainda não confirmado, *quando* olho o sino (ou recebo o
     resumo por e-mail), *então* vejo "Reajuste de <regra>: R$ X → R$ Y (<índice> Z%)", que leva à regra; *e*
     confirmar tira o aviso.
   - Estimativa: 2 · **Could** · Dependências: RJT-7
-- 🔵 **RJT-10** E2E Cypress: vigência, reajuste e previsão.
+- ✅ **RJT-10** E2E Cypress: vigência, reajuste e previsão. → `recurrence-adjustment-journey.cy.ts`.
+  - Feito assim: o reajuste só fica pendente (e confirmável) a partir do mês do aniversário (ADR-0010,
+    decisão 5), então a jornada usa um aluguel de R$ 1.000 que começou há um ano (dia 1) com reajuste de 5%
+    no mês corrente e lê a previsão nos meses seguintes, por diferença (usuário demo compartilhado): sem
+    confirmar, o mês que vem tem +1.000; confirmado o pendente pela tela, +1.050; com um valor renegociado
+    de R$ 1.100 a partir de daqui a dois meses, o mês que vem fica +1.050 e o seguinte +1.100. "Lançar" a
+    próxima vem com R$ 1.050. Fecha o Must do épico.
   - *Dado* um aluguel cadastrado, *quando* configuro reajuste anual por percentual fixo e confirmo o
     reajuste a partir do mês que vem pela SPA, *então* a previsão mostra o valor antigo neste mês e o novo
     nos seguintes, e o lançamento do mês que vem vem pré-preenchido com o valor novo.

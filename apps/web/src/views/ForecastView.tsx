@@ -92,7 +92,8 @@ export function ForecastView() {
           {forecast.notice} Compras no cartão entram pela fatura, no mês do vencimento.{' '}
           <span data-cy="forecast-recurring-notice">
             Recorrências entram como "previsto" de hoje em diante, até você lançar ou pular cada ocorrência (aba
-            Recorrências); se você importar o extrato, pule a ocorrência que veio por ele para não contar duas vezes.
+            Recorrências); se você importar o extrato, pule a ocorrência que veio por ele para não contar duas vezes. O
+            reajuste anual ainda não confirmado entra estimado, pelo último acumulado do índice ou pelo percentual fixo.
           </span>
         </p>
       )}
@@ -158,6 +159,11 @@ export function ForecastView() {
                   </td>
                   <td className={`right ${flow.result < 0 ? 'negative' : flow.result > 0 ? 'positive' : ''}`} data-cy="forecast-result">
                     {money(flow.result)}
+                    {flow.estimatedRecurring > 0 && (
+                      <span className="sub recurring" data-cy="forecast-estimated" title="Reajuste anual ainda não confirmado na aba Recorrências">
+                        inclui {money(flow.estimatedRecurring)} de reajuste estimado
+                      </span>
+                    )}
                   </td>
                   <td
                     className={`right ${flow.balance !== null && flow.balance < 0 ? 'negative' : ''}`}

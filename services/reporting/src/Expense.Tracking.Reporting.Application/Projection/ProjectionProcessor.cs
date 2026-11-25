@@ -121,7 +121,7 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
 
             case FeedEventTypes.RecurrenceSaved:
                 EnsureSupported(feedEvent);
-                await ApplyRecurrenceSavedAsync(feedEvent, Read<RecurrenceSavedV1>(feedEvent), cancellationToken);
+                await ApplyRecurrenceSavedAsync(feedEvent, ReadRecurrenceSaved(feedEvent), cancellationToken);
                 return true;
 
             case FeedEventTypes.RecurrenceDeleted:
@@ -257,8 +257,23 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         }
     }
 
+    /// <summary>RJT-3: v1 e lida como v2 com uma vigencia so, no periodo do inicio.</summary>
+    private static RecurrenceSavedV2 ReadRecurrenceSaved(FeedEvent feedEvent)
+    {
+        if (feedEvent.Version >= 2)
+        {
+            return Read<RecurrenceSavedV2>(feedEvent);
+        }
+
+        var v1 = Read<RecurrenceSavedV1>(feedEvent);
+        return new RecurrenceSavedV2(
+            v1.RecurrenceId, v1.OwnerUserId, v1.AccountId, v1.AccountScope, v1.TransactionType, v1.PaymentMethod, v1.CreditCardId,
+            v1.Description, v1.Category, v1.Amount, v1.Currency, v1.Frequency, v1.StartsOn, v1.EndsOn, v1.RecurrenceVersion,
+            [new RecurrenceAmountV2(Domain.Forecast.RecurrenceSchedule.PeriodOf(v1.Frequency, v1.StartsOn), v1.Amount)]);
+    }
+
     // REC-4 (ADR-0008, decisao 2): upsert pelo id da regra; a edicao chega como outro RecurrenceSaved.
-    private async Task ApplyRecurrenceSavedAsync(FeedEvent feedEvent, RecurrenceSavedV1 e, CancellationToken cancellationToken)
+    private async Task ApplyRecurrenceSavedAsync(FeedEvent feedEvent, RecurrenceSavedV2 e, CancellationToken cancellationToken)
     {
         var row = await store.FindRecurrenceAsync(e.RecurrenceId, cancellationToken);
         if (row is null)
@@ -280,6 +295,20 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         row.Frequency = e.Frequency;
         row.StartsOn = e.StartsOn;
         row.EndsOn = e.EndsOn;
+        // RJT-3: as vigencias vem inteiras; a primeira e o "amount" da regra.
+        var amounts = (e.Amounts is { Count: > 0 } list
+                ? list
+                : [new RecurrenceAmountV2(Domain.Forecast.RecurrenceSchedule.PeriodOf(e.Frequency, e.StartsOn), e.Amount)])
+            .OrderBy(a => a.FromPeriod, StringComparer.Ordinal)
+            .ToList();
+        row.Amount = amounts[0].Amount;
+        row.Amounts.Clear();
+        row.Amounts.AddRange(amounts.Select(a => new ProjectedRecurrenceAmount { FromPeriod = a.FromPeriod, Amount = a.Amount }));
+        // RJT-8: o reajuste configurado e a taxa estimada (v1 e v2 sem reajuste = nulos).
+        row.AdjustmentMonth = e.Adjustment?.AnniversaryMonth;
+        row.AdjustmentEstimatedRate = e.Adjustment?.EstimatedRate;
+        row.AdjustmentNoReduction = e.Adjustment?.NoReduction ?? false;
+        row.AdjustmentIndex = e.Adjustment?.Index;
         row.LastEventSequence = feedEvent.Sequence;
     }
 

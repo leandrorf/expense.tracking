@@ -29,7 +29,7 @@ public sealed class ReminderComposer(IProjectionQueries projection, IReminderSto
         var recurrences = settings.Recurrences
             ? (await projection.GetRecurrencesAsync(ownerUserId, cancellationToken))
                 .Select(r => new ReminderRecurrence(r.Id, r.Description, r.TransactionType != "Income", r.Amount, r.Frequency,
-                    r.StartsOn, r.EndsOn, r.ClosedPeriods))
+                    r.StartsOn, r.EndsOn, r.ClosedPeriods, r.Amounts, r.Adjustment))
                 .ToList()
             : [];
 

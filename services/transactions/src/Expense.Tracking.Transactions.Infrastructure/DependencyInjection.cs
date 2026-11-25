@@ -43,10 +43,25 @@ public static class DependencyInjection
         services.AddScoped<GetRecurrenceHandler>();
         services.AddScoped<UpdateRecurrenceHandler>();
         services.AddScoped<DeleteRecurrenceHandler>();
+        services.AddScoped<SetRecurrenceAmountHandler>();
+        services.AddScoped<RemoveRecurrenceAmountHandler>();
+        services.AddScoped<ApplyRecurrenceAdjustmentHandler>();
         services.AddScoped<LaunchOccurrenceHandler>();
         services.AddScoped<SkipOccurrenceHandler>();
         services.AddScoped<UnskipOccurrenceHandler>();
         services.AddScoped<ListDueOccurrencesHandler>();
+
+        // RJT-6 (ADR-0010, decisao 6): indices oficiais da API SGS do Banco Central (o worker fica na Api).
+        services.AddScoped<IEconomicIndexRepository, EconomicIndexRepository>();
+        services.AddScoped<FetchEconomicIndexesJob>();
+        services.AddScoped<AdjustmentRates>();
+        services.AddSingleton(IndexFetchOptionsFrom(configuration));
+        var indexesBaseUrl = configuration[IndexesBaseUrlKey] ?? "https://api.bcb.gov.br/";
+        services.AddHttpClient<IEconomicIndexSource, BcbSgsIndexSource>(client =>
+        {
+            client.BaseAddress = new Uri(indexesBaseUrl.EndsWith('/') ? indexesBaseUrl : indexesBaseUrl + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
 
         // INV-6: pagamentos de fatura (ADR-0005, decisao 6).
         services.AddScoped<ICardPaymentRepository, CardPaymentRepository>();
@@ -127,6 +142,27 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(accountsBaseUrl.EndsWith('/') ? accountsBaseUrl : accountsBaseUrl + "/");
         })
         .AddHttpMessageHandler<ServiceTokenHandler>();
+    }
+
+    /// <summary>RJT-6: host da API SGS (padrao <c>https://api.bcb.gov.br/</c>).</summary>
+    public const string IndexesBaseUrlKey = "Indexes:Fetch:BaseUrl";
+
+    /// <summary>RJT-6: primeiro mes (<c>yyyy-MM</c>) buscado quando o indice esta vazio; padrao: 24 meses atras.</summary>
+    public const string IndexesSinceKey = "Indexes:Fetch:Since";
+
+    private static IndexFetchOptions IndexFetchOptionsFrom(IConfiguration configuration)
+    {
+        var since = configuration[IndexesSinceKey];
+        if (string.IsNullOrWhiteSpace(since))
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            return new IndexFetchOptions(new DateOnly(today.Year, today.Month, 1).AddMonths(-24));
+        }
+
+        return DateOnly.TryParseExact(since + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var first)
+            ? new IndexFetchOptions(first)
+            : throw new InvalidOperationException($"{IndexesSinceKey} invalido: use yyyy-MM.");
     }
 
     /// <summary>Liga/desliga o backfill de escopos dos lancamentos legados (EVT-4). Padrao: ligado.</summary>

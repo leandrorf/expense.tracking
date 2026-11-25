@@ -26,8 +26,11 @@ public sealed class ProjectedRecurrence
 
     public string Category { get; set; } = string.Empty;
 
-    /// <summary>Valor estimado de cada ocorrencia.</summary>
+    /// <summary>Valor estimado da primeira vigencia (no v1, de todas as ocorrencias).</summary>
     public decimal Amount { get; set; }
+
+    /// <summary>RJT-3 (ADR-0010): todas as vigencias, a primeira inclusive; substituidas a cada RecurrenceSaved.</summary>
+    public List<ProjectedRecurrenceAmount> Amounts { get; set; } = [];
 
     public string Currency { get; set; } = string.Empty;
 
@@ -37,6 +40,17 @@ public sealed class ProjectedRecurrence
     public DateOnly StartsOn { get; set; }
 
     public DateOnly? EndsOn { get; set; }
+
+    /// <summary>RJT-8 (ADR-0010, decisao 8): mes do aniversario do reajuste; nulo = sem reajuste.</summary>
+    public int? AdjustmentMonth { get; set; }
+
+    /// <summary>RJT-8: taxa (%) que a previsao usa no aniversario ainda nao aplicado; nula = sem estimativa.</summary>
+    public decimal? AdjustmentEstimatedRate { get; set; }
+
+    public bool AdjustmentNoReduction { get; set; }
+
+    /// <summary>RJT-9: indice do reajuste (<c>IPCA</c>, <c>INPC</c>, <c>IGPM</c>); nulo no percentual fixo.</summary>
+    public string? AdjustmentIndex { get; set; }
 
     /// <summary>Sequencia do ultimo evento do feed aplicado a esta linha.</summary>
     public long LastEventSequence { get; set; }
@@ -61,4 +75,12 @@ public sealed class ProjectedRecurrenceOccurrence
     public Guid? TransactionId { get; set; }
 
     public long LastEventSequence { get; set; }
+}
+
+/// <summary>RJT-3: o valor estimado de uma regra a partir de um periodo.</summary>
+public sealed class ProjectedRecurrenceAmount
+{
+    public string FromPeriod { get; set; } = string.Empty;
+
+    public decimal Amount { get; set; }
 }

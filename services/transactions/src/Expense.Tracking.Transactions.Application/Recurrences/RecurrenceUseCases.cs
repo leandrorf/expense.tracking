@@ -6,8 +6,82 @@ using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Recurrences;
 
-/// <summary>Proxima ocorrencia em aberto de hoje em diante: o periodo que a identifica e a data.</summary>
-public sealed record NextOccurrenceDto(string Period, DateOnly ScheduledOn);
+/// <summary>Proxima ocorrencia em aberto de hoje em diante: o periodo, a data e o valor estimado dela (RJT-2).</summary>
+public sealed record NextOccurrenceDto(string Period, DateOnly ScheduledOn, decimal Amount);
+
+/// <summary>RJT-2: uma vigencia do valor.</summary>
+public sealed record RecurrenceAmountDto(string FromPeriod, decimal Amount);
+
+/// <summary>RJT-4 (ADR-0010, decisao 3): o reajuste anual configurado.</summary>
+public sealed record RecurrenceAdjustmentDto(int AnniversaryMonth, string Kind, string? Index, decimal? Rate, bool NoReduction)
+{
+    public static RecurrenceAdjustmentDto? From(RecurrenceAdjustment? a) => a is null
+        ? null
+        : new(a.AnniversaryMonth, a.Kind.ToString(), a.Index?.ToString(), a.Rate, a.NoReduction);
+}
+
+/// <summary>
+/// RJT-4 (ADR-0010, decisao 5): reajuste do aniversario ainda nao aplicado, com a sugestao quando ha. RJT-7:
+/// <c>waitingFor</c> = o mes de indice que falta para sugerir (o reajuste pode ser confirmado a mao assim mesmo).
+/// </summary>
+public sealed record PendingAdjustmentDto(
+    int Year, string Period, decimal CurrentAmount, decimal? Rate, decimal? SuggestedAmount, string? WaitingFor);
+
+/// <summary>
+/// RJT-7: variacoes mensais guardadas dos indices que as regras usam, nos meses que um reajuste pendente
+/// pode pedir (do aniversario mais antigo possivel, 23 meses atras, ate hoje).
+/// </summary>
+public sealed class AdjustmentRates(IEconomicIndexRepository indexes)
+{
+    public async Task<IndexRateLookup> PendingAsync(IEnumerable<Recurrence> rules, DateOnly today, CancellationToken cancellationToken)
+    {
+        var used = rules.Select(r => r.Adjustment).Where(a => a?.Index is not null).Select(a => a!.Index!.Value).Distinct().ToList();
+        if (used.Count == 0)
+        {
+            return (_, _) => null;
+        }
+
+        var first = new DateOnly(today.Year, today.Month, 1).AddMonths(-24);
+        var rates = new Dictionary<(EconomicIndex, string), decimal>();
+        foreach (var index in used)
+        {
+            foreach (var value in await indexes.ListAsync(index, EconomicIndexValue.MonthOf(first), EconomicIndexValue.MonthOf(today), cancellationToken))
+            {
+                rates[(index, value.Month)] = value.Rate;
+            }
+        }
+
+        return (index, month) => rates.TryGetValue((index, month), out var rate) ? rate : null;
+    }
+
+    /// <summary>
+    /// RJT-8 (ADR-0010, decisao 7): taxa que a previsao usa para o aniversario ainda nao aplicado: o
+    /// percentual fixo, ou o ultimo acumulado de 12 meses conhecido do indice (nulo sem os 12 meses).
+    /// </summary>
+    public async Task<decimal?> EstimatedRateAsync(Recurrence rule, CancellationToken cancellationToken)
+    {
+        if (rule.Adjustment is not { } adjustment)
+        {
+            return null;
+        }
+
+        if (adjustment.Kind == RecurrenceAdjustmentKind.Fixed)
+        {
+            return adjustment.Rate;
+        }
+
+        var index = adjustment.Index!.Value;
+        var last = await indexes.LastMonthAsync(index, cancellationToken);
+        if (last is null)
+        {
+            return null;
+        }
+
+        var lastMonth = DateOnly.ParseExact(last + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var months = await indexes.ListAsync(index, EconomicIndexValue.MonthOf(lastMonth.AddMonths(-11)), last, cancellationToken);
+        return RecurrenceAdjustment.LatestAccumulated(months.Select(m => (m.Month, m.Rate)));
+    }
+}
 
 public sealed record RecurrenceDto(
     Guid Id,
@@ -25,20 +99,28 @@ public sealed record RecurrenceDto(
     DateOnly? EndsOn,
     int Version,
     NextOccurrenceDto? NextOccurrence,
-    DateTimeOffset CreatedAtUtc)
+    DateTimeOffset CreatedAtUtc,
+    IReadOnlyList<RecurrenceAmountDto> Amounts,
+    RecurrenceAdjustmentDto? Adjustment,
+    PendingAdjustmentDto? PendingAdjustment)
 {
     /// <summary>Quantas datas a frente procurar a proxima em aberto (cobre 50 anos da anual).</summary>
     private const int MaxLookAheadYears = 50;
 
-    public static RecurrenceDto From(Recurrence r, DateOnly today, IReadOnlySet<string> closedPeriods)
+    public static RecurrenceDto From(Recurrence r, DateOnly today, IReadOnlySet<string> closedPeriods, IndexRateLookup? indexRates = null)
     {
         var next = r.Occurrences(today, today.AddYears(MaxLookAheadYears))
             .Where(o => !closedPeriods.Contains(o.Period))
-            .Select(o => new NextOccurrenceDto(o.Period, o.ScheduledOn))
+            .Select(o => new NextOccurrenceDto(o.Period, o.ScheduledOn, r.AmountFor(o.Period)))
             .FirstOrDefault();
+        // RJT-2: "amount" e o valor vigente hoje (o mesmo que o PUT corrige); as vigencias vem em "amounts".
         return new(r.Id, r.AccountId, r.Type.ToString(), r.PaymentMethod.ToString(), r.CreditCardId, r.Description,
-            r.Category, r.Amount, r.Currency, r.Notes, r.Frequency.ToString(), r.StartsOn, r.EndsOn, r.Version, next,
-            r.CreatedAtUtc);
+            r.Category, r.AmountFor(r.PeriodOf(today)), r.Currency, r.Notes, r.Frequency.ToString(), r.StartsOn, r.EndsOn,
+            r.Version, next, r.CreatedAtUtc, r.Amounts.Select(a => new RecurrenceAmountDto(a.FromPeriod, a.Amount)).ToList(),
+            RecurrenceAdjustmentDto.From(r.Adjustment),
+            r.PendingAdjustment(today, indexRates) is { } p
+                ? new PendingAdjustmentDto(p.Year, p.Period, p.CurrentAmount, p.Rate, p.SuggestedAmount, p.WaitingFor)
+                : null);
     }
 }
 
@@ -54,7 +136,8 @@ public sealed record RecurrenceFields(
     string? Notes,
     RecurrenceFrequency Frequency,
     DateOnly StartsOn,
-    DateOnly? EndsOn);
+    DateOnly? EndsOn,
+    RecurrenceAdjustmentSpec? Adjustment = null);
 
 /// <param name="FromTransactionId">REC-10: lancamento que vira a ocorrencia do proprio periodo ("repetir todo mes").</param>
 public sealed record CreateRecurrenceCommand(Guid OwnerUserId, Guid AccountId, RecurrenceFields Fields, Guid? FromTransactionId = null);
@@ -80,6 +163,7 @@ public sealed class CreateRecurrenceHandler(
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
+    AdjustmentRates adjustmentRates,
     LocalCalendar calendar,
     TimeProvider timeProvider)
 {
@@ -87,7 +171,8 @@ public sealed class CreateRecurrenceHandler(
     {
         var f = command.Fields;
         var created = Recurrence.Create(command.OwnerUserId, command.AccountId, f.Type, f.PaymentMethod, f.CreditCardId,
-            f.Description, f.Category, f.Amount, f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow());
+            f.Description, f.Category, f.Amount, f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(),
+            f.Adjustment);
         if (created.IsFailure)
         {
             return Result.Failure<RecurrenceDto>(created.Error);
@@ -128,7 +213,8 @@ public sealed class CreateRecurrenceHandler(
         }
 
         await recurrences.AddAsync(created.Value, cancellationToken);
-        outbox.Add(RecurrenceSaved.From(created.Value, accountScope));
+        outbox.Add(RecurrenceSaved.From(created.Value, accountScope, created.Value.PeriodOf(calendar.Today(timeProvider)),
+            await adjustmentRates.EstimatedRateAsync(created.Value, cancellationToken)));
         if (command.FromTransactionId is { } linked)
         {
             outbox.Add(new RecurrenceOccurrenceClosed(created.Value.Id, created.Value.OwnerUserId,
@@ -136,24 +222,29 @@ public sealed class CreateRecurrenceHandler(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return RecurrenceDto.From(created.Value, calendar.Today(timeProvider), closedPeriods);
+        var today = calendar.Today(timeProvider);
+        return RecurrenceDto.From(created.Value, today, closedPeriods,
+            await adjustmentRates.PendingAsync([created.Value], today, cancellationToken));
     }
 }
 
-public sealed class ListRecurrencesHandler(IRecurrenceRepository recurrences, LocalCalendar calendar, TimeProvider timeProvider)
+public sealed class ListRecurrencesHandler(
+    IRecurrenceRepository recurrences, AdjustmentRates adjustmentRates, LocalCalendar calendar, TimeProvider timeProvider)
 {
     public async Task<IReadOnlyList<RecurrenceDto>> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
         var items = await recurrences.ListAsync(ownerUserId, cancellationToken);
         var closed = await recurrences.ListClosedPeriodsAsync(ownerUserId, items.Select(r => r.Id).ToArray(), cancellationToken);
         var today = calendar.Today(timeProvider);
+        var rates = await adjustmentRates.PendingAsync(items, today, cancellationToken);
         return items
-            .Select(r => RecurrenceDto.From(r, today, closed.GetValueOrDefault(r.Id) ?? new HashSet<string>()))
+            .Select(r => RecurrenceDto.From(r, today, closed.GetValueOrDefault(r.Id) ?? new HashSet<string>(), rates))
             .ToList();
     }
 }
 
-public sealed class GetRecurrenceHandler(IRecurrenceRepository recurrences, LocalCalendar calendar, TimeProvider timeProvider)
+public sealed class GetRecurrenceHandler(
+    IRecurrenceRepository recurrences, AdjustmentRates adjustmentRates, LocalCalendar calendar, TimeProvider timeProvider)
 {
     public async Task<Result<RecurrenceDto>> HandleAsync(Guid id, Guid ownerUserId, CancellationToken cancellationToken)
     {
@@ -164,7 +255,9 @@ public sealed class GetRecurrenceHandler(IRecurrenceRepository recurrences, Loca
         }
 
         var closed = await recurrences.ListClosedPeriodsAsync(ownerUserId, [id], cancellationToken);
-        return RecurrenceDto.From(recurrence, calendar.Today(timeProvider), closed.GetValueOrDefault(id) ?? new HashSet<string>());
+        var today = calendar.Today(timeProvider);
+        return RecurrenceDto.From(recurrence, today, closed.GetValueOrDefault(id) ?? new HashSet<string>(),
+            await adjustmentRates.PendingAsync([recurrence], today, cancellationToken));
     }
 }
 
@@ -177,6 +270,7 @@ public sealed class UpdateRecurrenceHandler(
     IAccountsClient accountsClient,
     IEventOutbox outbox,
     IUnitOfWork unitOfWork,
+    AdjustmentRates adjustmentRates,
     LocalCalendar calendar,
     TimeProvider timeProvider)
 {
@@ -201,8 +295,10 @@ public sealed class UpdateRecurrenceHandler(
 
         var f = command.Fields;
         var previousCard = recurrence.CreditCardId;
+        // RJT-2 (ADR-0010, decisao 2): o valor do PUT corrige a vigencia de hoje.
+        var currentPeriod = recurrence.PeriodOf(calendar.Today(timeProvider));
         var edited = recurrence.Edit(f.Type, f.PaymentMethod, f.CreditCardId, f.Description, f.Category, f.Amount,
-            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow());
+            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(), currentPeriod, f.Adjustment);
         if (edited.IsFailure)
         {
             return Result.Failure<RecurrenceDto>(edited.Error);
@@ -210,9 +306,11 @@ public sealed class UpdateRecurrenceHandler(
 
         var closed = await recurrences.ListClosedPeriodsAsync(command.OwnerUserId, [recurrence.Id], cancellationToken);
         var closedPeriods = closed.GetValueOrDefault(recurrence.Id) ?? new HashSet<string>();
+        var today = calendar.Today(timeProvider);
+        var rates = await adjustmentRates.PendingAsync([recurrence], today, cancellationToken);
         if (!edited.Value)
         {
-            return RecurrenceDto.From(recurrence, calendar.Today(timeProvider), closedPeriods);
+            return RecurrenceDto.From(recurrence, today, closedPeriods, rates);
         }
 
         if (recurrence.CreditCardId is { } cardId && cardId != previousCard
@@ -223,7 +321,8 @@ public sealed class UpdateRecurrenceHandler(
 
         // O escopo e o da conta, que nao muda; a consulta so o traz de novo para o evento.
         var accountScope = await accountsClient.FindAccountScopeAsync(recurrence.AccountId, cancellationToken);
-        outbox.Add(RecurrenceSaved.From(recurrence, accountScope));
+        outbox.Add(RecurrenceSaved.From(recurrence, accountScope, recurrence.PeriodOf(calendar.Today(timeProvider)),
+            await adjustmentRates.EstimatedRateAsync(recurrence, cancellationToken)));
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -233,7 +332,7 @@ public sealed class UpdateRecurrenceHandler(
             return Result.Failure<RecurrenceDto>(RecurrenceErrors.ConcurrencyConflict);
         }
 
-        return RecurrenceDto.From(recurrence, calendar.Today(timeProvider), closedPeriods);
+        return RecurrenceDto.From(recurrence, today, closedPeriods, rates);
     }
 }
 

@@ -57,7 +57,7 @@ public sealed class LaunchOccurrenceHandler(
         var now = timeProvider.GetUtcNow();
         var created = Transaction.Create(
             recurrence.OwnerUserId, recurrence.AccountId, recurrence.Type, recurrence.PaymentMethod, recurrence.CreditCardId,
-            recurrence.Description, recurrence.Category, command.Amount ?? recurrence.Amount, recurrence.Currency,
+            recurrence.Description, recurrence.Category, command.Amount ?? recurrence.AmountFor(command.Period), recurrence.Currency,
             command.OccurredOn ?? scheduledOn, command.Notes ?? recurrence.Notes, now);
         if (created.IsFailure)
         {
@@ -194,7 +194,7 @@ public sealed class ListDueOccurrencesHandler(IRecurrenceRepository recurrences,
             .SelectMany(r => r.Occurrences(today.AddDays(-WindowDays), today.AddDays(-1))
                 .Where(o => !(closed.GetValueOrDefault(r.Id)?.Contains(o.Period) ?? false))
                 .Select(o => new DueOccurrenceDto(r.Id, o.Period, o.ScheduledOn, r.AccountId, r.Type.ToString(),
-                    r.PaymentMethod.ToString(), r.CreditCardId, r.Description, r.Category, r.Amount, r.Currency)))
+                    r.PaymentMethod.ToString(), r.CreditCardId, r.Description, r.Category, r.AmountFor(o.Period), r.Currency)))
             .OrderBy(d => d.ScheduledOn)
             .ThenBy(d => d.Description, StringComparer.Ordinal)
             .ToList();

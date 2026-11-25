@@ -13,6 +13,9 @@ public enum ReminderKind
     RecurrenceDue = 3,
     RecurrencesToLaunch = 4,
     Budget = 5,
+
+    /// <summary>RJT-9 (ADR-0010, decisao 10): reajuste anual chegado e ainda nao confirmado.</summary>
+    RecurrenceAdjustment = 6,
 }
 
 /// <summary>Urgencia do aviso, da maior para a menor: vencido, vence hoje, vence em breve.</summary>
@@ -29,13 +32,20 @@ public sealed record ReminderInvoice(Guid CardId, string CardLabel, string LastF
 /// <summary>Regra de recorrencia com os periodos ja fechados (lancados ou pulados).</summary>
 public sealed record ReminderRecurrence(
     Guid RecurrenceId, string Description, bool IsExpense, decimal Amount, string Frequency, DateOnly StartsOn,
-    DateOnly? EndsOn, IReadOnlySet<string> ClosedPeriods);
+    DateOnly? EndsOn, IReadOnlySet<string> ClosedPeriods, IReadOnlyList<RecurrenceAmountFrom>? Amounts = null,
+    RecurrenceAdjustmentEstimate? Adjustment = null)
+{
+    /// <summary>RJT-3: valor estimado do periodo pelas vigencias.</summary>
+    public decimal AmountFor(string period) => RecurrenceAmounts.For(Amounts ?? [], Amount, period);
+}
 
 /// <summary>
 /// Um aviso. <see cref="Key"/> e estavel por item e estado (para dispensar, ADR-0009, decisao 5).
 /// <see cref="DueOn"/> e a data que vence (no "a lancar", a mais antiga pendente); <see cref="Count"/>
 /// so no "a lancar"; <see cref="Limit"/> so no orcamento (o <see cref="Amount"/> e o consumido). O destino do
-/// atalho vem nos ids: cartao e mes da fatura, ou regra e periodo.
+/// atalho vem nos ids: cartao e mes da fatura, ou regra e periodo. No reajuste (RJT-9), <see cref="PreviousAmount"/>
+/// e o valor atual, <see cref="Amount"/> o estimado e <see cref="Rate"/>/<see cref="Index"/> a taxa e o indice
+/// (taxa nula = aguardando o indice; <see cref="Amount"/> fica o atual).
 /// </summary>
 public sealed record Reminder(
     ReminderKind Kind,
@@ -49,7 +59,10 @@ public sealed record Reminder(
     Guid? RecurrenceId = null,
     string? Period = null,
     int Count = 0,
-    decimal Limit = 0m);
+    decimal Limit = 0m,
+    decimal? PreviousAmount = null,
+    decimal? Rate = null,
+    string? Index = null);
 
 /// <summary>
 /// NTF-2 (ADR-0009, decisao 3): o que o usuario precisa resolver. Calculado a cada consulta e nunca
@@ -116,9 +129,25 @@ public static class ReminderCalculator
                     {
                         reminders.Add(new Reminder(ReminderKind.RecurrenceDue, $"recurrence:{rule.RecurrenceId}:{occurrence.Period}",
                             occurrence.ScheduledOn == today ? ReminderUrgency.Today : ReminderUrgency.Soon, occurrence.ScheduledOn,
-                            rule.Amount, rule.Description, RecurrenceId: rule.RecurrenceId, Period: occurrence.Period));
+                            rule.AmountFor(occurrence.Period), rule.Description, RecurrenceId: rule.RecurrenceId, Period: occurrence.Period));
                     }
                 }
+            }
+
+            // RJT-9: reajuste anual chegado e ainda sem vigencia. A chave e por aniversario: confirmar tira o aviso.
+            foreach (var rule in recurrences)
+            {
+                if (rule.Adjustment is not { } adjustment
+                    || RecurrenceAmounts.Pending(rule.Amounts ?? [], rule.Amount, rule.Frequency, rule.StartsOn, rule.EndsOn, today,
+                        adjustment.AnniversaryMonth) is not { } pending)
+                {
+                    continue;
+                }
+
+                reminders.Add(new Reminder(ReminderKind.RecurrenceAdjustment, $"adjustment:{rule.RecurrenceId}:{pending.Period}",
+                    ReminderUrgency.Soon, pending.On, adjustment.Adjust(pending.Base) ?? pending.Base, $"Reajuste de {rule.Description}",
+                    RecurrenceId: rule.RecurrenceId, Period: pending.Period, PreviousAmount: pending.Base,
+                    Rate: adjustment.EstimatedRate, Index: adjustment.Index));
             }
 
             if (toLaunch.Count > 0)

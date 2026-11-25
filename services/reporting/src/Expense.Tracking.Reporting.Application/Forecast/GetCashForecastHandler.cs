@@ -24,7 +24,21 @@ public sealed record RecurrenceRecord(
     DateOnly StartsOn,
     DateOnly? EndsOn,
     IReadOnlySet<string> ClosedPeriods,
-    string Description = "");
+    string Description = "",
+    IReadOnlyList<RecurrenceAmountFrom>? Amounts = null,
+    RecurrenceAdjustmentEstimate? Adjustment = null)
+{
+    /// <summary>RJT-3: valor estimado de um periodo (sem vigencias, o <see cref="Amount"/>).</summary>
+    public decimal AmountFor(string period) => RecurrenceAmounts.For(Amounts ?? [], Amount, period);
+
+    /// <summary>RJT-8: o reajuste estimado a frente, visto de <paramref name="today"/>.</summary>
+    public EstimatedAdjustment? EstimateFrom(DateOnly today) =>
+        RecurrenceAmounts.Estimate(Amounts ?? [], Amount, Frequency, StartsOn, today, Adjustment);
+
+    /// <summary>RJT-8: valor do periodo na previsao, com o reajuste estimado.</summary>
+    public ForecastAmount ForecastAmountFor(string period, EstimatedAdjustment? estimate) =>
+        RecurrenceAmounts.ForForecast(Amounts ?? [], Amount, period, estimate);
+}
 
 /// <summary>INV-13: conta como o accounts a devolve ao dono (so o que a previsao usa).</summary>
 public sealed record AccountInfo(Guid Id, string? Scope, bool IsActive, decimal? OpeningBalance, DateOnly? OpeningBalanceOn);
@@ -33,13 +47,14 @@ public sealed record AccountInfo(Guid Id, string? Scope, bool IsActive, decimal?
 /// <param name="RecurringIncome">REC-4: parte das entradas que vem de recorrencias ainda nao lancadas.</param>
 /// <param name="RecurringExpense">REC-4: parte das saidas que vem de recorrencias ainda nao lancadas.</param>
 /// <param name="RecurringInvoices">REC-4: parte das faturas que vem de recorrencias no cartao ainda nao lancadas.</param>
+/// <param name="EstimatedRecurring">RJT-8: quanto da parte recorrente e reajuste estimado, ainda nao confirmado.</param>
 public sealed record MonthFlowDto(
     decimal Income, decimal Expense, decimal Invoices, decimal InvoicesPaid, decimal InvoicesRemaining, decimal Result,
-    decimal? Balance, decimal RecurringIncome, decimal RecurringExpense, decimal RecurringInvoices)
+    decimal? Balance, decimal RecurringIncome, decimal RecurringExpense, decimal RecurringInvoices, decimal EstimatedRecurring)
 {
     public static MonthFlowDto From(MonthFlow flow, decimal? balance) =>
         new(flow.Income, flow.Expense, flow.Invoices, flow.InvoicesPaid, flow.InvoicesRemaining, flow.Result, balance,
-            flow.RecurringIncome, flow.RecurringExpense, flow.RecurringInvoices);
+            flow.RecurringIncome, flow.RecurringExpense, flow.RecurringInvoices, flow.EstimatedRecurring);
 }
 
 /// <param name="Month">Mes da previsao, <c>yyyy-MM</c>.</param>
@@ -154,13 +169,15 @@ public sealed class GetCashForecastHandler(
         {
             var isIncome = rule.TransactionType == "Income";
             var onCard = rule.CreditCardId is not null || rule.PaymentMethod == "CreditCard";
+            var estimate = rule.EstimateFrom(today);
             foreach (var occurrence in RecurrenceSchedule.Occurrences(rule.Frequency, rule.StartsOn, rule.EndsOn, today, last)
                          .Where(o => !rule.ClosedPeriods.Contains(o.Period)))
             {
                 if (!onCard)
                 {
-                    movements.Add(new CashMovement(rule.AccountScope, isIncome, rule.Amount, occurrence.ScheduledOn, Recurring: true));
-                    accountMovements.Add(new AccountCashMovement(rule.AccountId, isIncome, rule.Amount, occurrence.ScheduledOn));
+                    var (amount, estimatedPart) = rule.ForecastAmountFor(occurrence.Period, estimate);
+                    movements.Add(new CashMovement(rule.AccountScope, isIncome, amount, occurrence.ScheduledOn, Recurring: true, estimatedPart));
+                    accountMovements.Add(new AccountCashMovement(rule.AccountId, isIncome, amount, occurrence.ScheduledOn));
                     continue;
                 }
 
@@ -171,9 +188,10 @@ public sealed class GetCashForecastHandler(
 
                 // A vista, na fatura da regra de corte (ADR-0005, decisao 4); receita no cartao e estorno.
                 var dueMonth = new CardCycle(scoped.Card.ClosingDay, scoped.Card.DueDay).DueMonthOf(occurrence.ScheduledOn);
-                var signed = isIncome ? -rule.Amount : rule.Amount;
+                var (periodAmount, cardEstimatedPart) = rule.ForecastAmountFor(occurrence.Period, estimate);
+                var signed = isIncome ? -periodAmount : periodAmount;
                 invoices.Add(new RecurringInvoice(
-                    new ForecastInvoice(scoped.Scope, dueMonth, signed, 0m, signed, Recurring: true), scoped.Card.AccountId));
+                    new ForecastInvoice(scoped.Scope, dueMonth, signed, 0m, signed, Recurring: true, cardEstimatedPart), scoped.Card.AccountId));
             }
         }
 

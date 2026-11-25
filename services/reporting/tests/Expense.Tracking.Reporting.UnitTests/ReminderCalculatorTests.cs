@@ -1,3 +1,4 @@
+using Expense.Tracking.Reporting.Domain.Forecast;
 using Expense.Tracking.Reporting.Domain.Invoices;
 using Expense.Tracking.Reporting.Domain.Reminders;
 
@@ -96,5 +97,43 @@ public sealed class ReminderCalculatorTests
             includeInvoices: false));
         // Antecedencia 0: so o que vence hoje.
         Assert.Empty(ReminderCalculator.Calculate(Today, 0, [Invoice("2026-11-22", InvoiceStatus.Closed, 800m)], []));
+    }
+
+    // ---------- RJT-9 (ADR-0010, decisao 10): reajuste pendente ----------
+
+    private static ReminderRecurrence Adjusted(
+        decimal? rate, string? index = "IPCA", DateOnly? endsOn = null, params RecurrenceAmountFrom[] later) =>
+        new(Guid.NewGuid(), "Aluguel", true, 2000m, "Monthly", new DateOnly(2026, 1, 10), endsOn, new HashSet<string>(),
+            [new RecurrenceAmountFrom("2026-01", 2000m), .. later], new RecurrenceAdjustmentEstimate(11, rate, true, index));
+
+    [Fact]
+    public void Adjustment_ArrivedAndNotConfirmed_IsAReminder_WithTheEstimatedAmount()
+    {
+        var rule = Adjusted(5m);
+
+        var reminder = Assert.Single(ReminderCalculator.Calculate(Today, 3, [], [rule]), r => r.Kind == ReminderKind.RecurrenceAdjustment);
+
+        Assert.Equal(($"adjustment:{rule.RecurrenceId}:2026-11", ReminderUrgency.Soon, new DateOnly(2026, 11, 1), 2000m, 2100m, 5m, "IPCA"),
+            (reminder.Key, reminder.Urgency, reminder.DueOn, reminder.PreviousAmount, reminder.Amount, reminder.Rate, reminder.Index));
+        Assert.Equal(("Reajuste de Aluguel", rule.RecurrenceId, "2026-11"), (reminder.Title, reminder.RecurrenceId, reminder.Period));
+    }
+
+    [Fact]
+    public void Adjustment_WithoutRate_WaitsForTheIndex_AndLeavesWhenConfirmedOrOutsideTheRule()
+    {
+        var waiting = Assert.Single(ReminderCalculator.Calculate(Today, 3, [], [Adjusted(null)]), r => r.Kind == ReminderKind.RecurrenceAdjustment);
+        Assert.Equal((2000m, (decimal?)null), (waiting.Amount, waiting.Rate));
+
+        // Confirmado (vigencia no aniversario), a regra terminou antes dele, ou sem reajuste: nada.
+        Assert.DoesNotContain(ReminderCalculator.Calculate(Today, 3, [], [Adjusted(5m, later: new RecurrenceAmountFrom("2026-11", 2100m))]),
+            r => r.Kind == ReminderKind.RecurrenceAdjustment);
+        Assert.DoesNotContain(ReminderCalculator.Calculate(Today, 3, [], [Adjusted(5m, endsOn: new DateOnly(2026, 10, 31))]),
+            r => r.Kind == ReminderKind.RecurrenceAdjustment);
+        Assert.DoesNotContain(ReminderCalculator.Calculate(Today, 3, [], [Rule("Aluguel", true, "2026-01-10")]),
+            r => r.Kind == ReminderKind.RecurrenceAdjustment);
+
+        // Desligar as recorrencias nas preferencias tira o aviso de reajuste junto.
+        Assert.DoesNotContain(ReminderCalculator.Calculate(Today, 3, [], [Adjusted(5m)], includeRecurrences: false),
+            r => r.Kind == ReminderKind.RecurrenceAdjustment);
     }
 }
