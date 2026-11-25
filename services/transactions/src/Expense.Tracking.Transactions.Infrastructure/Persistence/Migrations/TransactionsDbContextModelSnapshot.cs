@@ -399,6 +399,32 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                     b.ToTable("import_lines", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.EconomicIndexValue", b =>
+                {
+                    b.Property<string>("Index")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("index_code");
+
+                    b.Property<string>("Month")
+                        .HasMaxLength(7)
+                        .HasColumnType("varchar(7)")
+                        .HasColumnName("month");
+
+                    b.Property<DateTime>("FetchedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("fetched_at_utc");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("decimal(9,4)")
+                        .HasColumnName("rate");
+
+                    b.HasKey("Index", "Month");
+
+                    b.ToTable("economic_indexes", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.Recurrence", b =>
                 {
                     b.Property<Guid>("Id")

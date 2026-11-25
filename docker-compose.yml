@@ -151,6 +151,10 @@ services:
       ServiceAuth__ClientSecret: ${TRANSACTIONS_SERVICE_CLIENT_SECRET:-dev-service-secret}
       # REC (ADR-0008, decisao 8): "hoje" das recorrencias, no mesmo fuso do reporting.
       TimeZone: ${APP_TIME_ZONE:-America/Sao_Paulo}
+      # RJT-6 (ADR-0010, decisao 6): indices IPCA/INPC/IGP-M da API SGS do Banco Central, uma vez por dia.
+      # Unica saida para a internet (sem dado de usuario); INDEXES_FETCH_ENABLED=false desliga.
+      Indexes__Fetch__Enabled: ${INDEXES_FETCH_ENABLED:-true}
+      Indexes__Fetch__BaseUrl: ${INDEXES_FETCH_BASE_URL:-https://api.bcb.gov.br/}
     ports:
       - "${TRANSACTIONS_HTTP_PORT:-5100}:8080"
     networks:

@@ -2192,7 +2192,17 @@ CI.
     configuro o reajuste anual e, no mês do aniversário, confirmo o reajuste com o percentual ou o valor
     novo.
   - Estimativa: 5 · **Must** · Dependências: RJT-4
-- 🔵 **RJT-6** Índices oficiais do Banco Central.
+- ✅ **RJT-6** Índices oficiais do Banco Central. → `IndexFetchWorker`, `economic_indexes`.
+  - Feito assim: `FetchEconomicIndexesJob` pede ao SGS (`BcbSgsIndexSource`, séries 433/188/189,
+    `dataInicial`/`dataFinal`; 404 = sem dados) os meses de cada índice desde o último guardado (ou
+    `Indexes:Fetch:Since`, padrão 24 meses atrás) até hoje e grava os novos em `economic_indexes`
+    (migration `EconomicIndexes`, chave índice + mês). A falha de um índice (rede, HTTP, resposta fora
+    do formato) descarta o que ficou pela metade, vai para o log e não impede os outros. O
+    `IndexFetchWorker` roda 30 s depois da subida e a cada 24 h, só com `Indexes:Fetch:Enabled`
+    (padrão desligado; o compose liga com `INDEXES_FETCH_ENABLED`, host em `INDEXES_FETCH_BASE_URL`).
+    Conferido no Docker: 24 meses de cada índice gravados da API real; com host inválido, um aviso por
+    índice e o serviço segue de pé. A republicação das regras quando chega mês novo fica com a RJT-8,
+    que é quem usa a taxa estimada.
   - *Dado* o job diário ligado, *quando* ele roda, *então* busca na API do SGS as variações mensais do
     IPCA, INPC e IGP-M que ainda não tem e as guarda (mês, índice, variação); *e* com a fonte fora do ar,
     registra no log e tenta no dia seguinte, sem afetar o resto.

@@ -27,6 +27,11 @@ if (builder.Configuration.GetValue(ImportBatchCleanupWorker.EnabledKey, true))
 {
     builder.Services.AddHostedService<ImportBatchCleanupWorker>();
 }
+// RJT-6: indices oficiais do Banco Central; padrao desligado (unica saida do sistema para a internet).
+if (builder.Configuration.GetValue(IndexFetchWorker.EnabledKey, false))
+{
+    builder.Services.AddHostedService<IndexFetchWorker>();
+}
 builder.Services.AddTransactionsAuthentication(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();

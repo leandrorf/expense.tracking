@@ -29,6 +29,8 @@ public sealed class TransactionsDbContext(DbContextOptions<TransactionsDbContext
 
     public DbSet<RecurrenceOccurrence> RecurrenceOccurrences => Set<RecurrenceOccurrence>();
 
+    public DbSet<EconomicIndexValue> EconomicIndexes => Set<EconomicIndexValue>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateTimeOffset>().HaveConversion<UtcDateTimeOffsetConverter>();
