@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
-import { recurrencesApi, type DueOccurrence, type Frequency, type Recurrence, type RecurrenceInput } from '../api/recurrences';
+import {
+  recurrencesApi,
+  type DueOccurrence,
+  type EconomicIndex,
+  type Frequency,
+  type Recurrence,
+  type RecurrenceInput,
+} from '../api/recurrences';
 import type { Account, CreditCard, PaymentMethod, Transaction } from '../api/types';
+import { adjustmentLabel, periodLabel, RecurrenceValuesRow } from './RecurrenceValuesRow';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
 
-const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 function today(): string {
   const d = new Date();
@@ -17,12 +25,6 @@ function today(): string {
 function dateLabel(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
-}
-
-/** `2026-12` → `dez/2026`; `2027` → `2027`. */
-function periodLabel(period: string): string {
-  const [y, m] = period.split('-');
-  return m ? `${MONTHS[Number(m) - 1]}/${y}` : y;
 }
 
 /** "todo dia 10" ou "todo ano em 15/03" (mês sem o dia usa o último). */
@@ -77,7 +79,14 @@ export function RecurrencesView({
   const [startsOn, setStartsOn] = useState(today());
   const [endsOn, setEndsOn] = useState('');
   const [notes, setNotes] = useState('');
+  // RJT-5: reajuste anual (vazio = sem reajuste).
+  const [adjKind, setAdjKind] = useState<'' | 'Fixed' | 'Index'>('');
+  const [adjMonth, setAdjMonth] = useState('');
+  const [adjRate, setAdjRate] = useState('');
+  const [adjIndex, setAdjIndex] = useState<EconomicIndex>('IPCA');
+  const [adjNoReduction, setAdjNoReduction] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [valuesOpen, setValuesOpen] = useState<string | null>(null);
 
   const [launch, setLaunch] = useState<LaunchDraft | null>(null);
   const [fromTransaction, setFromTransaction] = useState<Transaction | null>(null);
@@ -153,6 +162,11 @@ export function RecurrencesView({
     setStartsOn(today());
     setEndsOn('');
     setNotes('');
+    setAdjKind('');
+    setAdjMonth('');
+    setAdjRate('');
+    setAdjIndex('IPCA');
+    setAdjNoReduction(true);
   }
 
   function startEdit(r: Recurrence) {
@@ -168,6 +182,11 @@ export function RecurrencesView({
     setStartsOn(r.startsOn);
     setEndsOn(r.endsOn ?? '');
     setNotes(r.notes ?? '');
+    setAdjKind(r.adjustment?.kind ?? '');
+    setAdjMonth(r.adjustment ? String(r.adjustment.anniversaryMonth) : '');
+    setAdjRate(r.adjustment?.rate != null ? String(r.adjustment.rate) : '');
+    setAdjIndex(r.adjustment?.index ?? 'IPCA');
+    setAdjNoReduction(r.adjustment?.noReduction ?? true);
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -191,6 +210,16 @@ export function RecurrencesView({
       endsOn: endsOn || undefined,
       notes: notes.trim() || undefined,
       fromTransactionId: !editing && fromTransaction ? fromTransaction.id : undefined,
+      // RJT-5: o PUT leva o reajuste inteiro; sem ele, a regra fica sem reajuste.
+      adjustment: adjKind
+        ? {
+            kind: adjKind,
+            anniversaryMonth: frequency === 'Yearly' || !adjMonth ? undefined : Number(adjMonth),
+            rate: adjKind === 'Fixed' ? Number(adjRate) : undefined,
+            index: adjKind === 'Index' ? adjIndex : undefined,
+            noReduction: adjNoReduction,
+          }
+        : undefined,
     };
     try {
       if (editing) {
@@ -256,6 +285,13 @@ export function RecurrencesView({
     } catch (err) {
       setError(messageOf(err));
     }
+  }
+
+  const startMonth = Number(startsOn.split('-')[1]) || 1;
+
+  async function handleValuesChanged(message: string) {
+    if (message) setNotice(message);
+    await loadRules();
   }
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '—';
@@ -469,6 +505,72 @@ export function RecurrencesView({
               <input data-cy="rec-ends-on" type="date" min={startsOn} value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />
             </label>
             <input data-cy="rec-notes" placeholder="Observações (opcional)" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <select
+              data-cy="rec-adjust-kind"
+              aria-label="Reajuste anual"
+              value={adjKind}
+              onChange={(e) => setAdjKind(e.target.value as '' | 'Fixed' | 'Index')}
+            >
+              <option value="">Sem reajuste anual</option>
+              <option value="Fixed">Reajuste anual por percentual</option>
+              <option value="Index">Reajuste anual pelo índice</option>
+            </select>
+            {adjKind && (
+              <>
+                <label className="inline-label">
+                  em
+                  <select
+                    data-cy="rec-adjust-month"
+                    aria-label="Mês do reajuste"
+                    value={frequency === 'Yearly' ? String(startMonth) : adjMonth || String(startMonth)}
+                    disabled={frequency === 'Yearly'}
+                    title={frequency === 'Yearly' ? 'Na recorrência anual, o reajuste é no mês dela.' : undefined}
+                    onChange={(e) => setAdjMonth(e.target.value)}
+                  >
+                    {MONTH_NAMES.map((name, i) => (
+                      <option key={name} value={String(i + 1)}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {adjKind === 'Fixed' ? (
+                  <label className="inline-label">
+                    <input
+                      data-cy="rec-adjust-rate"
+                      className="percent-input"
+                      aria-label="Percentual do reajuste"
+                      type="number"
+                      step="0.0001"
+                      value={adjRate}
+                      onChange={(e) => setAdjRate(e.target.value)}
+                      required
+                    />
+                    %
+                  </label>
+                ) : (
+                  <select
+                    data-cy="rec-adjust-index"
+                    aria-label="Índice do reajuste"
+                    value={adjIndex}
+                    onChange={(e) => setAdjIndex(e.target.value as EconomicIndex)}
+                  >
+                    <option value="IPCA">IPCA</option>
+                    <option value="INPC">INPC</option>
+                    <option value="IGPM">IGP-M</option>
+                  </select>
+                )}
+                <label className="inline-label">
+                  <input
+                    data-cy="rec-adjust-no-reduction"
+                    type="checkbox"
+                    checked={adjNoReduction}
+                    onChange={(e) => setAdjNoReduction(e.target.checked)}
+                  />
+                  não reduzir
+                </label>
+              </>
+            )}
             <button data-cy="rec-submit" className="primary" type="submit" disabled={submitting}>
               {submitting ? 'Salvando…' : editing ? 'Salvar alteração' : 'Cadastrar'}
             </button>
@@ -500,53 +602,88 @@ export function RecurrencesView({
             {rules.map((r) => {
               const next = r.nextOccurrence;
               const key = next ? `${r.id}:${next.period}` : r.id;
+              const adjustment = adjustmentLabel(r);
               return (
-                <tr key={r.id} data-cy="rec-row" data-type={r.type}>
-                  <td>
-                    {r.description}
-                    <span className="sub">{r.category}</span>
-                  </td>
-                  <td>
-                    {scheduleLabel(r)}
-                    {r.endsOn && <span className="sub">até {dateLabel(r.endsOn)}</span>}
-                  </td>
-                  <td>{accountName(r.accountId)}</td>
-                  <td className={`right ${r.type === 'Income' ? 'positive' : 'negative'}`} data-cy="rec-value">
-                    {signed(r.type, r.amount, r.currency)}
-                  </td>
-                  <td data-cy="rec-next">{next ? dateLabel(next.scheduledOn) : <span className="muted">encerrada</span>}</td>
-                  <td className="row-actions">
-                    {(next && launchForm(key)) || (
-                      <>
-                        {next && (
-                          <>
-                            <button
-                              className="link"
-                              data-cy="rec-launch-next"
-                              title={`Lançar a ocorrência de ${periodLabel(next.period)}`}
-                              onClick={() => openLaunch(r.id, next.period, r.amount, next.scheduledOn)}
-                            >
-                              lançar {periodLabel(next.period)}
-                            </button>
-                            <button
-                              className="link"
-                              data-cy="rec-skip-next"
-                              onClick={() => void handleSkip(r.id, next.period, r.description)}
-                            >
-                              pular
-                            </button>
-                          </>
-                        )}
-                        <button className="link" data-cy="rec-edit" onClick={() => startEdit(r)}>
-                          editar
+                <Fragment key={r.id}>
+                  <tr data-cy="rec-row" data-type={r.type}>
+                    <td>
+                      {r.description}
+                      <span className="sub">{r.category}</span>
+                    </td>
+                    <td>
+                      {scheduleLabel(r)}
+                      {r.endsOn && <span className="sub">até {dateLabel(r.endsOn)}</span>}
+                      {adjustment && (
+                        <span className="sub" data-cy="rec-adjustment">
+                          {adjustment}
+                        </span>
+                      )}
+                    </td>
+                    <td>{accountName(r.accountId)}</td>
+                    <td className={`right ${r.type === 'Income' ? 'positive' : 'negative'}`} data-cy="rec-value">
+                      {signed(r.type, r.amount, r.currency)}
+                      {r.pendingAdjustment && (
+                        <button
+                          className="link sub"
+                          data-cy="rec-adjust-pending"
+                          title="Confirmar o reajuste deste ano"
+                          onClick={() => setValuesOpen(r.id)}
+                        >
+                          reajuste de {periodLabel(r.pendingAdjustment.period)} pendente
                         </button>
-                        <button className="link-danger" data-cy="rec-remove" onClick={() => void handleRemove(r)}>
-                          excluir
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
+                      )}
+                    </td>
+                    <td data-cy="rec-next">{next ? dateLabel(next.scheduledOn) : <span className="muted">encerrada</span>}</td>
+                    <td className="row-actions">
+                      {(next && launchForm(key)) || (
+                        <>
+                          {next && (
+                            <>
+                              <button
+                                className="link"
+                                data-cy="rec-launch-next"
+                                title={`Lançar a ocorrência de ${periodLabel(next.period)}`}
+                                onClick={() => openLaunch(r.id, next.period, next.amount, next.scheduledOn)}
+                              >
+                                lançar {periodLabel(next.period)}
+                              </button>
+                              <button
+                                className="link"
+                                data-cy="rec-skip-next"
+                                onClick={() => void handleSkip(r.id, next.period, r.description)}
+                              >
+                                pular
+                              </button>
+                            </>
+                          )}
+                          <button
+                            className="link"
+                            data-cy="rec-values-toggle"
+                            aria-expanded={valuesOpen === r.id}
+                            onClick={() => setValuesOpen(valuesOpen === r.id ? null : r.id)}
+                          >
+                            valores
+                          </button>
+                          <button className="link" data-cy="rec-edit" onClick={() => startEdit(r)}>
+                            editar
+                          </button>
+                          <button className="link-danger" data-cy="rec-remove" onClick={() => void handleRemove(r)}>
+                            excluir
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                  {valuesOpen === r.id && (
+                    <RecurrenceValuesRow
+                      key={`${r.id}:${r.version}`}
+                      rule={r}
+                      colSpan={6}
+                      onChanged={handleValuesChanged}
+                      onClose={() => setValuesOpen(null)}
+                    />
+                  )}
+                </Fragment>
               );
             })}
           </tbody>

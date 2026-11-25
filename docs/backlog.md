@@ -2178,7 +2178,16 @@ CI.
     *então* nasce a vigência a partir daquele período, com o valor arredondado a centavos; confirmar duas
     vezes o mesmo aniversário responde 409.
   - Estimativa: 3 · **Must** · Dependências: RJT-2
-- 🔵 **RJT-5** Vigências e reajuste na SPA.
+- ✅ **RJT-5** Vigências e reajuste na SPA. → `RecurrenceValuesRow`, `recurrence-values.cy.ts`.
+  - Feito assim: o formulário da regra ganha "Sem reajuste anual / por percentual / pelo índice", com o mês
+    (padrão o do início; travado na anual), o percentual ou o índice (IPCA, INPC, IGP-M) e "não reduzir";
+    editar traz o reajuste e o manda de volta no `PUT` (antes a edição o apagava). Na lista, a regra mostra
+    o reajuste configurado e, quando há, o link "reajuste de <mês> pendente". O link "valores" abre uma
+    linha com as vigências ("desde … (início)", "a partir de …"; as que ainda não começaram podem ser
+    removidas), o formulário de valor novo a partir de um mês (ou ano, na anual) e, com reajuste pendente,
+    o resumo "R$ X → R$ Y (Z%)" e a confirmação pelo percentual ou pelo valor novo. Lançar a próxima usa o
+    valor do período dela. E2E: cadastra com 5% no mês corrente, confirma o pendente (1.000 → 1.050), põe e
+    tira um valor futuro e edita mantendo o reajuste.
   - *Dado* a aba Recorrências, *quando* abro uma regra, *então* vejo as vigências (valor e "a partir de"),
     configuro o reajuste anual e, no mês do aniversário, confirmo o reajuste com o percentual ou o valor
     novo.
