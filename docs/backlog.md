@@ -2217,7 +2217,13 @@ CI.
     resumo por e-mail), *então* vejo "Reajuste de <regra>: R$ X → R$ Y (<índice> Z%)", que leva à regra; *e*
     confirmar tira o aviso.
   - Estimativa: 2 · **Could** · Dependências: RJT-7
-- 🔵 **RJT-10** E2E Cypress: vigência, reajuste e previsão.
+- ✅ **RJT-10** E2E Cypress: vigência, reajuste e previsão. → `recurrence-adjustment-journey.cy.ts`.
+  - Feito assim: o reajuste só fica pendente (e confirmável) a partir do mês do aniversário (ADR-0010,
+    decisão 5), então a jornada usa um aluguel de R$ 1.000 que começou há um ano (dia 1) com reajuste de 5%
+    no mês corrente e lê a previsão nos meses seguintes, por diferença (usuário demo compartilhado): sem
+    confirmar, o mês que vem tem +1.000; confirmado o pendente pela tela, +1.050; com um valor renegociado
+    de R$ 1.100 a partir de daqui a dois meses, o mês que vem fica +1.050 e o seguinte +1.100. "Lançar" a
+    próxima vem com R$ 1.050. Fecha o Must do épico.
   - *Dado* um aluguel cadastrado, *quando* configuro reajuste anual por percentual fixo e confirmo o
     reajuste a partir do mês que vem pela SPA, *então* a previsão mostra o valor antigo neste mês e o novo
     nos seguintes, e o lançamento do mês que vem vem pré-preenchido com o valor novo.
