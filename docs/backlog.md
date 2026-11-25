@@ -2031,7 +2031,7 @@ painel usável no dia a dia; o e-mail entrega o lembrete a quem não abre o app,
 
 **Ordem sugerida:** NTF-1 → NTF-2 → NTF-3 → NTF-4 (fecha o Must) → NTF-5 → NTF-6 → NTF-7 → NTF-8 → NTF-9.
 
-## 🔵 EPIC RJT — Reajuste das recorrências  · *To Do*
+## 🟡 EPIC RJT — Reajuste das recorrências  · *In Progress*
 **Problema:** aluguel, condomínio, escola, plano de saúde e contratos de serviço são reajustados uma vez
 por ano, quase sempre por um índice (IGP-M, IPCA, INPC) ou por um percentual combinado. A recorrência
 (REC) só conhece um valor: o usuário precisa lembrar de editar a regra no mês certo, e a edição muda todos
@@ -2073,7 +2073,7 @@ CI.
 - **"Hoje" e fuso já existem nos dois serviços** (`TimeZone`, ADR-0008, decisão 8), e o `transactions` já
   tem workers em segundo plano.
 
-**Decisões em aberto (para a ADR-0010, RJT-1; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0010](adr/0010-reajuste-das-recorrencias.md), RJT-1; ficou a recomendação de cada uma, com os refinamentos da RJT-1):**
 1. **Modelo do valor.** Opções: (a) **valor com vigência**: a regra guarda uma lista de valores, cada um
    válido a partir de um período; o reajuste cria uma vigência nova; (b) continuar editando o valor único.
    *Recomendação: (a)*, no mesmo padrão do limite dos orçamentos. A vigência de um período já fechado não
@@ -2108,10 +2108,23 @@ CI.
    por e-mail (NTF): "Reajuste do aluguel: R$ 2.000,00 → R$ 2.084,00 (IPCA 4,2%)", levando à regra para
    confirmar.
 
-- 🔵 **RJT-1** ADR: reajuste das recorrências.
+- ✅ **RJT-1** ADR: reajuste das recorrências. → [ADR-0010](adr/0010-reajuste-das-recorrencias.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções,
     *então* a ADR-0010 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO
     ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: vigências em `recurrence_amounts` por
+    **período** (como a identidade da ocorrência), a primeira sempre existe, a nova começa num período da
+    agenda, depois do primeiro e ainda não fechado (400 `recurrence.amount_period_invalid`); rotas
+    `POST/DELETE /transactions/recurrences/{id}/amounts`; o `amount` do `PUT` da regra passa a corrigir a
+    **vigência atual** (não cria vigência). Reajuste aplicado por
+    `POST .../adjustments` com `{ year, rate }` ou `{ year, amount }` (409
+    `recurrence.adjustment_already_applied`), sobre o valor vigente antes do aniversário, meio para cima.
+    A leitura da regra traz `pendingAdjustment` do aniversário até 11 meses depois (com `waitingFor` quando
+    falta mês de índice). Índices em `economic_indexes`, `IndexFetchWorker` diário com
+    `Indexes:Fetch:Enabled` (padrão desligado; o compose liga) e host em configuração. `RecurrenceSaved` v2
+    com `amounts` e `adjustment` (inclui `estimatedRate`), republicado quando sai mês novo do índice; a
+    previsão estima só o próximo aniversário (`estimatedRecurring`). Aviso `RecurrenceAdjustment` com chave
+    `adjustment:{regra}:{período}`.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **RJT-2** Valor com vigência na regra.
   - *Dado* um aluguel de R$ 2.000 desde janeiro, *quando* informo R$ 2.100 a partir de março, *então*
