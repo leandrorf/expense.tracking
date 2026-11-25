@@ -308,6 +308,7 @@ public sealed class ProjectionProcessor(IEventFeedClient feed, IProjectionStore 
         row.AdjustmentMonth = e.Adjustment?.AnniversaryMonth;
         row.AdjustmentEstimatedRate = e.Adjustment?.EstimatedRate;
         row.AdjustmentNoReduction = e.Adjustment?.NoReduction ?? false;
+        row.AdjustmentIndex = e.Adjustment?.Index;
         row.LastEventSequence = feedEvent.Sequence;
     }
 

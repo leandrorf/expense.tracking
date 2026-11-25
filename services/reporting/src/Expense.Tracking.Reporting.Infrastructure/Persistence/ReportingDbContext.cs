@@ -102,6 +102,7 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(r => r.AdjustmentMonth).HasColumnName("adjustment_month");
             b.Property(r => r.AdjustmentEstimatedRate).HasColumnName("adjustment_estimated_rate").HasPrecision(9, 4);
             b.Property(r => r.AdjustmentNoReduction).HasColumnName("adjustment_no_reduction").IsRequired();
+            b.Property(r => r.AdjustmentIndex).HasColumnName("adjustment_index").HasMaxLength(8);
             // RJT-3 (ADR-0010): vigencias da regra, trocadas inteiras a cada RecurrenceSaved.
             b.OwnsMany(r => r.Amounts, a =>
             {

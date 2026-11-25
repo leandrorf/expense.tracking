@@ -72,8 +72,8 @@ internal sealed class ProjectionQueries(ReportingDbContext dbContext) : IProject
                 r.CreditCardId, r.Amount, r.Frequency, r.StartsOn, r.EndsOn,
                 closed.GetValueOrDefault(r.RecurrenceId) ?? new HashSet<string>(), r.Description,
                 r.Amounts.Select(a => new RecurrenceAmountFrom(a.FromPeriod, a.Amount)).ToList(),
-                r.AdjustmentMonth is { } month && r.AdjustmentEstimatedRate is { } rate
-                    ? new RecurrenceAdjustmentEstimate(month, rate, r.AdjustmentNoReduction)
+                r.AdjustmentMonth is { } month
+                    ? new RecurrenceAdjustmentEstimate(month, r.AdjustmentEstimatedRate, r.AdjustmentNoReduction, r.AdjustmentIndex)
                     : null))
             .ToList();
     }

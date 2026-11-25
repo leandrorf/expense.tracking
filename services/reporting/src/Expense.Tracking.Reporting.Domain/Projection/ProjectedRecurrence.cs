@@ -49,6 +49,9 @@ public sealed class ProjectedRecurrence
 
     public bool AdjustmentNoReduction { get; set; }
 
+    /// <summary>RJT-9: indice do reajuste (<c>IPCA</c>, <c>INPC</c>, <c>IGPM</c>); nulo no percentual fixo.</summary>
+    public string? AdjustmentIndex { get; set; }
+
     /// <summary>Sequencia do ultimo evento do feed aplicado a esta linha.</summary>
     public long LastEventSequence { get; set; }
 }

@@ -2245,7 +2245,17 @@ CI.
     previsão de 12 meses, *então* do mês que vem em diante o valor é o estimado pelo último acumulado de 12
     meses conhecido, e a tela mostra a parte estimada.
   - Estimativa: 3 · **Should** · Dependências: RJT-3, RJT-6
-- 🔵 **RJT-9** Aviso de reajuste pendente.
+- ✅ **RJT-9** Aviso de reajuste pendente. → aviso `RecurrenceAdjustment` no sino e no resumo por e-mail.
+  - Feito assim: o `reporting` passa a guardar também o índice do reajuste (migration
+    `ProjectedRecurrenceAdjustmentIndex`) e o `ReminderCalculator` avisa o aniversário mais recente (do
+    mês dele até 11 meses depois) que ainda não virou vigência, dentro da regra e depois do período do
+    início (mesma regra do reajuste pendente da previsão, `RecurrenceAmounts.Pending`), com chave
+    `adjustment:{regra}:{período}`, valor atual (`previousAmount`), valor estimado pela taxa do evento
+    (`amount`), `rate` e `index`; sem taxa, `rate` nulo. Vale para gasto e receita e segue a preferência
+    "recorrências" dos avisos; dispensar funciona como nos outros. O sino mostra "R$ 2.000,00 → R$ 2.084,00
+    (IGP-M 4,2%)" ou "aguardando o IPCA: confirme na recorrência", e o atalho abre a linha "valores" da
+    regra; o e-mail traz a mesma linha. Confirmar cria a vigência, e o aviso some. A jornada da RJT-10
+    confirma o reajuste a partir do aviso.
   - *Dado* uma regra com reajuste no mês corrente ainda não confirmado, *quando* olho o sino (ou recebo o
     resumo por e-mail), *então* vejo "Reajuste de <regra>: R$ X → R$ Y (<índice> Z%)", que leva à regra; *e*
     confirmar tira o aviso.

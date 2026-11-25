@@ -157,6 +157,11 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(9,4)")
                         .HasColumnName("adjustment_estimated_rate");
 
+                    b.Property<string>("AdjustmentIndex")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)")
+                        .HasColumnName("adjustment_index");
+
                     b.Property<int?>("AdjustmentMonth")
                         .HasColumnType("int")
                         .HasColumnName("adjustment_month");

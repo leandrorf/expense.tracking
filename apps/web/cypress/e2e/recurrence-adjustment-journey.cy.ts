@@ -45,6 +45,20 @@ describe('Recorrencias (jornada do reajuste com previsao)', () => {
     });
   };
 
+  /** RJT-9: abre o sino ate o aviso aparecer (ou sumir) — a projecao do reporting leva um instante. */
+  const waitForReminder = (title: string, present = true, attempts = 30) => {
+    cy.get('body').then(($body) => {
+      if ($body.find('[data-cy=reminders-panel]').length === 0) cy.get('[data-cy=reminders-bell]').click();
+    });
+    cy.get('[data-cy=reminders-panel]').then(($panel) => {
+      if (($panel.find(`[data-cy=reminder-item]:contains("${title}")`).length > 0) === present) return;
+      if (attempts <= 1) throw new Error(`O aviso "${title}" nao ${present ? 'apareceu' : 'sumiu'} (projecao atrasada?).`);
+      cy.get('[data-cy=reminders-bell]').click(); // fecha
+      cy.wait(1_000);
+      waitForReminder(title, present, attempts - 1);
+    });
+  };
+
   let stamp = 0;
   beforeEach(() => {
     stamp = Date.now();
@@ -87,13 +101,21 @@ describe('Recorrencias (jornada do reajuste com previsao)', () => {
     cy.then(() => waitForDiff(next, before, 1050));
     cy.get(`[data-cy=forecast-row][data-month="${next}"] [data-cy=forecast-estimated]`).should('contain', 'reajuste estimado');
 
-    // Confirma o reajuste pendente (sugestao de 5%): o valor de hoje e o da proxima passam a R$ 1.050.
-    cy.get('[data-cy=tab-recurrences]').click();
-    ruleRow().find('[data-cy=rec-adjust-pending]').click();
+    // RJT-9: o sino avisa o reajuste pendente; o aviso abre os valores da regra, onde ele e confirmado
+    // (sugestao de 5%): o valor de hoje e o da proxima passam a R$ 1.050, e o aviso sai.
+    waitForReminder(`Reajuste de ${rent}`);
+    cy.contains('[data-cy=reminder-item]', `Reajuste de ${rent}`)
+      .should('have.attr', 'data-kind', 'RecurrenceAdjustment')
+      .and('contain', '1.000,00')
+      .and('contain', '1.050,00')
+      .and('contain', '5%')
+      .click();
     cy.get('[data-cy=rec-adjust-summary]').should('contain', '1.050,00');
     cy.get('[data-cy=rec-adjust-confirm]').click();
     cy.get('[data-cy=rec-notice]').should('contain', `Reajuste de ${rent} confirmado`);
     ruleRow().find('[data-cy=rec-value]').should('contain', '1.050,00');
+    waitForReminder(`Reajuste de ${rent}`, false);
+    cy.get('[data-cy=reminders-bell]').click(); // fecha
 
     // Valor renegociado a partir de daqui a dois meses.
     cy.get('[data-cy=rec-amount-value]').type('1100');

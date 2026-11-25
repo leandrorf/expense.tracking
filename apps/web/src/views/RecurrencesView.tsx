@@ -56,7 +56,15 @@ interface LaunchDraft {
 export function RecurrencesView({
   template = null,
   onTemplateUsed,
-}: { template?: Transaction | null; onTemplateUsed?: () => void } = {}) {
+  focusValuesOf = null,
+  onFocusUsed,
+}: {
+  template?: Transaction | null;
+  onTemplateUsed?: () => void;
+  /** RJT-9: regra cujos valores abrem já (aviso de reajuste pendente). */
+  focusValuesOf?: string | null;
+  onFocusUsed?: () => void;
+} = {}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -148,6 +156,14 @@ export function RecurrencesView({
     onTemplateUsed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template, loading]);
+
+  // RJT-9: o aviso de reajuste abre os valores da regra (depois de carregar a lista).
+  useEffect(() => {
+    if (!focusValuesOf || loading) return;
+    setValuesOpen(focusValuesOf);
+    onFocusUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusValuesOf, loading]);
 
   function resetForm() {
     setEditing(null);

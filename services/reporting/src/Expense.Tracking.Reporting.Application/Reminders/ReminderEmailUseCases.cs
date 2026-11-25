@@ -117,6 +117,9 @@ public static class ReminderEmails
         CurrencyDecimalDigits = 2,
         CurrencyPositivePattern = 2, // "R$ 1.234,56"
         CurrencyNegativePattern = 12, // "R$ -1.234,56"
+        // RJT-9: o percentual do reajuste ("4,2%").
+        NumberDecimalSeparator = ",",
+        NumberGroupSeparator = ".",
     };
 
     public static EmailMessage Confirmation(string to, string link) => new(
@@ -137,6 +140,19 @@ public static class ReminderEmails
         return new EmailMessage(to, $"Expense Tracking: {subject}", text, html);
     }
 
+    /// <summary>RJT-9: "Reajuste de Aluguel: R$ 2.000,00 → R$ 2.084,00 (IPCA 4,2%)", ou aguardando o indice.</summary>
+    private static string AdjustmentLine(Reminder r)
+    {
+        var index = r.Index switch { null => null, "IGPM" => "IGP-M", var other => other };
+        if (r.Rate is not { } rate)
+        {
+            return $"{r.Title}: aguardando o {index ?? "índice"}; confirme na recorrência";
+        }
+
+        var how = $"{(index is null ? string.Empty : index + " ")}{rate.ToString("0.####", Brl)}%";
+        return $"{r.Title}: {(r.PreviousAmount ?? r.Amount).ToString("C", Brl)} → {r.Amount.ToString("C", Brl)} ({how})";
+    }
+
     private static string LineOf(Reminder r)
     {
         var date = r.DueOn.ToString("dd/MM", CultureInfo.InvariantCulture);
@@ -148,6 +164,7 @@ public static class ReminderEmails
             ReminderKind.RecurrenceDue => $"{r.Title}: vence em {date}, {money}",
             ReminderKind.RecurrencesToLaunch => $"{r.Title} (pendentes desde {date})",
             ReminderKind.Budget => $"{r.Title}: {money} gastos de {r.Limit.ToString("C", Brl)} no mês",
+            ReminderKind.RecurrenceAdjustment => AdjustmentLine(r),
             _ => $"{r.Title}: {date}",
         };
     }
