@@ -63,6 +63,30 @@ public sealed class ReminderCalculatorTests
     }
 
     [Fact]
+    public void Budgets_WarnInAttentionOrExceeded_WithAKeyThatChangesWithTheSituation()
+    {
+        // NTF-9.
+        var (warning, exceeded, fine) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        Expense.Tracking.Reporting.Domain.Budgets.BudgetMonthStatus Status(Guid id, string category, decimal spent,
+            Expense.Tracking.Reporting.Domain.Budgets.BudgetHealth health) =>
+            new(id, category, Expense.Tracking.Reporting.Domain.Budgets.BudgetScope.Business, "BRL", 1000m, spent, 1000m - spent,
+                spent / 10m, health, 80);
+
+        var reminders = ReminderCalculator.Calculate(Today, 3, [], [], budgets:
+        [
+            Status(warning, "Software", 850m, Expense.Tracking.Reporting.Domain.Budgets.BudgetHealth.Warning),
+            Status(exceeded, "Viagem", 1200m, Expense.Tracking.Reporting.Domain.Budgets.BudgetHealth.Exceeded),
+            Status(fine, "Contador", 100m, Expense.Tracking.Reporting.Domain.Budgets.BudgetHealth.OnTrack),
+        ]);
+
+        Assert.Equal(
+            [(ReminderKind.Budget, ReminderUrgency.Overdue, $"budget:{exceeded}:2026-11:exceeded", "Orçamento Viagem (PJ)", 1200m, 1000m),
+             (ReminderKind.Budget, ReminderUrgency.Soon, $"budget:{warning}:2026-11:warning", "Orçamento Software (PJ)", 850m, 1000m)],
+            reminders.Select(r => (r.Kind, r.Urgency, r.Key, r.Title, r.Amount, r.Limit)));
+        Assert.All(reminders, r => Assert.Equal(new DateOnly(2026, 11, 30), r.DueOn));
+    }
+
+    [Fact]
     public void ResolvedItems_AndDisabledKinds_DoNotWarn()
     {
         var launched = Rule("Aluguel", isExpense: true, "2026-01-23", "2026-09", "2026-10", "2026-11");

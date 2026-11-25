@@ -18,6 +18,10 @@ function detailOf(r: Reminder, money: (v: number) => string): string {
       return `${r.urgency === 'Today' ? 'vence hoje' : `vence em ${shortDate(r.dueOn)}`} · ${money(r.amount)}`;
     case 'RecurrencesToLaunch':
       return `pendentes desde ${shortDate(r.dueOn)}: lance ou pule`;
+    case 'Budget':
+      return r.urgency === 'Overdue'
+        ? `estourou: ${money(r.amount)} de ${money(r.limit)}`
+        : `${Math.round((r.amount / r.limit) * 100)}% de ${money(r.limit)} gastos`;
     default:
       return shortDate(r.dueOn);
   }

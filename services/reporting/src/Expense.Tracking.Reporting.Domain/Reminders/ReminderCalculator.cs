@@ -1,4 +1,5 @@
 using System.Globalization;
+using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Forecast;
 using Expense.Tracking.Reporting.Domain.Invoices;
 
@@ -33,7 +34,8 @@ public sealed record ReminderRecurrence(
 /// <summary>
 /// Um aviso. <see cref="Key"/> e estavel por item e estado (para dispensar, ADR-0009, decisao 5).
 /// <see cref="DueOn"/> e a data que vence (no "a lancar", a mais antiga pendente); <see cref="Count"/>
-/// so no "a lancar". O destino do atalho vem nos ids: cartao e mes da fatura, ou regra e periodo.
+/// so no "a lancar"; <see cref="Limit"/> so no orcamento (o <see cref="Amount"/> e o consumido). O destino do
+/// atalho vem nos ids: cartao e mes da fatura, ou regra e periodo.
 /// </summary>
 public sealed record Reminder(
     ReminderKind Kind,
@@ -46,7 +48,8 @@ public sealed record Reminder(
     string? DueMonth = null,
     Guid? RecurrenceId = null,
     string? Period = null,
-    int Count = 0);
+    int Count = 0,
+    decimal Limit = 0m);
 
 /// <summary>
 /// NTF-2 (ADR-0009, decisao 3): o que o usuario precisa resolver. Calculado a cada consulta e nunca
@@ -65,7 +68,7 @@ public static class ReminderCalculator
 
     public static IReadOnlyList<Reminder> Calculate(
         DateOnly today, int leadDays, IEnumerable<ReminderInvoice> invoices, IEnumerable<ReminderRecurrence> recurrences,
-        bool includeInvoices = true, bool includeRecurrences = true)
+        bool includeInvoices = true, bool includeRecurrences = true, IEnumerable<BudgetMonthStatus>? budgets = null)
     {
         var horizon = today.AddDays(leadDays);
         var reminders = new List<Reminder>();
@@ -126,6 +129,19 @@ public static class ReminderCalculator
                     toLaunch.Min(), 0m, toLaunch.Count == 1 ? "1 recorrência a lançar" : $"{toLaunch.Count} recorrências a lançar",
                     Count: toLaunch.Count));
             }
+        }
+
+        // NTF-9: orcamento do mes em Atencao (em breve) ou Estourado (urgente). A chave leva a situacao:
+        // dispensar o "atencao" nao esconde o "estourado".
+        var month = today.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        var endOfMonth = new DateOnly(today.Year, today.Month, 1).AddMonths(1).AddDays(-1);
+        foreach (var budget in (budgets ?? []).Where(b => b.Health is BudgetHealth.Warning or BudgetHealth.Exceeded))
+        {
+            var exceeded = budget.Health == BudgetHealth.Exceeded;
+            var scope = budget.Scope == BudgetScope.Business ? "PJ" : "PF";
+            reminders.Add(new Reminder(ReminderKind.Budget, $"budget:{budget.BudgetId}:{month}:{(exceeded ? "exceeded" : "warning")}",
+                exceeded ? ReminderUrgency.Overdue : ReminderUrgency.Soon, endOfMonth, budget.Spent,
+                $"Orçamento {budget.Category} ({scope})", Limit: budget.Limit));
         }
 
         return reminders.OrderBy(r => r.Urgency).ThenBy(r => r.DueOn).ThenBy(r => r.Title, StringComparer.Ordinal).ToList();

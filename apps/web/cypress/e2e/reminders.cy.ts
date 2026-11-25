@@ -198,4 +198,46 @@ describe('Avisos de vencimento', () => {
     cy.get('[data-cy=tab-recurrences]').click();
     cy.contains('[data-cy=rec-row]', gym).find('[data-cy=rec-remove]').click();
   });
+
+  it('orcamento estourado vira aviso e leva a aba Orcamentos', () => {
+    // NTF-9: orcamento PF de R$ 100 com R$ 150 gastos no mes.
+    const [account, category] = [`E2E Orcamento Aviso ${stamp}`, `Lazer Aviso ${stamp}`];
+    const title = `Orçamento ${category} (PF)`;
+    cy.get('[data-cy=tab-accounts]').click();
+    cy.get('[data-cy=account-name]').type(account);
+    cy.get('[data-cy=account-submit]').click();
+    cy.get('[data-cy=accounts-table]').contains('td', account).should('be.visible');
+
+    cy.get('[data-cy=tab-budgets]').click();
+    cy.get('[data-cy=budget-category]').type(category);
+    cy.get('[data-cy=budget-scope]').select('Personal');
+    cy.get('[data-cy=budget-amount]').type('100');
+    cy.get('[data-cy=budget-submit]').click();
+    cy.get(`[data-cy=budgets-personal] [data-cy=budget-row][data-category="${category}"]`).should('exist');
+
+    cy.get('[data-cy=tab-transactions]').click();
+    cy.get('[data-cy=tx-account]').select(account);
+    cy.get('[data-cy=tx-payment-method]').select('Pix');
+    cy.get('[data-cy=tx-description]').type(`Show ${stamp}`);
+    cy.get('[data-cy=tx-category]').type(category);
+    cy.get('[data-cy=tx-amount]').type('150');
+    cy.get('[data-cy=tx-date]').clear().type(iso(today));
+    cy.get('[data-cy=tx-submit]').click();
+    cy.contains('[data-cy=tx-row]', `Show ${stamp}`).should('exist');
+
+    waitForReminder(title);
+    cy.contains('[data-cy=reminder-item]', title)
+      .should('have.attr', 'data-kind', 'Budget')
+      .and('have.attr', 'data-urgency', 'Overdue')
+      // toLocaleString separa "R$" do valor com espaco nao separavel.
+      .invoke('text')
+      .should((text) => expect(text.replace(/ /g, ' ')).to.contain('estourou: R$ 150,00 de R$ 100,00'));
+    cy.contains('[data-cy=reminder-item]', title).click();
+    cy.get(`[data-cy=budget-status-personal] [data-cy=budget-status-row][data-category="${category}"]`).should('exist');
+
+    // Limpeza: dispensa o aviso (o orcamento fica estourado no mes do demo).
+    waitForReminder(title);
+    cy.contains('[data-cy=reminder-row]', title).find('[data-cy=reminder-dismiss]').click();
+    cy.contains('[data-cy=reminder-item]', title).should('not.exist');
+  });
 });

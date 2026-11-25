@@ -1810,7 +1810,7 @@ REC-10 (2 pts). Total: 36 pts.
 **Ordem sugerida:** REC-1 → REC-2 → REC-3 → REC-4 (com o `reporting` implantado antes do `transactions`
 que publica os eventos novos) → REC-5 → REC-6 → REC-7 (fecha o Must) → REC-8 → REC-9 → REC-10.
 
-## 🟡 EPIC NTF — Lembretes de vencimento  · *In Progress*
+## 🟢 EPIC NTF — Lembretes de vencimento  · *Done*
 **Problema:** o produto já sabe o que vai vencer (a fatura de cada cartão com a situação dela, as
 ocorrências recorrentes e o que está "a lançar"), mas só mostra isso a quem abre a aba certa e procura. Fatura
 fechada que ninguém olha vira fatura vencida, com juros no banco; boleto do aluguel cadastrado como
@@ -2007,9 +2007,16 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     (link lido pela API do Mailpit, resumo com o aviso de amanhã; desliga o e-mail do demo e apaga as regras
     no fim, mesmo se falhar).
   - Estimativa: 8 · **Should** · Dependências: NTF-6, NTF-7
-- 🔵 **NTF-9** Aviso de orçamento.
+- ✅ **NTF-9** Aviso de orçamento. → aviso `Budget` em Atenção ou Estourado.
   - *Dado* um orçamento em Atenção ou Estourado no mês corrente, *quando* olho o painel, *então* vejo o
     aviso com o consumido e o limite, levando a Orçamentos.
+  - Feito assim: o `ReminderComposer` calcula a situação dos orçamentos do mês corrente com o mesmo
+    `BudgetStatusCalculator` da aba Orçamentos (BDG-4) quando o tipo "orçamentos" está ligado; Estourado vira
+    aviso urgente e Atenção, "em breve", com vencimento no fim do mês, o consumido em `amount` e o limite em
+    `limit`. A chave leva a situação (`budget:{id}:{yyyy-MM}:warning|exceeded`): dispensar o de Atenção não
+    esconde o de Estourado. Na SPA: "estourou: R$ 150,00 de R$ 100,00" ou "85% de R$ 1.000,00 gastos", e o
+    clique leva a Orçamentos; o resumo por e-mail ganha a mesma linha. Cypress: quarto caso do
+    `reminders.cy.ts` (dispensa o aviso no fim).
   - Estimativa: 2 · **Could** · Dependências: NTF-3
 
 **Fora do escopo (Won't, nesta versão):** push do navegador e app móvel; SMS e WhatsApp; aviso por

@@ -21,6 +21,8 @@ export interface Reminder {
   period: string | null;
   /** "A lançar": quantas ocorrências. */
   count: number;
+  /** NTF-9, orçamento: o limite do mês (`amount` é o consumido). */
+  limit: number;
 }
 
 export interface Reminders {

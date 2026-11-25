@@ -141,6 +141,41 @@ public sealed class RemindersApiTests(InvoicesApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Budgets_InWarningOrExceeded_AreReminders_AndCanBeTurnedOff()
+    {
+        // NTF-9: mes corrente = 2026-11; limiar de atencao padrao de 80%.
+        var owner = Guid.NewGuid();
+        var client = WriterFor(owner);
+        object Budget(string category, decimal amount) => new
+        {
+            category, scope = "Personal", amount, currency = "BRL", startMonth = "2026-11",
+        };
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/budgets", Budget("Mercado", 1000m))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/budgets", Budget("Lazer", 100m))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/budgets", Budget("Saude", 1000m))).StatusCode);
+        var feed = _factory.EventFeed;
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 900m, "Mercado", occurredOn: "2026-11-10");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 150m, "Lazer", occurredOn: "2026-11-12");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 100m, "Saude", occurredOn: "2026-11-12");
+        await _factory.DrainFeedAsync();
+
+        var items = (await client.GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray()
+            .Where(i => i.GetProperty("kind").GetString() == "Budget")
+            .Select(i => (i.GetProperty("title").GetString(), i.GetProperty("urgency").GetString(), i.GetProperty("amount").GetDecimal(),
+                i.GetProperty("limit").GetDecimal(), i.GetProperty("dueOn").GetString()))
+            .ToList();
+
+        Assert.Equal(
+            [("Orçamento Lazer (PF)", "Overdue", 150m, 100m, "2026-11-30"),
+             ("Orçamento Mercado (PF)", "Soon", 900m, 1000m, "2026-11-30")],
+            items);
+
+        await client.PutAsJsonAsync("/reports/reminder-settings", new { leadDays = 3, invoices = true, recurrences = true, budgets = false });
+        Assert.DoesNotContain((await client.GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray(),
+            i => i.GetProperty("kind").GetString() == "Budget");
+    }
+
+    [Fact]
     public async Task Reminders_DisappearWhenResolved_AndRequireAToken()
     {
         var owner = Guid.NewGuid();

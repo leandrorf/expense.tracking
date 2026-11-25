@@ -1,5 +1,7 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Budgets;
 using Expense.Tracking.Reporting.Application.Invoices;
+using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Reminders;
 
 namespace Expense.Tracking.Reporting.Application.Reminders;
@@ -9,7 +11,7 @@ namespace Expense.Tracking.Reporting.Application.Reminders;
 /// API, ou pelo endpoint interno do accounts no job do e-mail), das recorrencias projetadas, das
 /// preferencias e das dispensas. Um so calculo para a tela e para o e-mail.
 /// </summary>
-public sealed class ReminderComposer(IProjectionQueries projection, IReminderStore store)
+public sealed class ReminderComposer(IProjectionQueries projection, IReminderStore store, IBudgetRepository budgets)
 {
     public async Task<IReadOnlyList<Reminder>> ComposeAsync(
         Guid ownerUserId, IReadOnlyList<CardInfo> cards, ReminderSettings settings, DateOnly today, CancellationToken cancellationToken)
@@ -31,9 +33,24 @@ public sealed class ReminderComposer(IProjectionQueries projection, IReminderSto
                 .ToList()
             : [];
 
+        // NTF-9: situacao dos orcamentos no mes corrente (mesma regra da aba Orcamentos, BDG-4).
+        IReadOnlyList<BudgetMonthStatus> budgetStatus = [];
+        if (settings.Budgets)
+        {
+            var first = new DateOnly(today.Year, today.Month, 1);
+            var list = await budgets.ListAsync(ownerUserId, cancellationToken);
+            if (list.Count > 0)
+            {
+                var monthTransactions = await projection.GetTransactionsAsync(
+                    ownerUserId, new ReportFilter(From: first, To: first.AddMonths(1).AddDays(-1)), cancellationToken);
+                budgetStatus = BudgetStatusCalculator.Calculate(first, list, monthTransactions);
+            }
+        }
+
         // NTF-5: o dispensado some ate a chave dele mudar (ADR-0009, decisao 5).
         var dismissed = await store.ListDismissedKeysAsync(ownerUserId, cancellationToken);
-        return ReminderCalculator.Calculate(today, settings.LeadDays, invoices, recurrences, settings.Invoices, settings.Recurrences)
+        return ReminderCalculator.Calculate(
+                today, settings.LeadDays, invoices, recurrences, settings.Invoices, settings.Recurrences, budgetStatus)
             .Where(r => !dismissed.Contains(r.Key))
             .ToList();
     }

@@ -147,6 +147,7 @@ public static class ReminderEmails
             ReminderKind.InvoiceDue => $"{r.Title}: vence em {date}, falta {money}",
             ReminderKind.RecurrenceDue => $"{r.Title}: vence em {date}, {money}",
             ReminderKind.RecurrencesToLaunch => $"{r.Title} (pendentes desde {date})",
+            ReminderKind.Budget => $"{r.Title}: {money} gastos de {r.Limit.ToString("C", Brl)} no mês",
             _ => $"{r.Title}: {date}",
         };
     }

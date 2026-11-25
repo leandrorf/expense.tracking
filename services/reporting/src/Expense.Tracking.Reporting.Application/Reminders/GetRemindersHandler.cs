@@ -12,6 +12,7 @@ namespace Expense.Tracking.Reporting.Application.Reminders;
 /// <param name="RecurrenceId">Ocorrencia: a regra (atalho para a aba Recorrencias).</param>
 /// <param name="Period">Ocorrencia: o periodo, <c>yyyy-MM</c> ou <c>yyyy</c>.</param>
 /// <param name="Count">"A lancar": quantas ocorrencias.</param>
+/// <param name="Limit">Orcamento: o limite do mes (o <c>Amount</c> e o consumido).</param>
 public sealed record ReminderDto(
     string Kind,
     string Key,
@@ -23,11 +24,12 @@ public sealed record ReminderDto(
     string? DueMonth,
     Guid? RecurrenceId,
     string? Period,
-    int Count)
+    int Count,
+    decimal Limit)
 {
     public static ReminderDto From(Reminder r) => new(
         r.Kind.ToString(), r.Key, r.Urgency.ToString(), r.DueOn, r.Amount, r.Title, r.CardId, r.DueMonth, r.RecurrenceId,
-        r.Period, r.Count);
+        r.Period, r.Count, r.Limit);
 }
 
 /// <param name="Overdue">Quantos avisos sao de algo ja vencido (o sino os destaca).</param>
