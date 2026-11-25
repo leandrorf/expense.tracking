@@ -40,6 +40,20 @@ export interface ReminderSettings {
   budgets: boolean;
 }
 
+/** NTF-8: resumo diário por e-mail; só sai com o endereço confirmado pelo link. */
+export interface ReminderEmail {
+  email: string | null;
+  enabled: boolean;
+  emailConfirmed: boolean;
+  /** Hora local (0 a 23). */
+  sendHour: number;
+}
+
+/** O que `GET /reminder-settings` devolve: os tipos e o e-mail. */
+export interface ReminderSettingsView extends ReminderSettings {
+  email: ReminderEmail;
+}
+
 export const remindersApi = {
   list: () => apiFetch<Reminders>('/api/reports/reminders'),
 
@@ -47,8 +61,17 @@ export const remindersApi = {
   dismiss: (key: string) =>
     apiFetch<void>('/api/reports/reminders/dismissals', { method: 'POST', body: JSON.stringify({ key }) }),
 
-  settings: () => apiFetch<ReminderSettings>('/api/reports/reminder-settings'),
+  settings: () => apiFetch<ReminderSettingsView>('/api/reports/reminder-settings'),
 
   saveSettings: (settings: ReminderSettings) =>
     apiFetch<ReminderSettings>('/api/reports/reminder-settings', { method: 'PUT', body: JSON.stringify(settings) }),
+
+  /** NTF-8: trocar o endereço manda um link de confirmação para ele. */
+  saveEmail: (input: { email: string | null; enabled: boolean; sendHour: number }) =>
+    apiFetch<ReminderEmail>('/api/reports/reminder-settings/email', { method: 'PUT', body: JSON.stringify(input) }),
+
+  confirmEmail: (token: string) =>
+    apiFetch<ReminderEmail>('/api/reports/reminder-settings/email/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  resendEmail: () => apiFetch<void>('/api/reports/reminder-settings/email/resend', { method: 'POST' }),
 };

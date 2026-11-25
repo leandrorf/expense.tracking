@@ -36,37 +36,24 @@ public sealed record RemindersDto(string Currency, int LeadDays, int Overdue, IR
 
 /// <summary>
 /// NTF-2 (ADR-0009, decisoes 2 e 3): avisos do usuario, calculados a cada consulta com as faturas de
-/// todos os cartoes dele (ciclo lido no accounts com o token dele) e as recorrencias projetadas.
+/// todos os cartoes dele (ciclo lido no accounts com o token dele) e as recorrencias projetadas, nas
+/// preferencias dele (NTF-6) e sem os dispensados (NTF-5). O calculo e o mesmo do e-mail (ReminderComposer).
 /// </summary>
 public sealed class GetRemindersHandler(
-    ICardDirectory cards, IProjectionQueries projection, IReminderStore store, InvoiceOptions options, TimeProvider timeProvider)
+    ICardDirectory cards, ReminderComposer composer, IReminderStore store, InvoiceOptions options, TimeProvider timeProvider)
 {
     public async Task<RemindersDto> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
         var today = CardInvoiceSource.Today(timeProvider, options);
-        // NTF-6: antecedencia e tipos ligados nas preferencias (sem preferencia gravada, os padroes).
         var settings = await store.FindSettingsAsync(ownerUserId, cancellationToken) ?? ReminderSettings.Default(ownerUserId);
-        var leadDays = settings.LeadDays;
+        IReadOnlyList<CardInfo> userCards = settings.Invoices
+            ? (await cards.ListWithScopesAsync(cancellationToken)).Select(c => c.Card).ToList()
+            : [];
 
-        var invoices = new List<ReminderInvoice>();
-        foreach (var (card, _) in settings.Invoices ? await cards.ListWithScopesAsync(cancellationToken) : [])
-        {
-            var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
-            invoices.AddRange(loaded.Invoices.Select(i => new ReminderInvoice(card.Id, card.Label, card.LastFourDigits, i)));
-        }
-
-        var recurrences = (await projection.GetRecurrencesAsync(ownerUserId, cancellationToken))
-            .Select(r => new ReminderRecurrence(r.Id, r.Description, r.TransactionType != "Income", r.Amount, r.Frequency,
-                r.StartsOn, r.EndsOn, r.ClosedPeriods));
-
-        // NTF-5: o dispensado some ate a chave dele mudar (decisao 5).
-        var dismissed = await store.ListDismissedKeysAsync(ownerUserId, cancellationToken);
-        var reminders = ReminderCalculator.Calculate(today, leadDays, invoices, recurrences, settings.Invoices, settings.Recurrences)
-            .Where(r => !dismissed.Contains(r.Key))
-            .ToList();
+        var reminders = await composer.ComposeAsync(ownerUserId, userCards, settings, today, cancellationToken);
         return new RemindersDto(
             "BRL",
-            leadDays,
+            settings.LeadDays,
             reminders.Count(r => r.Urgency == ReminderUrgency.Overdue),
             reminders.Select(ReminderDto.From).ToList());
     }

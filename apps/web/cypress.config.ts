@@ -40,6 +40,8 @@ export default defineConfig({
       identityUrl: process.env.E2E_IDENTITY_URL ?? 'http://localhost:5080',
       // Gateway das APIs, para testes que mudam dados por fora da tela (ex.: outra aba, LNC-5).
       gatewayUrl: process.env.E2E_GATEWAY_URL ?? 'http://localhost:8080',
+      // NTF-8: API do Mailpit (SMTP de desenvolvimento), onde o E2E le os e-mails dos avisos.
+      mailpitUrl: process.env.E2E_MAILPIT_URL ?? 'http://localhost:8025',
       // Credenciais do usuario demo semeado pelo identity (IdentitySeeder).
       demoEmail: process.env.E2E_DEMO_EMAIL ?? 'demo@expense.local',
       demoPassword: process.env.E2E_DEMO_PASSWORD ?? 'Password123!',

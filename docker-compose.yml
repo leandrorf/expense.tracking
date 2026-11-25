@@ -179,6 +179,15 @@ services:
     networks:
       - expense-net
 
+  # NTF-8: servidor SMTP de desenvolvimento; guarda os e-mails e os mostra (e expoe uma API) na porta 8025.
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    container_name: expense-mailpit
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - expense-net
+
   reporting:
     build:
       context: .
@@ -194,6 +203,8 @@ services:
         condition: service_started
       # INV-4: a fatura le o ciclo do cartao no accounts, com o token do usuario.
       accounts:
+        condition: service_started
+      mailpit:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -213,6 +224,15 @@ services:
       ServiceAuth__ClientSecret: ${REPORTING_SERVICE_CLIENT_SECRET:-dev-service-secret}
       # INV-4/REC: fuso do "hoje" de faturas, previsao e recorrencias (o mesmo do transactions).
       Reports__TimeZone: ${APP_TIME_ZONE:-America/Sao_Paulo}
+      # NTF-8 (ADR-0009, decisao 6): resumo diario por e-mail. Em desenvolvimento o SMTP e o Mailpit
+      # (caixa em http://localhost:8025) e o job roda a cada 20 s para o E2E nao esperar uma hora.
+      ServiceAuth__Scope: "events.read accounts.cards.read"
+      App__PublicUrl: "http://localhost:${WEB_HTTP_PORT:-5173}/"
+      Smtp__Host: ${SMTP_HOST:-mailpit}
+      Smtp__Port: ${SMTP_PORT:-1025}
+      Smtp__From: ${SMTP_FROM:-avisos@expense.local}
+      Reminders__Digest__IntervalSeconds: ${REMINDER_DIGEST_INTERVAL_SECONDS:-20}
+      Reminders__Digest__FirstDelaySeconds: ${REMINDER_DIGEST_FIRST_DELAY_SECONDS:-10}
     ports:
       - "${REPORTING_HTTP_PORT:-5110}:8080"
     networks:

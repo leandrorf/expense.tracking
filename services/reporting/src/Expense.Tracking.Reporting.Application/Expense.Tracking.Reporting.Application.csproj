@@ -4,4 +4,9 @@
     <ProjectReference Include="..\Expense.Tracking.Reporting.Domain\Expense.Tracking.Reporting.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- NTF-8: o job do resumo registra falhas por usuario sem parar os outros. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
 </Project>

@@ -370,9 +370,39 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("budgets");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("varchar(254)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset?>("EmailConfirmedAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("email_confirmed_at_utc");
+
+                    b.Property<bool>("EmailEnabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("email_enabled");
+
+                    b.Property<DateTimeOffset?>("EmailTokenExpiresAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("email_token_expires_at_utc");
+
+                    b.Property<string>("EmailTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("email_token_hash");
+
                     b.Property<bool>("Invoices")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("invoices");
+
+                    b.Property<string>("LastSentKeys")
+                        .HasColumnType("text")
+                        .HasColumnName("last_sent_keys");
+
+                    b.Property<DateTime?>("LastSentOn")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("last_sent_on");
 
                     b.Property<int>("LeadDays")
                         .HasColumnType("int")
@@ -382,11 +412,20 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("recurrences");
 
+                    b.Property<int>("SendHour")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(8)
+                        .HasColumnName("send_hour");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("datetime")
                         .HasColumnName("updated_at_utc");
 
                     b.HasKey("OwnerUserId");
+
+                    b.HasIndex("EmailEnabled")
+                        .HasDatabaseName("ix_reminder_settings_email_enabled");
 
                     b.ToTable("reminder_settings", (string)null);
                 });

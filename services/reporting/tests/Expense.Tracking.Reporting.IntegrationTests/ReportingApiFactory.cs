@@ -25,6 +25,9 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
     /// <summary>INV-4: cartoes que o "accounts" devolve, por dono.</summary>
     public CardRegistry Cards { get; } = new();
 
+    /// <summary>NTF-8: e-mails "enviados" (o SMTP nao existe nos testes).</summary>
+    public RecordingEmailSender Emails { get; } = new();
+
     protected virtual void ConfigureTestSettings(IDictionary<string, string?> settings)
     {
     }
@@ -39,6 +42,8 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
             ["Services:TransactionsBaseUrl"] = "http://localhost:5100",
             ["ConnectionStrings:ReportingDb"] = "server=localhost;database=ignored;user=root;password=root;",
             ["Projection:Enabled"] = "false",
+            ["Reminders:Digest:Enabled"] = "false",
+            ["App:PublicUrl"] = "http://app.test/",
         };
         ConfigureTestSettings(settings);
 
@@ -54,6 +59,8 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
                 .Where(d =>
                     d.ServiceType == typeof(IEventFeedClient) ||
                     d.ServiceType == typeof(ICardDirectory) ||
+                    d.ServiceType == typeof(Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory) ||
+                    d.ServiceType == typeof(Expense.Tracking.Reporting.Application.Reminders.IEmailSender) ||
                     d.ServiceType == typeof(DbContextOptions<ReportingDbContext>) ||
                     d.ServiceType == typeof(DbContextOptions) ||
                     d.ServiceType == typeof(ReportingDbContext) ||
@@ -69,6 +76,8 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IEventFeedClient>(EventFeed);
             services.AddSingleton(Cards);
             services.AddScoped<ICardDirectory, FakeCardDirectory>();
+            services.AddSingleton<Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory>(new FakeServiceCardDirectory(Cards));
+            services.AddSingleton<Expense.Tracking.Reporting.Application.Reminders.IEmailSender>(Emails);
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

@@ -1979,7 +1979,7 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     cliente existente). Conferido no stack real: com o escopo, 275 cartões do demo; sem ele, 403; pelo
     gateway, 404. Documentado em `docs/architecture.md`.
   - Estimativa: 3 · **Should** · Dependências: NTF-1
-- 🔵 **NTF-8** Resumo diário por e-mail.
+- ✅ **NTF-8** Resumo diário por e-mail. → `ReminderDigestWorker`, confirmação por link, MailKit + Mailpit.
   - *Dado* que ativei o e-mail e confirmei o endereço pelo link, *quando* chega o horário do resumo e
     tenho aviso novo desde o último envio, *então* recebo um e-mail com os avisos e um link para o app;
     *e* sem aviso novo, nada é enviado.
@@ -1987,6 +1987,25 @@ Won't do INV); ideia de produto promovida a pedido do dono do produto (2026-11-2
     nada é enviado.
   - *Dado* o compose de desenvolvimento, *quando* o resumo sai, *então* ele aparece no Mailpit (o E2E
     confere por lá).
+  - Feito assim: `reminder_settings` ganhou endereço, liga/desliga, hora (0 a 23, padrão 8), confirmação
+    (hash SHA-256 do token de uso único, validade de 24 h) e o registro do último envio (dia e chaves);
+    migração `ReminderEmail`. `PUT /reports/reminder-settings/email` grava e, quando o endereço muda, zera a
+    confirmação e o último envio e manda o link `/confirm-email?token=` (400 `reminders.email_invalid`,
+    `email_required`, `send_hour_invalid`); `POST .../email/confirm` (logado; token errado, vencido, de outro
+    usuário ou reusado = 400 `reminders.email_token_invalid`) e `POST .../email/resend` (token novo, o antigo
+    deixa de valer). O `PUT` das preferências continua só com os tipos (um corpo sem e-mail não apaga o
+    endereço). O cálculo dos avisos foi para o `ReminderComposer`, usado pela API (cartões com o token do
+    usuário) e pelo `SendReminderDigestsJob` (cartões pelo `/internal/credit-cards`, NTF-7), que o
+    `ReminderDigestWorker` roda a cada `Reminders:Digest:IntervalSeconds` (padrão 1 h; 20 s no compose).
+    Envio com MailKit 4.18.2 (MIT; a 5.0 recém-lançada ficou de fora); sem `Smtp:Host`, nada sai. Compose:
+    Mailpit `v1.33.1` (8025), `App__PublicUrl`, `Smtp__*` e o escopo `accounts.cards.read` no reporting. Na
+    SPA, seção "Resumo diário por e-mail" nas preferências do sino (endereço, ligado, hora, situação e
+    "reenviar link"), e a rota `/confirm-email` guarda o token até o login e confirma com a sessão
+    (`email-confirmation`). **Dois defeitos achados pelos testes:** o formato `pt-BR` não existe com
+    `InvariantGlobalization` (o resumo quebraria no container; o dinheiro e a data são formatados à mão) e
+    trocar o endereço não liberava o resumo do dia para o endereço novo. Cypress `reminders-email.cy.ts`
+    (link lido pela API do Mailpit, resumo com o aviso de amanhã; desliga o e-mail do demo e apaga as regras
+    no fim, mesmo se falhar).
   - Estimativa: 8 · **Should** · Dependências: NTF-6, NTF-7
 - 🔵 **NTF-9** Aviso de orçamento.
   - *Dado* um orçamento em Atenção ou Estourado no mês corrente, *quando* olho o painel, *então* vejo o

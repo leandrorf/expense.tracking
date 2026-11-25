@@ -9,10 +9,17 @@ public sealed record ReminderSettingsDto(int LeadDays, bool Invoices, bool Recur
     public static ReminderSettingsDto From(ReminderSettings s) => new(s.LeadDays, s.Invoices, s.Recurrences, s.Budgets);
 }
 
+/// <summary>Leitura das preferencias: os tipos e, NTF-8, o resumo por e-mail.</summary>
+public sealed record ReminderSettingsView(int LeadDays, bool Invoices, bool Recurrences, bool Budgets, ReminderEmailDto Email)
+{
+    public static ReminderSettingsView From(ReminderSettings s) =>
+        new(s.LeadDays, s.Invoices, s.Recurrences, s.Budgets, ReminderEmailDto.From(s));
+}
+
 public sealed class GetReminderSettingsHandler(IReminderStore store)
 {
-    public async Task<ReminderSettingsDto> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
-        ReminderSettingsDto.From(await store.FindSettingsAsync(ownerUserId, cancellationToken) ?? ReminderSettings.Default(ownerUserId));
+    public async Task<ReminderSettingsView> HandleAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
+        ReminderSettingsView.From(await store.FindSettingsAsync(ownerUserId, cancellationToken) ?? ReminderSettings.Default(ownerUserId));
 }
 
 /// <summary>

@@ -30,5 +30,10 @@ internal sealed class ReminderStore(ReportingDbContext dbContext) : IReminderSto
 
     public void AddSettings(ReminderSettings settings) => dbContext.ReminderSettings.Add(settings);
 
+    public async Task<IReadOnlyList<ReminderSettings>> ListDigestCandidatesAsync(CancellationToken cancellationToken) =>
+        await dbContext.ReminderSettings
+            .Where(s => s.EmailEnabled && s.Email != null && s.EmailConfirmedAtUtc != null)
+            .ToListAsync(cancellationToken);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) => dbContext.SaveChangesAsync(cancellationToken);
 }

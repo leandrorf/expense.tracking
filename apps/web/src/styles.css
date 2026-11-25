@@ -1024,3 +1024,18 @@ table.data td.negative,
 .reminders-settings input[type='number'] {
   width: 3.5rem;
 }
+
+/* NTF-8: resumo por e-mail nas preferencias dos avisos. */
+.reminders-email {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.25rem 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+}
+
+.reminders-email legend {
+  padding: 0 0.25rem;
+  font-size: 0.8rem;
+}

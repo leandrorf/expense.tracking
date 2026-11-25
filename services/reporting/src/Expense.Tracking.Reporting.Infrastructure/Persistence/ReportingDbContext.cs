@@ -134,6 +134,17 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(s => s.Recurrences).HasColumnName("recurrences").IsRequired();
             b.Property(s => s.Budgets).HasColumnName("budgets").IsRequired();
             b.Property(s => s.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+            // NTF-8: resumo por e-mail (o token de confirmacao so como hash).
+            b.Property(s => s.EmailEnabled).HasColumnName("email_enabled").IsRequired();
+            b.Property(s => s.Email).HasColumnName("email").HasMaxLength(Domain.Reminders.ReminderSettings.EmailMaxLength);
+            b.Property(s => s.EmailConfirmedAtUtc).HasColumnName("email_confirmed_at_utc");
+            b.Property(s => s.EmailTokenHash).HasColumnName("email_token_hash").HasMaxLength(64);
+            b.Property(s => s.EmailTokenExpiresAtUtc).HasColumnName("email_token_expires_at_utc");
+            b.Property(s => s.SendHour).HasColumnName("send_hour").IsRequired().HasDefaultValue(Domain.Reminders.ReminderSettings.DefaultSendHour);
+            b.Property(s => s.LastSentOn).HasColumnName("last_sent_on");
+            b.Property(s => s.LastSentKeys).HasColumnName("last_sent_keys").HasColumnType("text");
+            b.Ignore(s => s.EmailConfirmed);
+            b.HasIndex(s => s.EmailEnabled).HasDatabaseName("ix_reminder_settings_email_enabled");
         });
 
         // BDG-2/BDG-3 (ADR-0002): dado escrito pelo usuario, fora da projecao.

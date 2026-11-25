@@ -16,5 +16,8 @@ public interface IReminderStore
 
     void AddSettings(ReminderSettings settings);
 
+    /// <summary>NTF-8: preferencias com o resumo por e-mail ligado e o endereco confirmado (de todos os usuarios).</summary>
+    Task<IReadOnlyList<ReminderSettings>> ListDigestCandidatesAsync(CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

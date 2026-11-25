@@ -296,6 +296,26 @@ Consolida gastos a partir de uma **projeção local** dos lançamentos, no banco
   `open_category_key`, nula quando encerrado) garante no banco um só orçamento aberto, mesmo com
   requisições concorrentes.
 
+**Avisos de vencimento** ([ADR-0009](adr/0009-lembretes-de-vencimento.md), épico NTF):
+
+- `GET /reports/reminders` calcula na hora (nada guardado) os avisos do usuário: fatura a vencer
+  (até a antecedência, padrão 3 dias) ou vencida (até 30 dias), saída recorrente a vencer e o "a
+  lançar" agrupado (regra pura `ReminderCalculator`; montagem em `ReminderComposer`). Cada aviso tem
+  chave estável, urgência e o destino do atalho na SPA.
+- Gravados pelo usuário: dispensas (`reminder_dismissals`, `POST /reports/reminders/dismissals`) e
+  preferências (`reminder_settings`, `GET/PUT /reports/reminder-settings`).
+- **Resumo diário por e-mail**: opt-in, com endereço confirmado por link de uso único (24 h, só o hash
+  é guardado; `PUT /reports/reminder-settings/email`, `POST .../email/confirm` e `.../email/resend`, todas
+  autenticadas). O `ReminderDigestWorker` roda de hora em hora (`Reminders:Digest:IntervalSeconds`; 20 s
+  no compose de desenvolvimento) e envia na hora escolhida (fuso `Reports:TimeZone`), uma vez por dia e
+  só com aviso novo desde o último envio. Sem token de usuário, ele lê os cartões em
+  `/internal/credit-cards` do `accounts` com o escopo de serviço `accounts.cards.read`
+  (`ServiceAuth:Scope` passa a pedir `events.read accounts.cards.read`). Envio por SMTP (MailKit, `Smtp:*`);
+  sem `Smtp:Host` nada sai (só um aviso no log, sem endereço nem conteúdo). No compose, o SMTP é o
+  Mailpit (caixa e API em http://localhost:8025). Os links dos e-mails usam `App:PublicUrl`.
+- Formato brasileiro de dinheiro e data montado à mão: os serviços rodam com `InvariantGlobalization`,
+  sem a cultura `pt-BR`.
+
 ## Gateway (YARP) — implementado
 
 Ponto único de entrada para os **serviços de recurso**, usando o reverse proxy YARP.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
-import { remindersApi, type Reminder, type ReminderSettings, type Reminders } from '../api/reminders';
+import { remindersApi, type Reminder, type ReminderEmail, type ReminderSettings, type Reminders } from '../api/reminders';
 
 /** `2026-11-23` → `23/11`. */
 function shortDate(iso: string): string {
@@ -42,6 +42,10 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   // O campo guarda o texto digitado: apagar para redigitar nao vira "0" no meio do caminho.
   const [leadDaysText, setLeadDaysText] = useState('');
+  // NTF-8: resumo por e-mail (o endereço gravado, para saber se mudou).
+  const [email, setEmail] = useState<ReminderEmail | null>(null);
+  const [emailText, setEmailText] = useState('');
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -90,9 +94,12 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
       return;
     }
     try {
-      const current = await remindersApi.settings();
+      const { email: currentEmail, ...current } = await remindersApi.settings();
       setSettings(current);
       setLeadDaysText(String(current.leadDays));
+      setEmail(currentEmail);
+      setEmailText(currentEmail.email ?? '');
+      setEmailNotice(null);
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'Erro inesperado.');
     }
@@ -104,6 +111,17 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
     setSettingsError(null);
     try {
       await remindersApi.saveSettings({ ...settings, leadDays: Number(leadDaysText) });
+      if (email) {
+        const typed = emailText.trim() || null;
+        const saved = await remindersApi.saveEmail({ email: typed, enabled: email.enabled, sendHour: email.sendHour });
+        if (typed && !saved.emailConfirmed && typed.toLowerCase() !== (email.email ?? '')) {
+          // Fica aberto para mostrar o aviso: o link foi para o endereço novo.
+          setEmail(saved);
+          setEmailNotice(`Enviamos um link de confirmação para ${typed}. O resumo só sai depois de confirmar.`);
+          load();
+          return;
+        }
+      }
       setSettings(null);
       load();
     } catch (err) {
@@ -185,12 +203,77 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
                 />{' '}
                 orçamentos
               </label>
+              <fieldset className="reminders-email" data-cy="reminders-email-section">
+                <legend>Resumo diário por e-mail</legend>
+                <input
+                  data-cy="reminders-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  aria-label="E-mail para o resumo"
+                  value={emailText}
+                  onChange={(e) => setEmailText(e.target.value)}
+                />
+                <label>
+                  <input
+                    type="checkbox"
+                    data-cy="reminders-email-enabled"
+                    checked={email?.enabled ?? false}
+                    onChange={(e) => email && setEmail({ ...email, enabled: e.target.checked })}
+                  />{' '}
+                  receber às{' '}
+                  <select
+                    data-cy="reminders-email-hour"
+                    aria-label="Hora do resumo"
+                    value={email?.sendHour ?? 8}
+                    onChange={(e) => email && setEmail({ ...email, sendHour: Number(e.target.value) })}
+                  >
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>
+                        {String(h).padStart(2, '0')}h
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {email?.email && (
+                  <span className="sub" data-cy="reminders-email-status" data-confirmed={email.emailConfirmed}>
+                    {email.emailConfirmed ? (
+                      'e-mail confirmado'
+                    ) : (
+                      <>
+                        aguardando confirmação: abra o link enviado para {email.email}{' '}
+                        <button
+                          type="button"
+                          className="link"
+                          data-cy="reminders-email-resend"
+                          onClick={() =>
+                            void remindersApi
+                              .resendEmail()
+                              .then(() => setEmailNotice(`Link reenviado para ${email.email}.`))
+                              .catch((err: unknown) => setSettingsError(err instanceof Error ? err.message : 'Erro inesperado.'))
+                          }
+                        >
+                          reenviar link
+                        </button>
+                      </>
+                    )}
+                  </span>
+                )}
+                {emailNotice && (
+                  <span className="sub" data-cy="reminders-email-notice">
+                    {emailNotice}
+                  </span>
+                )}
+              </fieldset>
               <button type="submit" className="primary small" data-cy="reminders-settings-save">
                 Salvar
               </button>
             </form>
           )}
-          {items.length === 0 ? (
+          {!reminders ? (
+            <p className="muted" data-cy="reminders-loading">
+              Carregando…
+            </p>
+          ) : items.length === 0 ? (
             <p className="muted" data-cy="reminders-empty">
               Nada vencendo nos próximos {reminders?.leadDays ?? 3} dias.
             </p>
