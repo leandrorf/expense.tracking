@@ -89,6 +89,65 @@ public sealed class RecurrenceTests
             rule.ScheduledOn(period));
     }
 
+    // ---------- RJT-2 (ADR-0010, decisao 1): valor com vigencia ----------
+
+    [Fact]
+    public void AmountFrom_ChangesOnlyThatPeriodOnwards()
+    {
+        var rule = Monthly(new DateOnly(2030, 1, 10));
+
+        var set = rule.SetAmountFrom("2030-03", 2100m, new HashSet<string>(), Now);
+
+        Assert.True(set.IsSuccess);
+        Assert.Equal((2000m, 2000m, 2100m, 2100m), (rule.AmountFor("2030-01"), rule.AmountFor("2030-02"),
+            rule.AmountFor("2030-03"), rule.AmountFor("2031-01")));
+        Assert.Equal([("2030-01", 2000m), ("2030-03", 2100m)], rule.Amounts.Select(a => (a.FromPeriod, a.Amount)));
+        Assert.Equal(2, rule.Version);
+
+        // Mesmo periodo de novo: troca o valor da vigencia.
+        rule.SetAmountFrom("2030-03", 2150m, new HashSet<string>(), Now);
+        Assert.Equal(2150m, rule.AmountFor("2030-04"));
+        Assert.Equal(2, rule.LaterAmounts.Count + 1);
+    }
+
+    [Theory]
+    [InlineData("2030-01")] // o primeiro periodo e a vigencia inicial
+    [InlineData("2029-12")] // antes do inicio
+    [InlineData("2030-02")] // periodo ja fechado
+    [InlineData("marco")]
+    public void AmountFrom_RefusesFirstEarlierClosedOrInvalidPeriods(string period)
+    {
+        var rule = Monthly(new DateOnly(2030, 1, 10));
+
+        var set = rule.SetAmountFrom(period, 2100m, new HashSet<string> { "2030-02" }, Now);
+
+        Assert.Equal("recurrence.amount_period_invalid", set.Error.Code);
+        Assert.Equal(1, rule.Version);
+    }
+
+    [Fact]
+    public void Edit_CorrectsTheCurrentAmount_AndRemovingOnlyAFutureAmountIsAllowed()
+    {
+        var rule = Monthly(new DateOnly(2030, 1, 10));
+        rule.SetAmountFrom("2030-03", 2100m, new HashSet<string>(), Now);
+        rule.SetAmountFrom("2030-06", 2200m, new HashSet<string>(), Now);
+
+        // Em abril vale a vigencia de marco: o PUT corrige ela, nao a primeira.
+        rule.Edit(TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia", 2120m, "BRL", null,
+            RecurrenceFrequency.Monthly, new DateOnly(2030, 1, 10), null, Now, currentPeriod: "2030-04");
+        Assert.Equal((2000m, 2120m, 2200m), (rule.AmountFor("2030-01"), rule.AmountFor("2030-04"), rule.AmountFor("2030-06")));
+
+        Assert.Equal("recurrence.amount_already_started", rule.RemoveAmountFrom("2030-03", "2030-04", Now).Error.Code);
+        Assert.Equal("recurrence.amount_not_found", rule.RemoveAmountFrom("2030-05", "2030-04", Now).Error.Code);
+        Assert.True(rule.RemoveAmountFrom("2030-06", "2030-04", Now).IsSuccess);
+        Assert.Equal(2120m, rule.AmountFor("2030-07"));
+
+        // Mudar o inicio para depois de uma vigencia a deixa fora da agenda: recusado.
+        var moved = rule.Edit(TransactionType.Expense, PaymentMethod.Boleto, null, "Aluguel", "Moradia", 2120m, "BRL", null,
+            RecurrenceFrequency.Monthly, new DateOnly(2030, 4, 10), null, Now, currentPeriod: "2030-04");
+        Assert.Equal("recurrence.amounts_outside_schedule", moved.Error.Code);
+    }
+
     [Fact]
     public void Edit_ChangesTheRule_BumpsTheVersion_AndWithoutChangesTouchesNothing()
     {

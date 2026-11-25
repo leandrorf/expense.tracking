@@ -32,6 +32,21 @@ internal sealed class RecurrenceConfiguration : IEntityTypeConfiguration<Recurre
         builder.Property(r => r.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
 
         builder.HasIndex(r => r.OwnerUserId);
+
+        // RJT-2 (ADR-0010, decisao 1): vigencias depois da primeira (a primeira e a coluna amount).
+        builder.Ignore(r => r.LaterAmounts);
+        builder.Ignore(r => r.Amounts);
+        builder.Ignore(r => r.FirstPeriod);
+        builder.OwnsMany<RecurrenceAmount>("_laterAmounts", a =>
+        {
+            a.ToTable("recurrence_amounts");
+            a.WithOwner().HasForeignKey("RecurrenceId");
+            a.Property<Guid>("RecurrenceId").HasColumnName("recurrence_id");
+            a.Property(x => x.FromPeriod).HasColumnName("from_period").HasMaxLength(7);
+            a.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+            a.HasKey("RecurrenceId", nameof(RecurrenceAmount.FromPeriod));
+        });
+        builder.Navigation("_laterAmounts").AutoInclude();
     }
 }
 

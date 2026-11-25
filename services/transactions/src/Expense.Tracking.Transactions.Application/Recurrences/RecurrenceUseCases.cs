@@ -6,8 +6,11 @@ using Expense.Tracking.Transactions.Domain.Transactions;
 
 namespace Expense.Tracking.Transactions.Application.Recurrences;
 
-/// <summary>Proxima ocorrencia em aberto de hoje em diante: o periodo que a identifica e a data.</summary>
-public sealed record NextOccurrenceDto(string Period, DateOnly ScheduledOn);
+/// <summary>Proxima ocorrencia em aberto de hoje em diante: o periodo, a data e o valor estimado dela (RJT-2).</summary>
+public sealed record NextOccurrenceDto(string Period, DateOnly ScheduledOn, decimal Amount);
+
+/// <summary>RJT-2: uma vigencia do valor.</summary>
+public sealed record RecurrenceAmountDto(string FromPeriod, decimal Amount);
 
 public sealed record RecurrenceDto(
     Guid Id,
@@ -25,7 +28,8 @@ public sealed record RecurrenceDto(
     DateOnly? EndsOn,
     int Version,
     NextOccurrenceDto? NextOccurrence,
-    DateTimeOffset CreatedAtUtc)
+    DateTimeOffset CreatedAtUtc,
+    IReadOnlyList<RecurrenceAmountDto> Amounts)
 {
     /// <summary>Quantas datas a frente procurar a proxima em aberto (cobre 50 anos da anual).</summary>
     private const int MaxLookAheadYears = 50;
@@ -34,11 +38,12 @@ public sealed record RecurrenceDto(
     {
         var next = r.Occurrences(today, today.AddYears(MaxLookAheadYears))
             .Where(o => !closedPeriods.Contains(o.Period))
-            .Select(o => new NextOccurrenceDto(o.Period, o.ScheduledOn))
+            .Select(o => new NextOccurrenceDto(o.Period, o.ScheduledOn, r.AmountFor(o.Period)))
             .FirstOrDefault();
+        // RJT-2: "amount" e o valor vigente hoje (o mesmo que o PUT corrige); as vigencias vem em "amounts".
         return new(r.Id, r.AccountId, r.Type.ToString(), r.PaymentMethod.ToString(), r.CreditCardId, r.Description,
-            r.Category, r.Amount, r.Currency, r.Notes, r.Frequency.ToString(), r.StartsOn, r.EndsOn, r.Version, next,
-            r.CreatedAtUtc);
+            r.Category, r.AmountFor(r.PeriodOf(today)), r.Currency, r.Notes, r.Frequency.ToString(), r.StartsOn, r.EndsOn,
+            r.Version, next, r.CreatedAtUtc, r.Amounts.Select(a => new RecurrenceAmountDto(a.FromPeriod, a.Amount)).ToList());
     }
 }
 
@@ -128,7 +133,7 @@ public sealed class CreateRecurrenceHandler(
         }
 
         await recurrences.AddAsync(created.Value, cancellationToken);
-        outbox.Add(RecurrenceSaved.From(created.Value, accountScope));
+        outbox.Add(RecurrenceSaved.From(created.Value, accountScope, created.Value.PeriodOf(calendar.Today(timeProvider))));
         if (command.FromTransactionId is { } linked)
         {
             outbox.Add(new RecurrenceOccurrenceClosed(created.Value.Id, created.Value.OwnerUserId,
@@ -201,8 +206,10 @@ public sealed class UpdateRecurrenceHandler(
 
         var f = command.Fields;
         var previousCard = recurrence.CreditCardId;
+        // RJT-2 (ADR-0010, decisao 2): o valor do PUT corrige a vigencia de hoje.
+        var currentPeriod = recurrence.PeriodOf(calendar.Today(timeProvider));
         var edited = recurrence.Edit(f.Type, f.PaymentMethod, f.CreditCardId, f.Description, f.Category, f.Amount,
-            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow());
+            f.Currency, f.Notes, f.Frequency, f.StartsOn, f.EndsOn, timeProvider.GetUtcNow(), currentPeriod);
         if (edited.IsFailure)
         {
             return Result.Failure<RecurrenceDto>(edited.Error);
@@ -223,7 +230,7 @@ public sealed class UpdateRecurrenceHandler(
 
         // O escopo e o da conta, que nao muda; a consulta so o traz de novo para o evento.
         var accountScope = await accountsClient.FindAccountScopeAsync(recurrence.AccountId, cancellationToken);
-        outbox.Add(RecurrenceSaved.From(recurrence, accountScope));
+        outbox.Add(RecurrenceSaved.From(recurrence, accountScope, recurrence.PeriodOf(calendar.Today(timeProvider))));
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);

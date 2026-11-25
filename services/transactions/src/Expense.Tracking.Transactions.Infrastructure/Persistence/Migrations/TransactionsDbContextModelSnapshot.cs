@@ -718,6 +718,35 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Recurrences.Recurrence", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Transactions.Domain.Recurrences.RecurrenceAmount", "_laterAmounts", b1 =>
+                        {
+                            b1.Property<Guid>("RecurrenceId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("recurrence_id");
+
+                            b1.Property<string>("FromPeriod")
+                                .HasMaxLength(7)
+                                .HasColumnType("varchar(7)")
+                                .HasColumnName("from_period");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.HasKey("RecurrenceId", "FromPeriod");
+
+                            b1.ToTable("recurrence_amounts", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("RecurrenceId");
+                        });
+
+                    b.Navigation("_laterAmounts");
+                });
+
             modelBuilder.Entity("Expense.Tracking.Transactions.Domain.Imports.ImportBatch", b =>
                 {
                     b.Navigation("Lines");

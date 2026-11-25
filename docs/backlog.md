@@ -2126,7 +2126,7 @@ CI.
     previsão estima só o próximo aniversário (`estimatedRecurring`). Aviso `RecurrenceAdjustment` com chave
     `adjustment:{regra}:{período}`.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **RJT-2** Valor com vigência na regra.
+- ✅ **RJT-2** Valor com vigência na regra. → `recurrence_amounts`, `POST/DELETE .../amounts`, `RecurrenceSaved` v2.
   - *Dado* um aluguel de R$ 2.000 desde janeiro, *quando* informo R$ 2.100 a partir de março, *então*
     janeiro e fevereiro continuam R$ 2.000 (em aberto ou lançados) e março em diante passam a R$ 2.100; *e*
     a vigência não pode começar antes do início da regra nem num período já fechado.
@@ -2134,6 +2134,16 @@ CI.
     extrato, *então* o valor pré-preenchido, o da lista e o do casamento são os do período.
   - *Dado* uma vigência nova, *quando* ela é gravada, *então* um `RecurrenceSaved` v2 sai no outbox com a
     lista de vigências.
+  - Feito assim: a coluna `amount` da regra continua sendo o valor da **primeira vigência** (sem migração de
+    dados) e as seguintes ficam em `recurrence_amounts` (regra + período, migração `RecurrenceAmounts`);
+    `AmountFor(período)` devolve a última com início até ele. `POST /transactions/recurrences/{id}/amounts`
+    (`{ fromPeriod, amount, version }`) cria ou troca a vigência (período fora da agenda, o primeiro ou já
+    fechado = 400 `recurrence.amount_period_invalid`; versão antiga = 409); `DELETE .../amounts/{período}?version=`
+    tira uma que ainda não começou (400 `recurrence.amount_already_started`, 404 `recurrence.amount_not_found`).
+    O `amount` do `PUT` passa a corrigir a vigência de hoje; mudar início, fim ou frequência que deixe uma
+    vigência fora da agenda = 400 `recurrence.amounts_outside_schedule`. O DTO traz `amount` (vigente hoje),
+    `amounts` e o valor da próxima ocorrência. Lançar sem valor, "a lançar" e o casamento da importação usam o
+    valor do período. `RecurrenceSaved` v2 com `amounts` (e `amount` = vigente no dia do evento).
   - Estimativa: 5 · **Must** · Dependências: RJT-1
 - 🔵 **RJT-3** Previsão usa o valor vigente.
   - *Dado* um aluguel de R$ 2.000 com R$ 2.100 a partir de março, *quando* consulto a previsão de 6 meses

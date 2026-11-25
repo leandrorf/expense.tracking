@@ -134,7 +134,7 @@ public sealed class PreviewImportHandler(
         return rules
             .SelectMany(r => r.Occurrences(from, to)
                 .Where(o => !(closed.GetValueOrDefault(r.Id)?.Contains(o.Period) ?? false))
-                .Select(o => new RecurrenceCandidate(r.Id, o.Period, o.ScheduledOn, r.Type, r.Amount, r.Description, r.Category)))
+                .Select(o => new RecurrenceCandidate(r.Id, o.Period, o.ScheduledOn, r.Type, r.AmountFor(o.Period), r.Description, r.Category)))
             .ToList();
     }
 

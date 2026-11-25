@@ -19,6 +19,9 @@ public enum RecurrenceFrequency
 /// </summary>
 public sealed class Recurrence
 {
+    // RJT-2 (ADR-0010, decisao 1): vigencias depois da primeira. A primeira e o Amount da regra, no periodo do inicio.
+    private readonly List<RecurrenceAmount> _laterAmounts = [];
+
     private Recurrence()
     {
         Description = string.Empty;
@@ -42,8 +45,25 @@ public sealed class Recurrence
 
     public string Category { get; private set; }
 
-    /// <summary>Valor estimado de cada ocorrencia; ao lancar, o usuario informa o real.</summary>
+    /// <summary>
+    /// Valor estimado da <b>primeira vigencia</b> (do periodo do inicio). O valor de um periodo e o de
+    /// <see cref="AmountFor"/>: a ultima vigencia que comecou ate ele (RJT-2, ADR-0010, decisao 1).
+    /// </summary>
     public decimal Amount { get; private set; }
+
+    /// <summary>Vigencias depois da primeira, em ordem de periodo.</summary>
+    public IReadOnlyList<RecurrenceAmount> LaterAmounts => _laterAmounts.OrderBy(a => a.FromPeriod, StringComparer.Ordinal).ToList();
+
+    /// <summary>Periodo do inicio, onde comeca a primeira vigencia.</summary>
+    public string FirstPeriod => PeriodOf(StartsOn);
+
+    /// <summary>Todas as vigencias, a primeira inclusive, em ordem.</summary>
+    public IReadOnlyList<RecurrenceAmount> Amounts =>
+        [new RecurrenceAmount(FirstPeriod, Amount), .. LaterAmounts];
+
+    /// <summary>Valor estimado de um periodo: o da ultima vigencia com inicio ate ele.</summary>
+    public decimal AmountFor(string period) =>
+        LaterAmounts.LastOrDefault(a => string.CompareOrdinal(a.FromPeriod, period) <= 0)?.Amount ?? Amount;
 
     public string Currency { get; private set; }
 
@@ -86,19 +106,102 @@ public sealed class Recurrence
     /// <summary>
     /// Corrige a regra com as regras da criacao. A conta nao muda. Devolve <c>true</c> quando algo mudou
     /// (a versao sobe); sem mudanca, nada e tocado. So os periodos em aberto sentem a mudanca: os
-    /// fechados (lancados ou pulados) sao guardados a parte.
+    /// fechados (lancados ou pulados) sao guardados a parte. RJT-2 (ADR-0010, decisao 2): o
+    /// <paramref name="amount"/> corrige a vigencia que vale em <paramref name="currentPeriod"/> (hoje), sem
+    /// criar vigencia; as vigencias seguintes precisam continuar na agenda nova.
     /// </summary>
     public Result<bool> Edit(
         TransactionType type, PaymentMethod paymentMethod, Guid? creditCardId, string? description, string? category,
         decimal amount, string? currency, string? notes, RecurrenceFrequency frequency, DateOnly startsOn,
-        DateOnly? endsOn, DateTimeOffset nowUtc) =>
-        Apply(type, paymentMethod, creditCardId, description, category, amount, currency, notes, frequency, startsOn,
-            endsOn, nowUtc, dryRun: true);
+        DateOnly? endsOn, DateTimeOffset nowUtc, string? currentPeriod = null)
+    {
+        var target = currentPeriod is null ? null : LaterAmounts.LastOrDefault(a => string.CompareOrdinal(a.FromPeriod, currentPeriod) <= 0);
+        var baseAmount = target is null ? amount : Amount;
+        var amountChanged = target is not null && target.Amount != amount;
+        if (amountChanged)
+        {
+            var money = Money.Create(amount, currency);
+            if (money.IsFailure)
+            {
+                return Result.Failure<bool>(money.Error);
+            }
+        }
+
+        var applied = Apply(type, paymentMethod, creditCardId, description, category, baseAmount, currency, notes, frequency,
+            startsOn, endsOn, nowUtc, dryRun: true, forceChanged: amountChanged);
+        if (applied.IsFailure || !applied.Value)
+        {
+            return applied;
+        }
+
+        // Com outra agenda (inicio, fim ou frequencia), as vigencias seguintes precisam continuar nela.
+        if (_laterAmounts.Any(a => ScheduledOn(a.FromPeriod) is null || string.CompareOrdinal(a.FromPeriod, FirstPeriod) <= 0))
+        {
+            return Result.Failure<bool>(Error.Validation(
+                "recurrence.amounts_outside_schedule",
+                "Ha valores com vigencia fora da nova agenda: remova-os antes de mudar o inicio, o fim ou a frequencia."));
+        }
+
+        if (amountChanged)
+        {
+            _laterAmounts.Remove(target!);
+            _laterAmounts.Add(new RecurrenceAmount(target!.FromPeriod, amount));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// RJT-2 (ADR-0010, decisao 1): o valor passa a <paramref name="amount"/> a partir de
+    /// <paramref name="fromPeriod"/>, sem mudar os periodos anteriores. O periodo precisa ser da agenda,
+    /// depois do primeiro e ainda nao fechado; se ja tem vigencia, o valor dela e trocado.
+    /// </summary>
+    public Result SetAmountFrom(string fromPeriod, decimal amount, IReadOnlySet<string> closedPeriods, DateTimeOffset nowUtc)
+    {
+        if (ScheduledOn(fromPeriod) is null || string.CompareOrdinal(fromPeriod, FirstPeriod) <= 0 || closedPeriods.Contains(fromPeriod))
+        {
+            return Result.Failure(Error.Validation(
+                "recurrence.amount_period_invalid",
+                "O valor novo precisa comecar num periodo da recorrencia, depois do primeiro e ainda nao lancado nem pulado."));
+        }
+
+        var money = Money.Create(amount, Currency);
+        if (money.IsFailure)
+        {
+            return Result.Failure(money.Error);
+        }
+
+        _laterAmounts.RemoveAll(a => a.FromPeriod == fromPeriod);
+        _laterAmounts.Add(new RecurrenceAmount(fromPeriod, money.Value.Amount));
+        UpdatedAtUtc = nowUtc;
+        Version++;
+        return Result.Success();
+    }
+
+    /// <summary>RJT-2: tira uma vigencia que ainda nao comecou (depois de <paramref name="currentPeriod"/>).</summary>
+    public Result RemoveAmountFrom(string fromPeriod, string currentPeriod, DateTimeOffset nowUtc)
+    {
+        if (_laterAmounts.FirstOrDefault(a => a.FromPeriod == fromPeriod) is not { } amount)
+        {
+            return Result.Failure(Error.NotFound("recurrence.amount_not_found", "Nao ha valor com vigencia nesse periodo."));
+        }
+
+        if (string.CompareOrdinal(fromPeriod, currentPeriod) <= 0)
+        {
+            return Result.Failure(Error.Validation(
+                "recurrence.amount_already_started", "Esse valor ja esta valendo: para corrigi-lo, edite o valor da recorrencia."));
+        }
+
+        _laterAmounts.Remove(amount);
+        UpdatedAtUtc = nowUtc;
+        Version++;
+        return Result.Success();
+    }
 
     private Result<bool> Apply(
         TransactionType type, PaymentMethod paymentMethod, Guid? creditCardId, string? description, string? category,
         decimal amount, string? currency, string? notes, RecurrenceFrequency frequency, DateOnly startsOn,
-        DateOnly? endsOn, DateTimeOffset nowUtc, bool dryRun)
+        DateOnly? endsOn, DateTimeOffset nowUtc, bool dryRun, bool forceChanged = false)
     {
         if (!Enum.IsDefined(frequency))
         {
@@ -122,7 +225,7 @@ public sealed class Recurrence
         var changed = Type != next.Type || PaymentMethod != next.PaymentMethod || CreditCardId != next.CreditCardId
             || Description != next.Description || Category != next.Category || Amount != next.Amount
             || Currency != next.Currency || Notes != next.Notes || Frequency != frequency || StartsOn != startsOn
-            || EndsOn != endsOn;
+            || EndsOn != endsOn || forceChanged;
         if (dryRun && !changed)
         {
             return false;
@@ -223,3 +326,6 @@ public static class RecurrenceSchedule
     private static DateOnly Clamp(int year, int month, int day) =>
         new(year, month, Math.Min(day, DateTime.DaysInMonth(year, month)));
 }
+
+/// <summary>RJT-2 (ADR-0010, decisao 1): o valor estimado da recorrencia a partir de um periodo.</summary>
+public sealed record RecurrenceAmount(string FromPeriod, decimal Amount);

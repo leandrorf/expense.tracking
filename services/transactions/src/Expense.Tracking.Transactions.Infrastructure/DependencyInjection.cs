@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<GetRecurrenceHandler>();
         services.AddScoped<UpdateRecurrenceHandler>();
         services.AddScoped<DeleteRecurrenceHandler>();
+        services.AddScoped<SetRecurrenceAmountHandler>();
+        services.AddScoped<RemoveRecurrenceAmountHandler>();
         services.AddScoped<LaunchOccurrenceHandler>();
         services.AddScoped<SkipOccurrenceHandler>();
         services.AddScoped<UnskipOccurrenceHandler>();

@@ -88,7 +88,7 @@ public sealed class RecurrencesApiTests(TransactionsApiFactory factory) : IClass
         Assert.Equal(id, listed.GetProperty("id").GetGuid());
 
         var saved = Assert.Single(await EventsForAsync(id));
-        Assert.Equal(("RecurrenceSaved", 1), (saved.GetProperty("eventType").GetString(), saved.GetProperty("version").GetInt32()));
+        Assert.Equal(("RecurrenceSaved", 2), (saved.GetProperty("eventType").GetString(), saved.GetProperty("version").GetInt32()));
         var payload = saved.GetProperty("payload");
         Assert.Equal((id, accountId, "Business", "Expense", "Boleto", "Monthly", "2030-01-31", 1), (
             payload.GetProperty("recurrenceId").GetGuid(), payload.GetProperty("accountId").GetGuid(),
@@ -96,6 +96,9 @@ public sealed class RecurrencesApiTests(TransactionsApiFactory factory) : IClass
             payload.GetProperty("paymentMethod").GetString(), payload.GetProperty("frequency").GetString(),
             payload.GetProperty("startsOn").GetString(), payload.GetProperty("recurrenceVersion").GetInt32()));
         Assert.False(payload.TryGetProperty("transactionId", out _));
+        // RJT-2 (v2): as vigencias, a primeira no periodo do inicio.
+        var amount = Assert.Single(payload.GetProperty("amounts").EnumerateArray());
+        Assert.Equal(("2030-01", 2000m), (amount.GetProperty("fromPeriod").GetString(), amount.GetProperty("amount").GetDecimal()));
     }
 
     [Fact]

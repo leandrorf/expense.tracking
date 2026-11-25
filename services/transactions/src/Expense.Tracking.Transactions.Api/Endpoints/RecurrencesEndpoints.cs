@@ -26,6 +26,9 @@ public sealed record RecurrenceRequest(
     int? Version = null,
     Guid? FromTransactionId = null);
 
+/// <summary>RJT-2: valor a partir de um periodo, com a versao lida da regra.</summary>
+public sealed record RecurrenceAmountRequest(string? FromPeriod, decimal Amount, int? Version);
+
 /// <summary>REC-3: lancar um periodo; sem corpo (ou campos nulos) valem o valor, a data agendada e as observacoes da regra.</summary>
 public sealed record LaunchOccurrenceRequest(decimal? Amount, DateOnly? OccurredOn, string? Notes);
 
@@ -110,6 +113,44 @@ public static class RecurrencesEndpoints
 
             var result = await handler.HandleAsync(id, owner.Value, ct);
             return result.IsSuccess ? Results.NoContent() : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        // RJT-2 (ADR-0010, decisoes 1 e 2): valor com vigencia.
+        group.MapPost("/{id:guid}/amounts", async (
+            Guid id, RecurrenceAmountRequest request, HttpContext http, SetRecurrenceAmountHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (request.Version is not { } version)
+            {
+                return HttpResults.Problem(Error.Validation("recurrence.version_required", "Informe a versao da recorrencia que voce leu."));
+            }
+
+            var result = await handler.HandleAsync(
+                new SetRecurrenceAmountCommand(id, owner.Value, request.FromPeriod ?? string.Empty, request.Amount, version), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapDelete("/{id:guid}/amounts/{fromPeriod}", async (
+            Guid id, string fromPeriod, int? version, HttpContext http, RemoveRecurrenceAmountHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (version is not { } v)
+            {
+                return HttpResults.Problem(Error.Validation("recurrence.version_required", "Informe a versao da recorrencia que voce leu."));
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, fromPeriod, v, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
         // REC-3 (ADR-0008, decisoes 7 e 8): "a lancar", lancar, pular e desfazer o pulo de um periodo.
