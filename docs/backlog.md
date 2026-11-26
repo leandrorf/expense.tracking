@@ -2655,7 +2655,12 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
   - *Dado* um pagamento de fatura no extrato, *quando* o app sugere qual fatura ele paga (importação no
     `transactions` e na SPA), *então* usa o vencimento do ciclo que vale para aquela data.
   - Estimativa: 2 · **Could** · Dependências: CYC-3
-- 🔵 **CYC-7** E2E Cypress: mudar o vencimento e conferir as faturas.
+- ✅ **CYC-7** E2E Cypress: mudar o vencimento e conferir as faturas. → `card-cycle-journey.cy.ts`.
+  - Feito assim: com as datas calculadas a partir de hoje, um cartão que fecha 10/vence 17 tem uma compra numa
+    fatura já fechada, paga pela tela; o limite vai de 5.000 para 8.000 (o disponível fica 8.000, nada em
+    aberto) e o ciclo passa a fechar 25/vencer 5 a partir da fatura sugerida, conferindo a prévia; uma compra
+    no dia 20 do mês do primeiro fechamento novo cai na fatura da troca, que fecha no dia 25 e vence no dia 5;
+    a fatura paga continua com o mesmo total, pagamento e situação. Fecha o Must do épico.
   - *Dado* um cartão com compras e uma fatura paga, *quando* mudo o fechamento e o vencimento a partir da
     próxima fatura pela SPA, *então* a fatura paga continua igual, a da troca tem o período e o vencimento
     novos, uma compra nova cai na fatura do ciclo novo e o limite novo aparece no disponível.
