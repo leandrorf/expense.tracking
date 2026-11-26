@@ -121,6 +121,21 @@ Portas/credenciais default (web 5173, identity 5080, usuário demo) são lidas d
 `cypress.config.ts` e podem ser sobrescritas por env (`E2E_BASE_URL`, `E2E_IDENTITY_URL`,
 `E2E_DEMO_EMAIL`, `E2E_DEMO_PASSWORD`).
 
+### Zerar o usuário demo (stack local)
+
+O Cypress e o smoke usam o mesmo usuário demo, persistente: cada execução deixa contas, cartões e
+lançamentos novos, e com o tempo a Previsão e o sino ficam lentos (a previsão lê todos os cartões,
+inclusive os desativados). Para apagar os dados do demo nos bancos locais, mantendo o usuário:
+
+```bash
+node build/reset-demo-data.mjs          # só mostra quanto há
+node build/reset-demo-data.mjs --yes    # apaga (accounts, transactions com o outbox, reporting)
+cd apps/web && npm run e2e:clean        # zera e roda a suíte inteira
+```
+
+Só mexe no usuário demo (`DEMO_EMAIL` muda o e-mail) e só no stack local via `docker exec`; o CI
+não precisa, porque sobe o stack do zero e o derruba com `down -v`.
+
 ## Identity (repositório próprio)
 
 O código, os testes e as migrations do identity ficam em

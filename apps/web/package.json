@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "e2e": "cypress run",
-    "e2e:open": "cypress open"
+    "e2e:open": "cypress open",
+    "e2e:reset": "node ../../build/reset-demo-data.mjs --yes",
+    "e2e:clean": "npm run e2e:reset && cypress run"
   },
   "dependencies": {
     "react": "18.3.1",
