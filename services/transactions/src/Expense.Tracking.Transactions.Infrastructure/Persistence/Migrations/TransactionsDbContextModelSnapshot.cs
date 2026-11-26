@@ -271,6 +271,19 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(36)")
                         .HasColumnName("owner_user_id");
 
+                    b.Property<decimal?>("StatedTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("stated_total");
+
+                    b.Property<DateTime?>("StatementEnd")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("statement_end");
+
+                    b.Property<DateTime?>("StatementStart")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("statement_start");
+
                     b.Property<string>("Status")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -320,6 +333,10 @@ namespace Expense.Tracking.Transactions.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)")
                         .HasColumnName("description");
+
+                    b.Property<Guid?>("DuplicateOf")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("duplicate_of");
 
                     b.Property<string>("ExternalId")
                         .HasMaxLength(255)

@@ -2285,7 +2285,7 @@ ainda não veio. Could = RJT-9 (2 pts). Total: 34 pts.
 **Ordem sugerida:** RJT-1 → RJT-2 → RJT-3 (com o `reporting` implantado antes do `transactions` que publica
 o `RecurrenceSaved` v2) → RJT-4 → RJT-5 → RJT-10 (fecha o Must) → RJT-6 → RJT-7 → RJT-8 → RJT-9.
 
-## 🔵 EPIC RCN — Conciliação da fatura do cartão  · *To Do*
+## 🟢 EPIC RCN — Conciliação da fatura do cartão  · *Done*
 **Problema:** a fatura do cartão é calculada pelo app a partir do que foi lançado (INV): compras,
 parcelas, estornos e pagamentos, no ciclo do cartão. A fatura do banco quase nunca bate de primeira:
 falta uma compra que ninguém lançou, uma compra foi lançada duas vezes ou caiu no ciclo errado, aparece
@@ -2330,7 +2330,7 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   `accounts` por HTTP com o token do usuário; o `transactions` chama o `accounts`. Nenhum serviço chama o
   `reporting`.
 
-**Decisões em aberto (a RCN-1 registra a ADR-0011; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0011](adr/0011-conciliacao-da-fatura-do-cartao.md), RCN-1; ficou a recomendação de cada uma, com os refinamentos da RCN-1):**
 1. **Onde a conciliação é calculada.** Opções: (a) no **`reporting`**, dono da fatura calculada, lendo as
    linhas do lote no `transactions` por HTTP com o token do usuário (mesma direção da dependência de hoje,
    via feed); (b) no `transactions`, dono do arquivo, recalculando a fatura (duplicaria ciclo, parcelas e
@@ -2373,24 +2373,63 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
    rotas cabem em `/api/reports/**` e `/api/transactions/**`) nem no `identity` (o `reporting` usa o token
    do próprio usuário para ler o lote).
 
-- 🔵 **RCN-1** ADR: conciliação da fatura do cartão.
+- ✅ **RCN-1** ADR: conciliação da fatura do cartão. → [ADR-0011](adr/0011-conciliacao-da-fatura-do-cartao.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0011 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO ajusta as
     histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: o `reporting` lê o lote em
+    `GET /transactions/imports/{id}` repassando o token do usuário (os três serviços aceitam o mesmo token)
+    pelo `Services:TransactionsBaseUrl` que já existe; lote de outro dono = 404
+    `reconciliation.batch_not_found`, de outro cartão = 400 `reconciliation.batch_card_mismatch`. Com OFX,
+    a tela vem com o `LEDGERBAL` como total do banco; sem ele, a soma das linhas sem os pagamentos.
+    Parcela casa sem olhar a data da linha (desempate pela descrição e pela data da compra); "descrição
+    parecida" = mais palavras em comum depois de normalizar. Estornos lançados entram na comparação; os
+    créditos fora por padrão, não. Linha "n/m" sem compra no app entra como compra de 1 parcela; "ANUIDADE
+    3/12" é encargo. Campos novos no lote: `statedTotal`, `statementStart`, `statementEnd` e, na linha
+    duplicada, `duplicateOf`. `GET /reports/cards/{id}/invoices` passa a trazer a conferência.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **RCN-2** Conferir pelo total do banco.
+- ✅ **RCN-2** Conferir pelo total do banco. → `GET/PUT/DELETE /reports/cards/{id}/invoices/{dueMonth}/reconciliation`.
+  - Feito assim: `InvoiceReconciliation` no `reporting` (tabela `invoice_reconciliations`, chave dono + cartão +
+    mês de vencimento, migration `InvoiceReconciliations`) guarda o total do banco, o total do app na hora e a
+    data; a diferença é banco − app. O `GET` devolve o total do app agora (fatura calculada; mês sem compra = 0),
+    o total do banco e a diferença contra o total de agora, e a conferência guardada. O `PUT {bankTotal}`
+    marca (ou substitui) a conferência; total ausente, com mais de 2 casas ou acima de 1 bilhão = 400
+    `reconciliation.bank_total_invalid`. O `DELETE` desfaz (204; sem conferência = 404
+    `reconciliation.not_found`). Cartão que o accounts não devolve ao dono = 404 `card.not_found`; mês fora de
+    `yyyy-MM` = 400 `invoice.month_invalid`. `GET /reports/cards/{id}/invoices` traz a `reconciliation` de cada
+    fatura. Smoke passo 24e (51 passos).
   - *Dado* a fatura de dezembro calculada em R$ 3.180,00, *quando* informo que a do banco é R$ 3.214,50,
     *então* vejo a diferença de R$ 34,50 e posso marcar a fatura como conferida com essa diferença aceita.
   - *Dado* uma fatura conferida, *quando* consulto as faturas do cartão, *então* ela traz a conferência
     (total do banco, total do app na hora, data); *e* desfazer apaga a marca.
   - Estimativa: 3 · **Must** · Dependências: RCN-1
-- 🔵 **RCN-3** Total e período do arquivo da fatura.
+- ✅ **RCN-3** Total e período do arquivo da fatura. → `statedTotal`, `statementStart`/`statementEnd`, `duplicateOf`.
+  - Feito assim: o `OfxReader` lê, só na fatura de cartão, o `LEDGERBAL/BALAMT` (sem sinal: o saldo do
+    cartão vem negativo na maioria dos bancos) e o `DTSTART`/`DTEND` da lista de lançamentos; valor ou data
+    ilegível fica ausente, sem derrubar o arquivo (`StatementTotals`). O lote de cartão guarda os três
+    (`stated_total`, `statement_start`, `statement_end`; extrato de conta ignora) e o `ImportBatchDto` os
+    devolve. Na prévia de fatura de cartão, a linha duplicada traz `duplicateOf` (o lançamento da conta com a
+    mesma chave, por `FindTransactionIdsByExternalIdsAsync`; coluna `duplicate_of` em `import_lines`, migration
+    `ImportStatementTotals`). Smoke passo 24d (fatura OFX: total, período e `duplicateOf`; 50 passos).
   - *Dado* um OFX de fatura com `LEDGERBAL` e `DTSTART`/`DTEND`, *quando* importo, *então* o lote guarda
     o total e o período declarados pelo banco (CSV fica sem eles).
   - *Dado* uma linha do arquivo que repete um lançamento já importado, *quando* vejo a prévia, *então* a
     linha duplicada informa qual lançamento ela repete.
   - Estimativa: 3 · **Must** · Dependências: RCN-1
-- 🔵 **RCN-4** Conciliação linha a linha.
+- ✅ **RCN-4** Conciliação linha a linha. → `GET .../reconciliation?batchId=`, `InvoiceMatcher`.
+  - Feito assim: com `batchId`, o `reporting` lê o lote em `GET /imports/{id}` do `transactions` (a rota é
+    `/imports`, não `/transactions/imports` como a ADR escreveu; no gateway, `/api/imports`) repassando o token
+    do usuário (`TransactionsImportBatchReader`); lote de outro dono = 404 `reconciliation.batch_not_found`,
+    extrato de conta ou fatura de outro cartão = 400 `reconciliation.batch_card_mismatch`. Entram as linhas
+    válidas; crédito com cara de pagamento ("PAGAMENTO", "PAGTO", "PGTO") fica fora, e os outros créditos
+    entram como estorno (valor negativo, casando com o estorno lançado no app). O `InvoiceMatcher` (função
+    pura) casa na ordem da ADR: chave (`duplicateOf` ou o lançamento que a linha criou); parcela "n/m"
+    ("PARCELA 03/10", "PARC 3/10", "PARC.03/12", "3 DE 10"; n ≤ m, m ≥ 2) com o mesmo valor ou, com valor
+    diferente, só com descrição parecida; mesmo valor e até 3 dias, o mais perto primeiro. O resultado
+    (`detail`) traz o total do arquivo (`statedTotal` ou a soma das linhas), a diferença para o app, a fatura
+    sugerida (pelo `statementEnd`; sem ele, a que recebe mais compras que não são parcela), as entradas com
+    grupo, regra, linha e item, e quanto cada grupo explica (com o `unexplained`, quando o total declarado
+    difere da soma das linhas). Smoke: passo 24d confere a linha casada pela chave no Docker (52 passos).
   - *Dado* o arquivo da fatura de dezembro com 20 linhas e a fatura do app com 19 itens, *quando* concilio,
     *então* cada linha e cada item caem num grupo (conferido, valor diferente, só no banco, só no app), pela
     ordem de casamento da decisão 3, com os totais e a diferença explicada por grupo.
@@ -2399,28 +2438,61 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* um arquivo sem fatura escolhida, *quando* concilio, *então* o app sugere a fatura pelas datas
     (ou pelo `DTEND`).
   - Estimativa: 5 · **Must** · Dependências: RCN-3
-- 🔵 **RCN-5** Resolver a diferença.
+- ✅ **RCN-5** Resolver a diferença. → parcela já lançada vira duplicada na prévia; importar só o que falta.
+  - Feito assim: na prévia de fatura de cartão, a linha "n/m" com o valor da parcela `n` de uma compra em `m`
+    vezes já lançada no mesmo cartão (mesma divisão da fatura: arredondada para baixo, sobra na primeira;
+    compra de até `n` meses e 45 dias antes da linha, ou até 3 dias depois; cada parcela de uma compra uma vez)
+    fica **duplicada**, fora da importação e com `duplicateOf` = a compra (`InstallmentLines`,
+    `ListInstallmentPurchasesAsync`). Vale também para quem importa a fatura sem conciliar, e a conciliação a
+    casa pela chave. Importar só o que falta usa a confirmação que já existe: a tela manda incluídas só as
+    linhas "só no banco" (as outras, `included: false`); os atalhos de editar e excluir ficam na RCN-6. Smoke
+    passo 24f (parcela 02/03 duplicada apontando a compra; 53 passos).
   - *Dado* uma conciliação com 2 linhas só no banco, *quando* importo o que falta, *então* só essas 2
     viram lançamento no cartão; as casadas (inclusive as parcelas) ficam de fora como já lançadas, e a
     diferença da fatura cai para o que sobrou.
   - *Dado* um item só no app ou com valor diferente, *quando* uso o atalho, *então* chego à edição (ou à
     exclusão) daquele lançamento.
   - Estimativa: 3 · **Must** · Dependências: RCN-4
-- 🔵 **RCN-6** Conferir na SPA.
+- ✅ **RCN-6** Conferir na SPA. → `InvoiceReconciliationPanel`, `invoice-reconciliation.cy.ts`.
+  - Feito assim: na fatura (aba Cartões), "Conferir com o banco" abre o painel: total do banco (vem preenchido
+    com o do app, ou com o do arquivo) e a diferença enquanto digita, "Marcar como conferida" (`PUT`) e
+    "desfazer"; a fatura ganha o selo "Conferida" (com a diferença aceita, se houver). O arquivo é o OFX da
+    fatura (CSV continua pela aba Importar, sem o painel): o painel cria o lote no cartão e mostra os totais
+    (arquivo, app, diferença), o aviso de "o arquivo parece ser da fatura de …" com atalho, a parte não
+    explicada e os grupos (só no banco, só no app, valor diferente, conferidas). "Importar o que falta"
+    confirma o lote com só as linhas "só no banco" incluídas (categoria sugerida pelo histórico ou a digitada)
+    e recarrega até a projeção casá-las. "Só no app" e "valor diferente" têm "editar" (abre o lançamento em
+    edição na aba Lançamentos) e "excluir". E2E: conferir pelo total com R$ 10 de diferença, selo e desfazer.
   - *Dado* a aba Cartões, *quando* abro uma fatura e escolho "Conferir com o banco", *então* informo o total
     ou envio o arquivo, vejo os grupos e os totais, importo o que falta, uso os atalhos e marco como
     conferida; a fatura passa a mostrar o selo "conferida" (com a diferença aceita, se houver).
   - Estimativa: 5 · **Must** · Dependências: RCN-2, RCN-5
-- 🔵 **RCN-7** Encargos do cartão reconhecidos.
+- ✅ **RCN-7** Encargos do cartão reconhecidos. → `CardChargeHints` nos dois serviços.
+  - Feito assim: descrição com a palavra inteira IOF, JUROS, MULTA, MORA, ANUIDADE, TARIFA ou ENCARGO(S) é
+    encargo. Na prévia de fatura de cartão, a saída que é encargo e não tem categoria no histórico vem com
+    "Encargos do cartão" (o histórico continua valendo antes); encargo nunca é parcela de compra (nem na
+    prévia, nem na conciliação: "ANUIDADE 3/12" fica só no banco). A conciliação marca a entrada (`charge`), e
+    o painel mostra "encargo do banco"; a jornada da RCN-9 confere a marca no IOF.
   - *Dado* linhas "IOF COMPRA INTERNACIONAL", "JUROS ROTATIVO", "ANUIDADE 3/12" ou "TARIFA", *quando*
     aparecem só no banco, *então* vêm marcadas como encargo, com a categoria "Encargos do cartão" sugerida
     (e a "ANUIDADE 3/12" não é tomada por parcela de compra).
   - Estimativa: 2 · **Should** · Dependências: RCN-4
-- 🔵 **RCN-8** Alterada depois da conferência.
+- ✅ **RCN-8** Alterada depois da conferência. → `changedSince` na conferência.
+  - Feito assim: a conferência devolvida (na lista de faturas e na rota da conferência) traz `changedSince`
+    quando o total do app agora difere do total guardado na conferência. A fatura troca o selo "Conferida" por
+    "Alterada depois da conferência" (com o total da conferência e o de agora no título), e o painel diz quanto
+    era e quanto é; conferir de novo atualiza a marca. E2E `invoice-reconciliation.cy.ts`: uma compra nova no
+    ciclo depois da conferência deixa a fatura alterada (150 → 170).
   - *Dado* uma fatura conferida em R$ 3.214,50, *quando* entra um lançamento novo naquele ciclo, *então* a
     fatura mostra "alterada depois da conferência" com o total novo; *e* conferir de novo atualiza a marca.
   - Estimativa: 2 · **Should** · Dependências: RCN-2
-- 🔵 **RCN-9** E2E Cypress: conferir a fatura com o arquivo do banco.
+- ✅ **RCN-9** E2E Cypress: conferir a fatura com o arquivo do banco. → `invoice-reconciliation-journey.cy.ts`.
+  - Feito assim: cartão novo com notebook 300 em 3x, mercado 80 e padaria 25 lançados hoje; o OFX traz a
+    parcela 01/03 (100), o supermercado (80), uma farmácia (39,40), um IOF (0,98) e o total declarado
+    (220,38). A conciliação mostra 2 conferidas (parcela pela chave da prévia, mercado por valor e data),
+    a padaria só no app e farmácia e IOF só no banco (diferença 15,38); "editar" abre a padaria na aba
+    Lançamentos. Importar o que falta e excluir a padaria deixam 4 conferidas e diferença 0; marcar como
+    conferida usa o total do arquivo e a fatura fica com o selo, sem diferença. Fecha o Must do épico.
   - *Dado* um cartão com uma compra parcelada e duas compras lançadas, *quando* envio o OFX da fatura com a
     parcela, uma das compras, uma compra que faltava e um IOF, *então* a conciliação mostra a parcela e a
     compra conferidas, a outra compra só no app e as duas linhas só no banco; *e* importar o que falta e

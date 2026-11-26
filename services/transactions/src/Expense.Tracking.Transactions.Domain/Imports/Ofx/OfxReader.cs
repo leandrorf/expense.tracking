@@ -50,11 +50,28 @@ public static class OfxReader
             return Result.Failure<ParsedStatement>(ImportErrors.FormatInvalid("A moeda do OFX e invalida."));
         }
 
-        var transactions = statement.Child("BANKTRANLIST")?.Children.Where(c => c.Name == "STMTTRN") ?? [];
+        var transactionList = statement.Child("BANKTRANLIST");
+        var transactions = transactionList?.Children.Where(c => c.Name == "STMTTRN") ?? [];
         var fitIdOccurrences = new Dictionary<string, int>(StringComparer.Ordinal);
         var lines = transactions.Select((trn, index) => ReadLine(trn, index + 1, fitIdOccurrences)).ToList();
 
-        return new ParsedStatement(kind, currency, lines);
+        return new ParsedStatement(kind, currency, lines,
+            kind == StatementKind.CreditCard ? CardTotals(statement, transactionList) : null);
+    }
+
+    /// <summary>
+    /// RCN-3 (ADR-0011, decisao 2): total e periodo que a fatura declara. O saldo do cartao vem negativo na
+    /// maioria dos bancos (o que se deve); o total e o valor sem sinal. Valor ou data ilegivel = ausente.
+    /// </summary>
+    private static StatementTotals? CardTotals(OfxNode statement, OfxNode? transactionList)
+    {
+        decimal? total = TryParseAmount(statement.Child("LEDGERBAL")?.ChildValue("BALAMT"), out var balance)
+            && decimal.Round(balance, 2) == balance
+                ? Math.Abs(balance)
+                : null;
+        DateOnly? start = TryParseDate(transactionList?.ChildValue("DTSTART"), out var from) ? from : null;
+        DateOnly? end = TryParseDate(transactionList?.ChildValue("DTEND"), out var to) ? to : null;
+        return total is null && start is null && end is null ? null : new StatementTotals(total, start, end);
     }
 
     private static StatementLine ReadLine(OfxNode trn, int number, Dictionary<string, int> fitIdOccurrences)

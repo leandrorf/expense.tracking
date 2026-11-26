@@ -83,6 +83,10 @@ public sealed class PreviewImportHandler(
             .ToList();
         var existing = await ExternalIds.ExistingAsync(
             transactions, payments, command.OwnerUserId, command.AccountId, keys, cancellationToken);
+        // RCN-3: na fatura de cartao, a linha duplicada diz qual lancamento repete (a conciliacao casa por ele).
+        var launched = statement.Value.Kind == StatementKind.CreditCard && existing.Count > 0
+            ? await transactions.FindTransactionIdsByExternalIdsAsync(command.OwnerUserId, command.AccountId, keys, cancellationToken)
+            : null;
 
         // IMP-6: ultima categoria usada para a mesma descricao, em qualquer conta do usuario.
         var descriptionKeys = statement.Value.Lines
@@ -103,7 +107,8 @@ public sealed class PreviewImportHandler(
 
         var batch = ImportBatch.Create(
             command.OwnerUserId, command.AccountId, command.CreditCardId, command.DefaultPaymentMethod,
-            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards, openOccurrences);
+            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards, openOccurrences, launched,
+            await InstallmentPurchasesAsync(command, statement.Value, cancellationToken));
         if (batch.IsFailure)
         {
             return Result.Failure<ImportBatchDto>(batch.Error);
@@ -112,6 +117,26 @@ public sealed class PreviewImportHandler(
         await batches.AddAsync(batch.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ImportBatchDto.From(batch.Value);
+    }
+
+    /// <summary>
+    /// RCN-5: so na fatura de cartao com linha "n/m", as compras parceladas do cartao que ainda podem estar sendo
+    /// cobradas (feitas ate 26 meses antes da linha mais antiga).
+    /// </summary>
+    private async Task<IReadOnlyList<InstallmentPurchase>> InstallmentPurchasesAsync(
+        PreviewImportCommand command, ParsedStatement statement, CancellationToken cancellationToken)
+    {
+        var dates = statement.Lines
+            .Where(l => l.IsValid && InstallmentLines.InstallmentOf(l.Description) is not null)
+            .Select(l => l.Date!.Value)
+            .ToList();
+        if (statement.Kind != StatementKind.CreditCard || command.CreditCardId is not { } cardId || dates.Count == 0)
+        {
+            return [];
+        }
+
+        return await transactions.ListInstallmentPurchasesAsync(
+            command.OwnerUserId, command.AccountId, cardId, dates.Min().AddMonths(-(Transaction.MaxInstallments + 2)), cancellationToken);
     }
 
     private async Task<IReadOnlyList<RecurrenceCandidate>> OpenOccurrencesAsync(

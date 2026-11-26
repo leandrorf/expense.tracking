@@ -86,6 +86,34 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
             .Select(t => t.Category)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Domain.Imports.InstallmentPurchase>> ListInstallmentPurchasesAsync(
+        Guid ownerUserId, Guid accountId, Guid creditCardId, DateOnly since, CancellationToken cancellationToken) =>
+        await dbContext.Transactions
+            .Where(t => t.OwnerUserId == ownerUserId && t.AccountId == accountId && t.CreditCardId == creditCardId
+                        && t.Installments > 1 && t.Type == TransactionType.Expense && t.OccurredOn >= since)
+            .Select(t => new Domain.Imports.InstallmentPurchase(t.Id, t.Amount, t.Installments, t.OccurredOn))
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, Guid>> FindTransactionIdsByExternalIdsAsync(
+        Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
+    {
+        var found = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        foreach (var chunk in externalIds.Distinct().Chunk(500))
+        {
+            var existing = await dbContext.Transactions
+                .Where(t => t.OwnerUserId == ownerUserId && t.AccountId == accountId &&
+                            t.ExternalId != null && chunk.Contains(t.ExternalId))
+                .Select(t => new { t.ExternalId, t.Id })
+                .ToListAsync(cancellationToken);
+            foreach (var item in existing)
+            {
+                found.TryAdd(item.ExternalId!, item.Id);
+            }
+        }
+
+        return found;
+    }
+
     public async Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
     {

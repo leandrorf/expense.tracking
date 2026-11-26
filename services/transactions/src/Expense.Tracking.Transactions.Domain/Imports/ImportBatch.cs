@@ -109,6 +109,14 @@ public sealed class ImportBatch
 
     public DateTimeOffset? UndoneAtUtc { get; private set; }
 
+    /// <summary>RCN-3 (ADR-0011, decisao 2): total declarado pela fatura do banco (OFX de cartao).</summary>
+    public decimal? StatedTotal { get; private set; }
+
+    /// <summary>RCN-3: periodo da fatura declarado no OFX (<c>DTSTART</c>/<c>DTEND</c>).</summary>
+    public DateOnly? StatementStart { get; private set; }
+
+    public DateOnly? StatementEnd { get; private set; }
+
     public IReadOnlyList<ImportLine> Lines => _lines;
 
     /// <summary>
@@ -118,12 +126,15 @@ public sealed class ImportBatch
     /// ultima categoria usada por chave de descricao (<see cref="Transaction.DescriptionKeyOf"/>):
     /// vira a categoria sugerida das linhas que podem entrar. <paramref name="accountCards"/> (INV-11)
     /// sao os cartoes ativos da conta: com um so, a linha de pagamento de fatura ja vem com ele.
+    /// <paramref name="launchedTransactions"/> (RCN-3) liga a chave externa ao lancamento que ja a tem: a
+    /// linha duplicada informa qual lancamento repete.
     /// </summary>
     public static Result<ImportBatch> Create(
         Guid ownerUserId, Guid accountId, Guid? creditCardId, PaymentMethod? defaultPaymentMethod,
         ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
         DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null,
-        IReadOnlyList<InvoiceCardHint>? accountCards = null, IReadOnlyList<RecurrenceCandidate>? openOccurrences = null)
+        IReadOnlyList<InvoiceCardHint>? accountCards = null, IReadOnlyList<RecurrenceCandidate>? openOccurrences = null,
+        IReadOnlyDictionary<string, Guid>? launchedTransactions = null, IReadOnlyList<InstallmentPurchase>? installmentPurchases = null)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -144,12 +155,31 @@ public sealed class ImportBatch
         var batch = new ImportBatch(
             Guid.NewGuid(), ownerUserId, accountId, creditCardId, format, statement.Kind,
             statement.Currency, paymentMethod.Value, nowUtc);
+        if (statement.Kind == StatementKind.CreditCard && statement.Totals is { } totals)
+        {
+            batch.StatedTotal = totals.StatedTotal;
+            batch.StatementStart = totals.Start;
+            batch.StatementEnd = totals.End;
+        }
 
         foreach (var line in statement.Lines)
         {
             batch._lines.Add(ImportLine.From(
                 batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds,
-                categoryHistory ?? EmptyHistory, accountCards is [var onlyCard] ? onlyCard : null));
+                categoryHistory ?? EmptyHistory, accountCards is [var onlyCard] ? onlyCard : null, launchedTransactions));
+        }
+
+        // RCN-5 (ADR-0011, decisao 5): parcela de compra ja lancada no cartao nao vira compra nova.
+        if (statement.Kind == StatementKind.CreditCard && installmentPurchases is { Count: > 0 })
+        {
+            var installments = InstallmentLines.Match(
+                batch._lines.Where(l => l.Status == ImportLineStatus.New && l.Type == TransactionType.Expense)
+                    .Select(l => (l.Number, l.OccurredOn!.Value, l.Amount!.Value, l.Description)),
+                installmentPurchases);
+            foreach (var line in batch._lines.Where(l => installments.ContainsKey(l.Number)))
+            {
+                line.MarkInstallmentOf(installments[line.Number]);
+            }
         }
 
         // REC-9: linha que bate com uma ocorrencia em aberto de uma regra da conta vem sugerida como ela.
@@ -362,6 +392,9 @@ public sealed class ImportLine
     /// <summary>Lancamento criado por esta linha na confirmacao (IMP-5).</summary>
     public Guid? TransactionId { get; private set; }
 
+    /// <summary>RCN-3 (ADR-0011, decisao 3): na linha duplicada, o lancamento que ela repete (quando se sabe).</summary>
+    public Guid? DuplicateOf { get; private set; }
+
     /// <summary>
     /// INV-11: a linha e (ou o usuario marcou como) pagamento de fatura: na confirmacao vira
     /// pagamento, nao gasto. So em extrato de conta e em saida.
@@ -468,6 +501,14 @@ public sealed class ImportLine
         return Result.Success();
     }
 
+    /// <summary>RCN-5: a linha e uma parcela de <paramref name="transactionId"/>, ja lancada: fica de fora.</summary>
+    internal void MarkInstallmentOf(Guid transactionId)
+    {
+        Status = ImportLineStatus.Duplicate;
+        Included = false;
+        DuplicateOf = transactionId;
+    }
+
     internal void MarkDuplicate()
     {
         Status = ImportLineStatus.Duplicate;
@@ -489,7 +530,7 @@ public sealed class ImportLine
     internal static ImportLine From(
         Guid batchId, StatementLine source, StatementKind kind, PaymentMethod paymentMethod,
         IReadOnlySet<string> existingExternalIds, IReadOnlyDictionary<string, string> categoryHistory,
-        InvoiceCardHint? onlyAccountCard = null)
+        InvoiceCardHint? onlyAccountCard = null, IReadOnlyDictionary<string, Guid>? launchedTransactions = null)
     {
         var line = new ImportLine(Guid.NewGuid(), batchId, source.Number)
         {
@@ -523,6 +564,7 @@ public sealed class ImportLine
         if (source.ExternalId is not null && existingExternalIds.Contains(source.ExternalId))
         {
             line.Status = ImportLineStatus.Duplicate;
+            line.DuplicateOf = launchedTransactions?.GetValueOrDefault(source.ExternalId) is { } id && id != Guid.Empty ? id : null;
         }
         else if (kind == StatementKind.CreditCard && line.Type == TransactionType.Income)
         {
@@ -538,6 +580,12 @@ public sealed class ImportLine
             categoryHistory.TryGetValue(Transaction.DescriptionKeyOf(line.Description), out var category))
         {
             line.Category = category;
+        }
+        else if (line.CanBeIncluded && kind == StatementKind.CreditCard && line.Type == TransactionType.Expense
+            && CardChargeHints.Matches(line.Description))
+        {
+            // RCN-7: encargo do banco na fatura, sem categoria no historico.
+            line.Category = CardChargeHints.Category;
         }
 
         // INV-11: saida de conta com "PAG FATURA" e afins vem sugerida como pagamento de fatura; com

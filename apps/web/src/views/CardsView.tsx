@@ -12,7 +12,13 @@ import { InvoicesView } from './InvoicesView';
 export function CardsView({
   openInvoice = null,
   onInvoiceOpened,
-}: { openInvoice?: { cardId: string; dueMonth: string } | null; onInvoiceOpened?: () => void } = {}) {
+  onEditTransaction,
+}: {
+  openInvoice?: { cardId: string; dueMonth: string } | null;
+  onInvoiceOpened?: () => void;
+  /** RCN-6: atalho da conferência para editar um lançamento. */
+  onEditTransaction?: (transactionId: string) => void;
+} = {}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   // INV-10: limite disponível por cartão (vem do reporting; sem ele, a lista continua funcionando).
@@ -105,6 +111,7 @@ export function CardsView({
         card={invoicesOf}
         accounts={accounts}
         initialDueMonth={initialDueMonth}
+        onEditTransaction={onEditTransaction}
         onBack={() => {
           setInvoicesOf(null);
           setInitialDueMonth(undefined);

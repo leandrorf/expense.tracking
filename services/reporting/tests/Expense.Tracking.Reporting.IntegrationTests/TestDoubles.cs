@@ -90,6 +90,33 @@ public sealed class FakeCardDirectory(CardRegistry registry, IHttpContextAccesso
     }
 }
 
+/// <summary>RCN-4: lotes de importacao guardados como o transactions os devolveria, por dono.</summary>
+public sealed class ImportBatchRegistry
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (Guid Owner, Expense.Tracking.Reporting.Application.Invoices.ImportBatchSnapshot Batch)> _batches = new();
+
+    public Expense.Tracking.Reporting.Application.Invoices.ImportBatchSnapshot Add(
+        Guid owner, Expense.Tracking.Reporting.Application.Invoices.ImportBatchSnapshot batch)
+    {
+        _batches[batch.Id] = (owner, batch);
+        return batch;
+    }
+
+    public Expense.Tracking.Reporting.Application.Invoices.ImportBatchSnapshot? Find(Guid batchId, Guid owner) =>
+        _batches.TryGetValue(batchId, out var entry) && entry.Owner == owner ? entry.Batch : null;
+}
+
+/// <summary>Faz o papel do transactions: so devolve o lote ao dono (o transactions filtra pelo token).</summary>
+public sealed class FakeImportBatchReader(ImportBatchRegistry registry, IHttpContextAccessor httpContextAccessor)
+    : Expense.Tracking.Reporting.Application.Invoices.IImportBatchReader
+{
+    public Task<Expense.Tracking.Reporting.Application.Invoices.ImportBatchSnapshot?> GetAsync(Guid batchId, CancellationToken cancellationToken)
+    {
+        var sub = httpContextAccessor.HttpContext?.User.FindFirstValue("sub");
+        return Task.FromResult(Guid.TryParse(sub, out var owner) ? registry.Find(batchId, owner) : null);
+    }
+}
+
 /// <summary>Relogio parado, para a situacao das faturas nao depender do dia em que o teste roda.</summary>
 public sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
 {

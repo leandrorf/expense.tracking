@@ -25,6 +25,9 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
     /// <summary>INV-4: cartoes que o "accounts" devolve, por dono.</summary>
     public CardRegistry Cards { get; } = new();
 
+    /// <summary>RCN-4: lotes de importacao que o "transactions" devolve, por dono.</summary>
+    public ImportBatchRegistry ImportBatches { get; } = new();
+
     /// <summary>NTF-8: e-mails "enviados" (o SMTP nao existe nos testes).</summary>
     public RecordingEmailSender Emails { get; } = new();
 
@@ -59,6 +62,7 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
                 .Where(d =>
                     d.ServiceType == typeof(IEventFeedClient) ||
                     d.ServiceType == typeof(ICardDirectory) ||
+                    d.ServiceType == typeof(Expense.Tracking.Reporting.Application.Invoices.IImportBatchReader) ||
                     d.ServiceType == typeof(Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory) ||
                     d.ServiceType == typeof(Expense.Tracking.Reporting.Application.Reminders.IEmailSender) ||
                     d.ServiceType == typeof(DbContextOptions<ReportingDbContext>) ||
@@ -76,6 +80,8 @@ public class ReportingApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IEventFeedClient>(EventFeed);
             services.AddSingleton(Cards);
             services.AddScoped<ICardDirectory, FakeCardDirectory>();
+            services.AddSingleton(ImportBatches);
+            services.AddScoped<Expense.Tracking.Reporting.Application.Invoices.IImportBatchReader, FakeImportBatchReader>();
             services.AddSingleton<Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory>(new FakeServiceCardDirectory(Cards));
             services.AddSingleton<Expense.Tracking.Reporting.Application.Reminders.IEmailSender>(Emails);
 

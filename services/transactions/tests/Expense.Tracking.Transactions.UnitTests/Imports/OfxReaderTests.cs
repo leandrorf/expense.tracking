@@ -288,4 +288,25 @@ public sealed class OfxReaderTests
         Assert.True(result.IsFailure);
         Assert.Equal(ImportErrors.FormatInvalidCode, result.Error.Code);
     }
+
+    // ---------- RCN-3 (ADR-0011, decisao 2): total e periodo declarados ----------
+
+    [Fact]
+    public void Read_CardStatement_KeepsTheStatedTotalAndPeriod()
+    {
+        var statement = OfxReader.Read(Sample("fatura-cartao-ofx2.ofx")).Value;
+
+        Assert.Equal(new StatementTotals(572.30m, new DateOnly(2026, 10, 6), new DateOnly(2026, 11, 5)), statement.Totals);
+    }
+
+    [Fact]
+    public void Read_BankStatement_OrCardWithoutTotals_HasNoTotals()
+    {
+        Assert.Null(OfxReader.Read(Sample("extrato-conta-ofx1.ofx")).Value.Totals);
+
+        var card = SgmlHeader + "<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<BANKTRANLIST>"
+            + "<STMTTRN><DTPOSTED>20261008<TRNAMT>-10.00<FITID>A<MEMO>LOJA</STMTTRN></BANKTRANLIST>"
+            + "<LEDGERBAL><BALAMT>abc<DTASOF>20261105</LEDGERBAL></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>";
+        Assert.Null(OfxReader.Read(Utf8(card)).Value.Totals);
+    }
 }

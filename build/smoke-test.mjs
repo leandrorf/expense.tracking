@@ -536,6 +536,77 @@ async function main() {
       ? `sugere ${idxPending.suggestedAmount} (${idxPending.rate}%)` : `aguardando o indice de ${idxPending.waitingFor}`}`);
   if (idxRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${idxRule.id}`, { method: 'DELETE', headers: auth });
 
+  // 24d) Fatura do cartao em OFX (RCN-3): o lote guarda o total e o periodo declarados, e reimportar diz
+  // qual lancamento cada linha duplicada repete. Desfeito no fim (nao mexe nos passos seguintes).
+  const ccDay = isoDay(new Date()).replaceAll('-', '');
+  const ccOfx = ['OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', '',
+    '<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<BANKTRANLIST>',
+    `<DTSTART>${ccDay}<DTEND>${ccDay}`,
+    `<STMTTRN><DTPOSTED>${ccDay}<TRNAMT>-61.10<FITID>SMOKE-CC-${Date.now()}-1<MEMO>Smoke fatura</STMTTRN>`,
+    '</BANKTRANLIST><LEDGERBAL><BALAMT>-61.10<DTASOF>' + ccDay + '</LEDGERBAL></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>'].join('\r\n');
+  const uploadCard = () => {
+    const form = new FormData();
+    form.append('file', new Blob([ccOfx]), 'fatura.ofx');
+    form.append('accountId', account.id);
+    form.append('creditCardId', card.id);
+    return fetch(`${GATEWAY}/api/imports`, { method: 'POST', headers: { Authorization: auth.Authorization }, body: form });
+  };
+  const ccRes = await uploadCard();
+  const ccBatch = ccRes.status === 201 ? await ccRes.json() : {};
+  const ccConfirmed = await (await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/confirm`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ lines: (ccBatch.lines ?? []).map((l) => ({ id: l.id, category: 'Smoke fatura' })) }),
+  })).json().catch(() => ({}));
+  const ccAgain = await (await uploadCard()).json().catch(() => ({}));
+  const ccLaunched = ccConfirmed.lines?.[0]?.transactionId;
+  const ccDuplicateOf = ccAgain.lines?.[0]?.duplicateOf;
+  ok(ccRes.status === 201 && ccBatch.statedTotal === 61.1 && ccBatch.statementEnd === isoDay(new Date())
+    && ccLaunched && ccDuplicateOf === ccLaunched,
+    `fatura OFX: total declarado ${ccBatch.statedTotal}, fim ${ccBatch.statementEnd}; reimportada aponta o lancamento (${ccDuplicateOf === ccLaunched})`);
+  // RCN-4: a conciliacao com o arquivo le o lote no transactions (token do usuario) e casa a linha pela chave.
+  const ccMonth = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json()).currentDueMonth;
+  let ccRecon = {};
+  for (let i = 0; i < 30; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices/${ccMonth}/reconciliation?batchId=${ccAgain.id}`, { headers: auth });
+    ccRecon = res.status === 200 ? await res.json() : { status: res.status };
+    if (ccRecon.detail?.entries?.some((e) => e.group === 'Matched' && e.transactionId === ccLaunched)) break;
+  }
+  const ccMatched = ccRecon.detail?.entries?.find((e) => e.transactionId === ccLaunched);
+  ok(ccMatched?.group === 'Matched' && ccMatched?.rule === 'Key' && ccRecon.detail?.fileTotal === 61.1,
+    `conciliacao com o arquivo (${ccMonth}): linha ${ccMatched?.group}/${ccMatched?.rule}, total do arquivo ${ccRecon.detail?.fileTotal}`);
+  if (ccBatch.id) await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/undo`, { method: 'POST', headers: auth });
+
+  // 24f) Parcela ja lancada (RCN-5): a fatura com "PARCELA 02/03" de uma compra de 300 em 3x no cartao nao vira
+  // compra nova: a linha e duplicada e aponta a compra.
+  const ccParcel = await (await installmentPurchase('CreditCard', card.id, 3)).json().catch(() => ({}));
+  const parcelOfx = ccOfx.replace(/<STMTTRN>.*<\/STMTTRN>/,
+    `<STMTTRN><DTPOSTED>${ccDay}<TRNAMT>-100.00<FITID>SMOKE-PARC-${Date.now()}<MEMO>SMOKE PARCELADO PARCELA 02/03</STMTTRN>`);
+  const parcelForm = new FormData();
+  parcelForm.append('file', new Blob([parcelOfx]), 'fatura.ofx');
+  parcelForm.append('accountId', account.id);
+  parcelForm.append('creditCardId', card.id);
+  const parcelBatch = await (await fetch(`${GATEWAY}/api/imports`, {
+    method: 'POST', headers: { Authorization: auth.Authorization }, body: parcelForm,
+  })).json().catch(() => ({}));
+  const parcelLine = parcelBatch.lines?.[0] ?? {};
+  ok(parcelLine.status === 'Duplicate' && parcelLine.included === false && parcelLine.duplicateOf === ccParcel.id,
+    `parcela 02/03 de compra ja lancada: ${parcelLine.status}, incluida=${parcelLine.included}, aponta a compra=${parcelLine.duplicateOf === ccParcel.id}`);
+  if (ccParcel.id) await fetch(`${GATEWAY}/api/transactions/${ccParcel.id}`, { method: 'DELETE', headers: auth });
+
+  // 24e) Conferir a fatura pelo total do banco (RCN-2): guarda a diferenca aceita, aparece na fatura e se desfaz.
+  const cardInvoices = await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json().catch(() => ({}));
+  const reconMonth = cardInvoices.currentDueMonth;
+  const reconUrl = `${GATEWAY}/api/reports/cards/${card.id}/invoices/${reconMonth}/reconciliation`;
+  const reconView = await (await fetch(reconUrl, { headers: auth })).json().catch(() => ({}));
+  const reconRes = await fetch(reconUrl, { method: 'PUT', headers: auth, body: JSON.stringify({ bankTotal: Math.round((reconView.appTotal + 12.34) * 100) / 100 }) });
+  const recon = reconRes.status === 200 ? await reconRes.json() : {};
+  const shown = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json())
+    .invoices?.find((i) => i.dueMonth === reconMonth)?.reconciliation;
+  const undoRecon = (await fetch(reconUrl, { method: 'DELETE', headers: auth })).status;
+  ok(reconRes.status === 200 && recon.difference === 12.34 && shown?.difference === 12.34 && undoRecon === 204,
+    `conferencia da fatura ${reconMonth}: PUT ${reconRes.status}, diferenca ${recon.difference}, na fatura ${shown?.difference}, desfeita ${undoRecon}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

@@ -88,6 +88,39 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("budgets", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Invoices.InvoiceReconciliation", b =>
+                {
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("card_id");
+
+                    b.Property<DateTime>("DueMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("due_month");
+
+                    b.Property<decimal>("AppTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("app_total");
+
+                    b.Property<decimal>("BankTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("bank_total");
+
+                    b.Property<DateTimeOffset>("ReconciledAtUtc")
+                        .HasColumnType("datetime")
+                        .HasColumnName("reconciled_at_utc");
+
+                    b.HasKey("OwnerUserId", "CardId", "DueMonth");
+
+                    b.ToTable("invoice_reconciliations", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedCardPayment", b =>
                 {
                     b.Property<Guid>("PaymentId")

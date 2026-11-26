@@ -128,6 +128,14 @@ public sealed class ConfirmImportHandlerTests
             Guid ownerUserId, IReadOnlyCollection<Guid> accountIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<string>>([]);
 
+        public Task<IReadOnlyList<Domain.Imports.InstallmentPurchase>> ListInstallmentPurchasesAsync(
+            Guid ownerUserId, Guid accountId, Guid creditCardId, DateOnly since, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Domain.Imports.InstallmentPurchase>>([]);
+
+        public Task<IReadOnlyDictionary<string, Guid>> FindTransactionIdsByExternalIdsAsync(
+            Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, Guid>>(new Dictionary<string, Guid>());
+
         public Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
             Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<string>>(Retrying ? LaunchedOnRetry : new HashSet<string>());

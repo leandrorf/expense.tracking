@@ -11,11 +11,18 @@ public enum StatementKind
 /// Extrato ou fatura lido de um arquivo, antes de virar lote de importacao. So contem o que foi
 /// lido; nada aqui e o arquivo original (ADR-0004, decisao 8).
 /// </summary>
-public sealed record ParsedStatement(StatementKind Kind, string Currency, IReadOnlyList<StatementLine> Lines)
+public sealed record ParsedStatement(
+    StatementKind Kind, string Currency, IReadOnlyList<StatementLine> Lines, StatementTotals? Totals = null)
 {
     /// <summary>Moeda quando o arquivo nao declara uma (ADR-0004: sem conversao de moeda).</summary>
     public const string DefaultCurrency = "BRL";
 }
+
+/// <summary>
+/// RCN-3 (ADR-0011, decisao 2): o que a fatura do banco declara no OFX: o total (<c>LEDGERBAL</c>, sem
+/// sinal) e o periodo (<c>DTSTART</c>/<c>DTEND</c> da lista de lancamentos). CSV nao traz nada disso.
+/// </summary>
+public sealed record StatementTotals(decimal? StatedTotal, DateOnly? Start, DateOnly? End);
 
 /// <summary>
 /// Uma linha do arquivo. <see cref="Amount"/> tem sinal: negativo e debito (gasto), positivo e

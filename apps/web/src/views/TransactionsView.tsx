@@ -10,7 +10,16 @@ function today(): string {
 }
 
 /** REC-10: `onRepeat` abre a aba Recorrências com o lançamento como modelo ("repetir todo mês"). */
-export function TransactionsView({ onRepeat }: { onRepeat?: (t: Transaction) => void } = {}) {
+export function TransactionsView({
+  onRepeat,
+  editId = null,
+  onEditOpened,
+}: {
+  onRepeat?: (t: Transaction) => void;
+  /** RCN-6: abre este lançamento em edição (atalho da conferência da fatura). */
+  editId?: string | null;
+  onEditOpened?: () => void;
+} = {}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -91,6 +100,17 @@ export function TransactionsView({ onRepeat }: { onRepeat?: (t: Transaction) => 
     void loadTransactions().catch((err) => setError(messageOf(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterAccount]);
+
+  // RCN-6: o atalho da conferência abre o lançamento em edição (depois de carregar contas e cartões).
+  useEffect(() => {
+    if (!editId || loading) return;
+    transactionsApi
+      .get(editId)
+      .then(startEdit)
+      .catch((err) => setError(messageOf(err)))
+      .finally(() => onEditOpened?.());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, loading]);
 
   const canSplit = paymentMethod === 'CreditCard' && type === 'Expense';
 

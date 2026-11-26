@@ -29,6 +29,10 @@ internal sealed class ImportBatchConfiguration : IEntityTypeConfiguration<Import
         builder.Property(b => b.ExpiresAtUtc).HasColumnName("expires_at_utc").IsRequired();
         builder.Property(b => b.ConfirmedAtUtc).HasColumnName("confirmed_at_utc");
         builder.Property(b => b.UndoneAtUtc).HasColumnName("undone_at_utc");
+        // RCN-3 (ADR-0011, decisao 2): o que a fatura do banco declara no OFX.
+        builder.Property(b => b.StatedTotal).HasColumnName("stated_total").HasPrecision(18, 2);
+        builder.Property(b => b.StatementStart).HasColumnName("statement_start");
+        builder.Property(b => b.StatementEnd).HasColumnName("statement_end");
 
         builder.HasMany(b => b.Lines).WithOne().HasForeignKey(l => l.BatchId).OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(b => b.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -59,6 +63,7 @@ internal sealed class ImportLineConfiguration : IEntityTypeConfiguration<ImportL
         builder.Property(l => l.Included).HasColumnName("included").IsRequired();
         builder.Property(l => l.Problem).HasColumnName("problem").HasMaxLength(200);
         builder.Property(l => l.TransactionId).HasColumnName("transaction_id");
+        builder.Property(l => l.DuplicateOf).HasColumnName("duplicate_of");
         builder.Property(l => l.InvoicePayment).HasColumnName("invoice_payment").IsRequired().HasDefaultValue(false);
         builder.Property(l => l.InvoiceCardId).HasColumnName("invoice_card_id");
         builder.Property(l => l.InvoiceDueMonth).HasColumnName("invoice_due_month");

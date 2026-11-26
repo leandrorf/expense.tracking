@@ -17,13 +17,18 @@ public sealed record ImportBatchDto(
     DateTimeOffset? ConfirmedAtUtc,
     DateTimeOffset? UndoneAtUtc,
     ImportSummaryDto Summary,
-    IReadOnlyList<ImportLineDto> Lines)
+    IReadOnlyList<ImportLineDto> Lines,
+    decimal? StatedTotal,
+    DateOnly? StatementStart,
+    DateOnly? StatementEnd)
 {
+    /// <remarks>RCN-3: <c>statedTotal</c>, <c>statementStart</c> e <c>statementEnd</c> sao o que a fatura do banco declara (OFX).</remarks>
     public static ImportBatchDto From(ImportBatch batch) =>
         new(batch.Id, batch.Status.ToString(), batch.Format.ToString(), batch.Kind.ToString(), batch.AccountId,
             batch.CreditCardId, batch.Currency, batch.DefaultPaymentMethod.ToString(), batch.CreatedAtUtc,
             batch.ExpiresAtUtc, batch.ConfirmedAtUtc, batch.UndoneAtUtc, ImportSummaryDto.From(batch.Lines),
-            batch.Lines.OrderBy(l => l.Number).Select(ImportLineDto.From).ToList());
+            batch.Lines.OrderBy(l => l.Number).Select(ImportLineDto.From).ToList(),
+            batch.StatedTotal, batch.StatementStart, batch.StatementEnd);
 }
 
 /// <summary>
@@ -62,12 +67,14 @@ public sealed record ImportLineDto(
     Guid? CardPaymentId,
     Guid? RecurrenceId = null,
     string? RecurrencePeriod = null,
-    string? RecurrenceDescription = null)
+    string? RecurrenceDescription = null,
+    Guid? DuplicateOf = null)
 {
+    /// <remarks>RCN-3: <c>duplicateOf</c> = lancamento que a linha duplicada repete (fatura de cartao).</remarks>
     public static ImportLineDto From(ImportLine line) =>
         new(line.Id, line.Number, line.Status.ToString(), line.Included, line.OccurredOn, line.Type?.ToString(),
             line.Amount, line.Description, line.PaymentMethod?.ToString(), line.Category, line.Problem,
             line.TransactionId, line.InvoicePayment, line.InvoiceCardId,
             line.InvoiceDueMonth?.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture),
-            line.CardPaymentId, line.RecurrenceId, line.RecurrencePeriod, line.RecurrenceDescription);
+            line.CardPaymentId, line.RecurrenceId, line.RecurrencePeriod, line.RecurrenceDescription, line.DuplicateOf);
 }
