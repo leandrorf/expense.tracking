@@ -2394,7 +2394,14 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* uma fatura conferida, *quando* consulto as faturas do cartão, *então* ela traz a conferência
     (total do banco, total do app na hora, data); *e* desfazer apaga a marca.
   - Estimativa: 3 · **Must** · Dependências: RCN-1
-- 🔵 **RCN-3** Total e período do arquivo da fatura.
+- ✅ **RCN-3** Total e período do arquivo da fatura. → `statedTotal`, `statementStart`/`statementEnd`, `duplicateOf`.
+  - Feito assim: o `OfxReader` lê, só na fatura de cartão, o `LEDGERBAL/BALAMT` (sem sinal: o saldo do
+    cartão vem negativo na maioria dos bancos) e o `DTSTART`/`DTEND` da lista de lançamentos; valor ou data
+    ilegível fica ausente, sem derrubar o arquivo (`StatementTotals`). O lote de cartão guarda os três
+    (`stated_total`, `statement_start`, `statement_end`; extrato de conta ignora) e o `ImportBatchDto` os
+    devolve. Na prévia de fatura de cartão, a linha duplicada traz `duplicateOf` (o lançamento da conta com a
+    mesma chave, por `FindTransactionIdsByExternalIdsAsync`; coluna `duplicate_of` em `import_lines`, migration
+    `ImportStatementTotals`). Smoke passo 24d (fatura OFX: total, período e `duplicateOf`; 50 passos).
   - *Dado* um OFX de fatura com `LEDGERBAL` e `DTSTART`/`DTEND`, *quando* importo, *então* o lote guarda
     o total e o período declarados pelo banco (CSV fica sem eles).
   - *Dado* uma linha do arquivo que repete um lançamento já importado, *quando* vejo a prévia, *então* a

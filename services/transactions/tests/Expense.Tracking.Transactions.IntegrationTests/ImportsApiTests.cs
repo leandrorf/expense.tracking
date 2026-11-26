@@ -899,6 +899,32 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         return scope.ServiceProvider.GetRequiredService<TransactionsDbContext>().ImportBatches.Count();
     }
 
+    // ---------- RCN-3 (ADR-0011, decisoes 2 e 3) ----------
+
+    [Fact]
+    public async Task Upload_CardStatement_BringsTheStatedTotal_AndDuplicatesPointToTheirTransactions()
+    {
+        var client = ClientFor(Guid.NewGuid());
+        var (accountId, cardId) = (Guid.NewGuid(), Guid.NewGuid());
+        var first = await Json(await client.PostAsync("/imports",
+            Upload(Sample("fatura-cartao-ofx2.ofx"), "fatura.ofx", accountId, creditCardId: cardId)));
+        Assert.Equal((572.30m, "2026-10-06", "2026-11-05"), (first.GetProperty("statedTotal").GetDecimal(),
+            first.GetProperty("statementStart").GetString(), first.GetProperty("statementEnd").GetString()));
+        var confirmed = await Json(await client.PostAsJsonAsync(
+            $"/imports/{first.GetProperty("id").GetGuid()}/confirm", AllWithCategory(first)));
+        var launched = confirmed.GetProperty("lines").EnumerateArray()
+            .Where(l => l.GetProperty("transactionId").ValueKind == JsonValueKind.String)
+            .Select(l => l.GetProperty("transactionId").GetGuid()).Order().ToList();
+
+        // O mesmo arquivo de novo: cada linha ja lancada diz qual lancamento repete.
+        var again = await Json(await client.PostAsync("/imports",
+            Upload(Sample("fatura-cartao-ofx2.ofx"), "fatura.ofx", accountId, creditCardId: cardId)));
+        var duplicates = again.GetProperty("lines").EnumerateArray().Where(l => l.GetProperty("status").GetString() == "Duplicate").ToList();
+
+        Assert.Equal(3, launched.Count);
+        Assert.Equal(launched, duplicates.Select(l => l.GetProperty("duplicateOf").GetGuid()).Order().ToList());
+    }
+
     private async Task SeedImportedTransactionAsync(Guid owner, Guid accountId, string externalId)
     {
         await using var scope = _factory.Services.CreateAsyncScope();

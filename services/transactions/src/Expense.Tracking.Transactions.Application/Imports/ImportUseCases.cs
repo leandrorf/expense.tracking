@@ -83,6 +83,10 @@ public sealed class PreviewImportHandler(
             .ToList();
         var existing = await ExternalIds.ExistingAsync(
             transactions, payments, command.OwnerUserId, command.AccountId, keys, cancellationToken);
+        // RCN-3: na fatura de cartao, a linha duplicada diz qual lancamento repete (a conciliacao casa por ele).
+        var launched = statement.Value.Kind == StatementKind.CreditCard && existing.Count > 0
+            ? await transactions.FindTransactionIdsByExternalIdsAsync(command.OwnerUserId, command.AccountId, keys, cancellationToken)
+            : null;
 
         // IMP-6: ultima categoria usada para a mesma descricao, em qualquer conta do usuario.
         var descriptionKeys = statement.Value.Lines
@@ -103,7 +107,7 @@ public sealed class PreviewImportHandler(
 
         var batch = ImportBatch.Create(
             command.OwnerUserId, command.AccountId, command.CreditCardId, command.DefaultPaymentMethod,
-            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards, openOccurrences);
+            format.Value, statement.Value, existing, timeProvider.GetUtcNow(), categoryHistory, accountCards, openOccurrences, launched);
         if (batch.IsFailure)
         {
             return Result.Failure<ImportBatchDto>(batch.Error);

@@ -348,4 +348,37 @@ public sealed class ImportBatchTests
         Assert.False(batch.IsExpired(Now + TimeSpan.FromDays(7) - TimeSpan.FromSeconds(1)));
         Assert.True(batch.IsExpired(Now + TimeSpan.FromDays(7)));
     }
+
+    // ---------- RCN-3 (ADR-0011, decisoes 2 e 3) ----------
+
+    [Fact]
+    public void Create_CardStatement_KeepsTheTotals_AndTheDuplicateSaysWhichTransactionItRepeats()
+    {
+        var launched = Guid.NewGuid();
+        var statement = new ParsedStatement(StatementKind.CreditCard, "BRL",
+            [StatementLine.Valid(1, new DateOnly(2026, 10, 8), -89.90m, "SOFTWARE", "CC-1"),
+             StatementLine.Valid(2, new DateOnly(2026, 10, 9), -10m, "PADARIA", "CC-2")],
+            new StatementTotals(99.90m, new DateOnly(2026, 10, 6), new DateOnly(2026, 11, 5)));
+
+        var batch = ImportBatch.Create(Owner, Account, Guid.NewGuid(), null, ImportFormat.Ofx, statement,
+            new HashSet<string> { "CC-1" }, Now, launchedTransactions: new Dictionary<string, Guid> { ["CC-1"] = launched }).Value;
+
+        Assert.Equal((99.90m, new DateOnly(2026, 10, 6), new DateOnly(2026, 11, 5)),
+            (batch.StatedTotal, batch.StatementStart, batch.StatementEnd));
+        Assert.Equal([(ImportLineStatus.Duplicate, (Guid?)launched), (ImportLineStatus.New, null)],
+            batch.Lines.OrderBy(l => l.Number).Select(l => (l.Status, l.DuplicateOf)));
+    }
+
+    [Fact]
+    public void Create_BankStatement_IgnoresTotals()
+    {
+        var statement = new ParsedStatement(StatementKind.BankAccount, "BRL",
+            [StatementLine.Valid(1, new DateOnly(2026, 10, 8), -10m, "PADARIA", "B-1")],
+            new StatementTotals(10m, null, null));
+
+        var batch = ImportBatch.Create(Owner, Account, null, PaymentMethod.Pix, ImportFormat.Ofx, statement,
+            new HashSet<string>(), Now).Value;
+
+        Assert.Null(batch.StatedTotal);
+    }
 }

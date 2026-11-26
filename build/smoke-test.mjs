@@ -536,6 +536,35 @@ async function main() {
       ? `sugere ${idxPending.suggestedAmount} (${idxPending.rate}%)` : `aguardando o indice de ${idxPending.waitingFor}`}`);
   if (idxRule.id) await fetch(`${GATEWAY}/api/transactions/recurrences/${idxRule.id}`, { method: 'DELETE', headers: auth });
 
+  // 24d) Fatura do cartao em OFX (RCN-3): o lote guarda o total e o periodo declarados, e reimportar diz
+  // qual lancamento cada linha duplicada repete. Desfeito no fim (nao mexe nos passos seguintes).
+  const ccDay = isoDay(new Date()).replaceAll('-', '');
+  const ccOfx = ['OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', '',
+    '<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<BANKTRANLIST>',
+    `<DTSTART>${ccDay}<DTEND>${ccDay}`,
+    `<STMTTRN><DTPOSTED>${ccDay}<TRNAMT>-61.10<FITID>SMOKE-CC-${Date.now()}-1<MEMO>Smoke fatura</STMTTRN>`,
+    '</BANKTRANLIST><LEDGERBAL><BALAMT>-61.10<DTASOF>' + ccDay + '</LEDGERBAL></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>'].join('\r\n');
+  const uploadCard = () => {
+    const form = new FormData();
+    form.append('file', new Blob([ccOfx]), 'fatura.ofx');
+    form.append('accountId', account.id);
+    form.append('creditCardId', card.id);
+    return fetch(`${GATEWAY}/api/imports`, { method: 'POST', headers: { Authorization: auth.Authorization }, body: form });
+  };
+  const ccRes = await uploadCard();
+  const ccBatch = ccRes.status === 201 ? await ccRes.json() : {};
+  const ccConfirmed = await (await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/confirm`, {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ lines: (ccBatch.lines ?? []).map((l) => ({ id: l.id, category: 'Smoke fatura' })) }),
+  })).json().catch(() => ({}));
+  const ccAgain = await (await uploadCard()).json().catch(() => ({}));
+  const ccLaunched = ccConfirmed.lines?.[0]?.transactionId;
+  const ccDuplicateOf = ccAgain.lines?.[0]?.duplicateOf;
+  ok(ccRes.status === 201 && ccBatch.statedTotal === 61.1 && ccBatch.statementEnd === isoDay(new Date())
+    && ccLaunched && ccDuplicateOf === ccLaunched,
+    `fatura OFX: total declarado ${ccBatch.statedTotal}, fim ${ccBatch.statementEnd}; reimportada aponta o lancamento (${ccDuplicateOf === ccLaunched})`);
+  if (ccBatch.id) await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/undo`, { method: 'POST', headers: auth });
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {
