@@ -2511,7 +2511,7 @@ reconhecidos e o selo de alterada depois da conferência. Total: 28 pts.
 
 **Ordem sugerida:** RCN-1 → RCN-3 → RCN-2 → RCN-4 → RCN-5 → RCN-6 → RCN-9 (fecha o Must) → RCN-7 → RCN-8.
 
-## 🔵 EPIC CYC — Editar o cartão e o ciclo da fatura  · *To Do*
+## 🟡 EPIC CYC — Editar o cartão e o ciclo da fatura  · *In Progress*
 **Problema:** o cartão não tem edição nenhuma: nome, final, limite e ciclo (dia de fechamento e de
 vencimento) são definidos ao criar, e para mudar qualquer um o usuário precisa criar outro cartão. O
 outro cartão não traz as compras, as parcelas, os pagamentos nem as conferências do antigo, e a fatura
@@ -2547,7 +2547,7 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
 - **O `accounts` não publica eventos.** O ciclo chega a quem precisa pela leitura na hora; não há projeção
   para atualizar.
 
-**Decisões em aberto (a CYC-1 registra a ADR-0012; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0012](adr/0012-editar-cartao-e-ciclo-da-fatura.md), CYC-1; ficou a recomendação de cada uma, com os refinamentos da CYC-1):**
 1. **Como guardar a mudança de ciclo.** Opções: (a) **ciclo com vigência**: o cartão guarda uma lista de
    ciclos, cada um valendo a partir de um mês de vencimento; (b) trocar o ciclo e recalcular tudo
    (simples, mas reescreve o passado); (c) guardar as faturas fechadas (cópia dos períodos e dos totais) e
@@ -2573,10 +2573,19 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
    desfazer uma troca que ainda não valeu. Nada novo no gateway (`/api/credit-cards/**` já passa) nem no
    `identity`.
 
-- 🔵 **CYC-1** ADR: editar o cartão e o ciclo da fatura.
+- ✅ **CYC-1** ADR: editar o cartão e o ciclo da fatura. → [ADR-0012](adr/0012-editar-cartao-e-ciclo-da-fatura.md), Aceita.
   - *Dado* as decisões em aberto 1 a 6 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0012 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), reabrindo a ADR-0005
     (decisão 3 e regra 4), e o PO ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: o primeiro ciclo continua nas colunas do cartão
+    (vale desde sempre) e as trocas vão para `card_cycles`; a troca vale de um mês cuja fatura não fechou
+    nem pelo ciclo antigo nem pelo novo e cujo período não fica vazio, senão 400 `card.cycle_change_invalid`
+    com a próxima fatura possível; "hoje" no fuso do app, que o `accounts` passa a ler (`TimeZone`). Pendente
+    = vigência cuja fatura ainda não começou (trocar de novo substitui; `DELETE` desfaz). O cartão sai com o
+    ciclo de hoje em `closingDay`/`dueDay` e o histórico em `cycles` (o primeiro com `fromDueMonth` nulo),
+    também no `/internal/credit-cards`. A regra dos períodos encadeados fica no `reporting` e, para validar,
+    uma cópia no `accounts`, com os mesmos testes de exemplo. Cartão desativado não é editado (400
+    `card.inactive`).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **CYC-2** Editar nome, bandeira, final e limite.
   - *Dado* um cartão com limite de R$ 5.000, *quando* corrijo o nome e mudo o limite para R$ 8.000, *então*
