@@ -1,6 +1,7 @@
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Projection;
 using Expense.Tracking.Reporting.Domain.Reminders;
+using Expense.Tracking.Reporting.Domain.Invoices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -27,6 +28,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
     public DbSet<ReminderDismissal> ReminderDismissals => Set<ReminderDismissal>();
 
     public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
+
+    public DbSet<InvoiceReconciliation> InvoiceReconciliations => Set<InvoiceReconciliation>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -127,6 +130,20 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
             b.Property(o => o.TransactionId).HasColumnName("transaction_id");
             b.Property(o => o.LastEventSequence).HasColumnName("last_event_sequence").IsRequired();
             b.HasIndex(o => o.OwnerUserId).HasDatabaseName("ix_projected_recurrence_occurrences_owner");
+        });
+
+        // RCN-2 (ADR-0011, decisao 7): faturas conferidas com a do banco, uma por (dono, cartao, mes).
+        modelBuilder.Entity<InvoiceReconciliation>(b =>
+        {
+            b.ToTable("invoice_reconciliations");
+            b.HasKey(r => new { r.OwnerUserId, r.CardId, r.DueMonth });
+            b.Property(r => r.OwnerUserId).HasColumnName("owner_user_id");
+            b.Property(r => r.CardId).HasColumnName("card_id");
+            b.Property(r => r.DueMonth).HasColumnName("due_month").HasColumnType("date");
+            b.Property(r => r.BankTotal).HasColumnName("bank_total").HasPrecision(18, 2).IsRequired();
+            b.Property(r => r.AppTotal).HasColumnName("app_total").HasPrecision(18, 2).IsRequired();
+            b.Property(r => r.ReconciledAtUtc).HasColumnName("reconciled_at_utc").IsRequired();
+            b.Ignore(r => r.Difference);
         });
 
         // NTF-5 (ADR-0009, decisao 5): avisos dispensados, por dono e chave.

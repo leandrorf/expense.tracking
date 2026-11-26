@@ -36,7 +36,8 @@ public sealed record InvoiceDto(
     decimal Remaining,
     string Status,
     IReadOnlyList<InvoiceItemDto> Items,
-    IReadOnlyList<InvoicePaymentDto> Payments);
+    IReadOnlyList<InvoicePaymentDto> Payments,
+    InvoiceReconciliationDto? Reconciliation = null);
 
 /// <param name="CurrentDueMonth">Fatura aberta hoje (<c>yyyy-MM</c>), sempre presente na lista.</param>
 /// <param name="Outstanding">INV-10: falta pagar de todas as faturas (incluindo parcelas futuras), sem o recorte.</param>
@@ -69,7 +70,8 @@ public sealed record InvoiceOptions(TimeZoneInfo TimeZone)
 /// do mes de vencimento que informam.
 /// </summary>
 public sealed class GetCardInvoicesHandler(
-    ICardDirectory cards, IProjectionQueries projection, InvoiceOptions options, TimeProvider timeProvider)
+    ICardDirectory cards, IProjectionQueries projection, InvoiceOptions options, TimeProvider timeProvider,
+    IInvoiceReconciliationStore? reconciliations = null)
 {
     public static readonly Error CardNotFound = Error.NotFound("card.not_found", "Cartao nao encontrado para o usuario.");
 
@@ -104,6 +106,12 @@ public sealed class GetCardInvoicesHandler(
             invoices.Add(new Invoice(period, 0m, 0m, 0m, InvoiceCalculator.StatusOf(period, 0m, 0m, today), []));
         }
 
+        // RCN-2 (ADR-0011, decisao 8): cada fatura traz a conferencia guardada, quando ha.
+        var reconciled = reconciliations is null
+            ? new Dictionary<DateOnly, InvoiceReconciliationDto?>()
+            : (await reconciliations.ListAsync(ownerUserId, cardId, cancellationToken))
+                .ToDictionary(r => r.DueMonth, InvoiceReconciliationDto.From);
+
         var from = fromDueMonth is { } f ? CardCycle.FirstDayOf(f) : current.AddMonths(-InvoiceOptions.DefaultMonthsBack);
         var to = toDueMonth is { } t ? CardCycle.FirstDayOf(t) : DateOnly.MaxValue;
 
@@ -118,7 +126,10 @@ public sealed class GetCardInvoicesHandler(
             invoices
                 .Where(i => i.Period.DueMonth >= from && i.Period.DueMonth <= to)
                 .OrderBy(i => i.Period.DueMonth)
-                .Select(i => ToDto(i, paymentsByMonth.GetValueOrDefault(i.Period.DueMonth) ?? []))
+                .Select(i => ToDto(i, paymentsByMonth.GetValueOrDefault(i.Period.DueMonth) ?? []) with
+                {
+                    Reconciliation = reconciled.GetValueOrDefault(i.Period.DueMonth),
+                })
                 .ToList(),
             card.CreditLimit,
             loaded.Outstanding,

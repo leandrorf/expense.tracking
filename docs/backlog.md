@@ -2388,7 +2388,16 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
     3/12" é encargo. Campos novos no lote: `statedTotal`, `statementStart`, `statementEnd` e, na linha
     duplicada, `duplicateOf`. `GET /reports/cards/{id}/invoices` passa a trazer a conferência.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **RCN-2** Conferir pelo total do banco.
+- ✅ **RCN-2** Conferir pelo total do banco. → `GET/PUT/DELETE /reports/cards/{id}/invoices/{dueMonth}/reconciliation`.
+  - Feito assim: `InvoiceReconciliation` no `reporting` (tabela `invoice_reconciliations`, chave dono + cartão +
+    mês de vencimento, migration `InvoiceReconciliations`) guarda o total do banco, o total do app na hora e a
+    data; a diferença é banco − app. O `GET` devolve o total do app agora (fatura calculada; mês sem compra = 0),
+    o total do banco e a diferença contra o total de agora, e a conferência guardada. O `PUT {bankTotal}`
+    marca (ou substitui) a conferência; total ausente, com mais de 2 casas ou acima de 1 bilhão = 400
+    `reconciliation.bank_total_invalid`. O `DELETE` desfaz (204; sem conferência = 404
+    `reconciliation.not_found`). Cartão que o accounts não devolve ao dono = 404 `card.not_found`; mês fora de
+    `yyyy-MM` = 400 `invoice.month_invalid`. `GET /reports/cards/{id}/invoices` traz a `reconciliation` de cada
+    fatura. Smoke passo 24e (51 passos).
   - *Dado* a fatura de dezembro calculada em R$ 3.180,00, *quando* informo que a do banco é R$ 3.214,50,
     *então* vejo a diferença de R$ 34,50 e posso marcar a fatura como conferida com essa diferença aceita.
   - *Dado* uma fatura conferida, *quando* consulto as faturas do cartão, *então* ela traz a conferência

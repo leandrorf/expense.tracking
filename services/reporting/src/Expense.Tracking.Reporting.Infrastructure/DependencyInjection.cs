@@ -38,6 +38,9 @@ public static class DependencyInjection
         services.AddScoped<GetBudgetStatusHandler>();
         services.AddScoped<GetCategorySuggestionsHandler>();
         services.AddScoped<GetCardInvoicesHandler>();
+        // RCN-2 (ADR-0011): conferencia da fatura com a do banco.
+        services.AddScoped<IInvoiceReconciliationStore, InvoiceReconciliationStore>();
+        services.AddScoped<InvoiceReconciliationHandler>();
         services.AddScoped<GetCardLimitsHandler>();
         services.AddScoped<GetCashForecastHandler>();
         services.AddScoped<GetRemindersHandler>();

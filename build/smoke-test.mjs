@@ -565,6 +565,19 @@ async function main() {
     `fatura OFX: total declarado ${ccBatch.statedTotal}, fim ${ccBatch.statementEnd}; reimportada aponta o lancamento (${ccDuplicateOf === ccLaunched})`);
   if (ccBatch.id) await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/undo`, { method: 'POST', headers: auth });
 
+  // 24e) Conferir a fatura pelo total do banco (RCN-2): guarda a diferenca aceita, aparece na fatura e se desfaz.
+  const cardInvoices = await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json().catch(() => ({}));
+  const reconMonth = cardInvoices.currentDueMonth;
+  const reconUrl = `${GATEWAY}/api/reports/cards/${card.id}/invoices/${reconMonth}/reconciliation`;
+  const reconView = await (await fetch(reconUrl, { headers: auth })).json().catch(() => ({}));
+  const reconRes = await fetch(reconUrl, { method: 'PUT', headers: auth, body: JSON.stringify({ bankTotal: Math.round((reconView.appTotal + 12.34) * 100) / 100 }) });
+  const recon = reconRes.status === 200 ? await reconRes.json() : {};
+  const shown = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json())
+    .invoices?.find((i) => i.dueMonth === reconMonth)?.reconciliation;
+  const undoRecon = (await fetch(reconUrl, { method: 'DELETE', headers: auth })).status;
+  ok(reconRes.status === 200 && recon.difference === 12.34 && shown?.difference === 12.34 && undoRecon === 204,
+    `conferencia da fatura ${reconMonth}: PUT ${reconRes.status}, diferenca ${recon.difference}, na fatura ${shown?.difference}, desfeita ${undoRecon}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {
