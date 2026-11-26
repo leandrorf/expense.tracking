@@ -134,7 +134,7 @@ public sealed class ImportBatch
         ImportFormat format, ParsedStatement statement, IReadOnlySet<string> existingExternalIds,
         DateTimeOffset nowUtc, IReadOnlyDictionary<string, string>? categoryHistory = null,
         IReadOnlyList<InvoiceCardHint>? accountCards = null, IReadOnlyList<RecurrenceCandidate>? openOccurrences = null,
-        IReadOnlyDictionary<string, Guid>? launchedTransactions = null)
+        IReadOnlyDictionary<string, Guid>? launchedTransactions = null, IReadOnlyList<InstallmentPurchase>? installmentPurchases = null)
     {
         if (ownerUserId == Guid.Empty || accountId == Guid.Empty)
         {
@@ -167,6 +167,19 @@ public sealed class ImportBatch
             batch._lines.Add(ImportLine.From(
                 batch.Id, line, statement.Kind, paymentMethod.Value, existingExternalIds,
                 categoryHistory ?? EmptyHistory, accountCards is [var onlyCard] ? onlyCard : null, launchedTransactions));
+        }
+
+        // RCN-5 (ADR-0011, decisao 5): parcela de compra ja lancada no cartao nao vira compra nova.
+        if (statement.Kind == StatementKind.CreditCard && installmentPurchases is { Count: > 0 })
+        {
+            var installments = InstallmentLines.Match(
+                batch._lines.Where(l => l.Status == ImportLineStatus.New && l.Type == TransactionType.Expense)
+                    .Select(l => (l.Number, l.OccurredOn!.Value, l.Amount!.Value, l.Description)),
+                installmentPurchases);
+            foreach (var line in batch._lines.Where(l => installments.ContainsKey(l.Number)))
+            {
+                line.MarkInstallmentOf(installments[line.Number]);
+            }
         }
 
         // REC-9: linha que bate com uma ocorrencia em aberto de uma regra da conta vem sugerida como ela.
@@ -486,6 +499,14 @@ public sealed class ImportLine
         }
 
         return Result.Success();
+    }
+
+    /// <summary>RCN-5: a linha e uma parcela de <paramref name="transactionId"/>, ja lancada: fica de fora.</summary>
+    internal void MarkInstallmentOf(Guid transactionId)
+    {
+        Status = ImportLineStatus.Duplicate;
+        Included = false;
+        DuplicateOf = transactionId;
     }
 
     internal void MarkDuplicate()

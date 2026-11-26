@@ -577,6 +577,23 @@ async function main() {
     `conciliacao com o arquivo (${ccMonth}): linha ${ccMatched?.group}/${ccMatched?.rule}, total do arquivo ${ccRecon.detail?.fileTotal}`);
   if (ccBatch.id) await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/undo`, { method: 'POST', headers: auth });
 
+  // 24f) Parcela ja lancada (RCN-5): a fatura com "PARCELA 02/03" de uma compra de 300 em 3x no cartao nao vira
+  // compra nova: a linha e duplicada e aponta a compra.
+  const ccParcel = await (await installmentPurchase('CreditCard', card.id, 3)).json().catch(() => ({}));
+  const parcelOfx = ccOfx.replace(/<STMTTRN>.*<\/STMTTRN>/,
+    `<STMTTRN><DTPOSTED>${ccDay}<TRNAMT>-100.00<FITID>SMOKE-PARC-${Date.now()}<MEMO>SMOKE PARCELADO PARCELA 02/03</STMTTRN>`);
+  const parcelForm = new FormData();
+  parcelForm.append('file', new Blob([parcelOfx]), 'fatura.ofx');
+  parcelForm.append('accountId', account.id);
+  parcelForm.append('creditCardId', card.id);
+  const parcelBatch = await (await fetch(`${GATEWAY}/api/imports`, {
+    method: 'POST', headers: { Authorization: auth.Authorization }, body: parcelForm,
+  })).json().catch(() => ({}));
+  const parcelLine = parcelBatch.lines?.[0] ?? {};
+  ok(parcelLine.status === 'Duplicate' && parcelLine.included === false && parcelLine.duplicateOf === ccParcel.id,
+    `parcela 02/03 de compra ja lancada: ${parcelLine.status}, incluida=${parcelLine.included}, aponta a compra=${parcelLine.duplicateOf === ccParcel.id}`);
+  if (ccParcel.id) await fetch(`${GATEWAY}/api/transactions/${ccParcel.id}`, { method: 'DELETE', headers: auth });
+
   // 24e) Conferir a fatura pelo total do banco (RCN-2): guarda a diferenca aceita, aparece na fatura e se desfaz.
   const cardInvoices = await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json().catch(() => ({}));
   const reconMonth = cardInvoices.currentDueMonth;

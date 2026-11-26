@@ -43,6 +43,10 @@ public interface ITransactionRepository
     Task<IReadOnlySet<string>> FindExistingExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);
 
+    /// <summary>RCN-5: compras parceladas do cartao feitas a partir de <paramref name="since"/> (as que a fatura ainda cobra).</summary>
+    Task<IReadOnlyList<Domain.Imports.InstallmentPurchase>> ListInstallmentPurchasesAsync(
+        Guid ownerUserId, Guid accountId, Guid creditCardId, DateOnly since, CancellationToken cancellationToken);
+
     /// <summary>RCN-3: o lancamento de cada chave externa ja lancada na conta (para a linha duplicada dizer qual).</summary>
     Task<IReadOnlyDictionary<string, Guid>> FindTransactionIdsByExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken);

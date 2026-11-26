@@ -86,6 +86,14 @@ internal sealed class TransactionRepository(TransactionsDbContext dbContext) : I
             .Select(t => t.Category)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Domain.Imports.InstallmentPurchase>> ListInstallmentPurchasesAsync(
+        Guid ownerUserId, Guid accountId, Guid creditCardId, DateOnly since, CancellationToken cancellationToken) =>
+        await dbContext.Transactions
+            .Where(t => t.OwnerUserId == ownerUserId && t.AccountId == accountId && t.CreditCardId == creditCardId
+                        && t.Installments > 1 && t.Type == TransactionType.Expense && t.OccurredOn >= since)
+            .Select(t => new Domain.Imports.InstallmentPurchase(t.Id, t.Amount, t.Installments, t.OccurredOn))
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyDictionary<string, Guid>> FindTransactionIdsByExternalIdsAsync(
         Guid ownerUserId, Guid accountId, IReadOnlyCollection<string> externalIds, CancellationToken cancellationToken)
     {

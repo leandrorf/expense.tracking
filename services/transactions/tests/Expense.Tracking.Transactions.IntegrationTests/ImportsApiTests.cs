@@ -899,6 +899,37 @@ public sealed class ImportsApiTests(ImportsApiTests.Factory factory) : IClassFix
         return scope.ServiceProvider.GetRequiredService<TransactionsDbContext>().ImportBatches.Count();
     }
 
+    [Fact]
+    public async Task Upload_CardStatement_InstallmentOfAPurchaseAlreadyLaunched_IsADuplicateOfIt()
+    {
+        // RCN-5: notebook de R$ 100 em 3x ja lancado; a fatura do banco traz a parcela 2 (33,33) e uma compra nova.
+        var owner = Guid.NewGuid();
+        var (accountId, cardId) = (Guid.NewGuid(), Guid.NewGuid());
+        Guid notebook;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TransactionsDbContext>();
+            var purchase = Transaction.Create(owner, accountId, TransactionType.Expense, PaymentMethod.CreditCard, cardId,
+                "Notebook", "Eletronicos", 100m, "BRL", new DateOnly(2026, 9, 15), null, DateTimeOffset.UtcNow, installments: 3).Value;
+            db.Transactions.Add(purchase);
+            await db.SaveChangesAsync();
+            notebook = purchase.Id;
+        }
+
+        var ofx = string.Join(Environment.NewLine, "OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "", "")
+            + "<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<BANKTRANLIST>"
+            + "<STMTTRN><DTPOSTED>20261112<TRNAMT>-33.33<FITID>P2<MEMO>LOJA NOTEBOOK PARCELA 02/03</STMTTRN>"
+            + "<STMTTRN><DTPOSTED>20261113<TRNAMT>-50.00<FITID>N1<MEMO>FARMACIA</STMTTRN>"
+            + "</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>";
+        var batch = await Json(await ClientFor(owner).PostAsync("/imports",
+            Upload(System.Text.Encoding.UTF8.GetBytes(ofx), "fatura.ofx", accountId, creditCardId: cardId)));
+
+        var lines = batch.GetProperty("lines").EnumerateArray().ToList();
+        Assert.Equal(("Duplicate", false, notebook), (lines[0].GetProperty("status").GetString(), lines[0].GetProperty("included").GetBoolean(),
+            lines[0].GetProperty("duplicateOf").GetGuid()));
+        Assert.Equal(("New", true), (lines[1].GetProperty("status").GetString(), lines[1].GetProperty("included").GetBoolean()));
+    }
+
     // ---------- RCN-3 (ADR-0011, decisoes 2 e 3) ----------
 
     [Fact]

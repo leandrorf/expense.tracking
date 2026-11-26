@@ -2438,7 +2438,15 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* um arquivo sem fatura escolhida, *quando* concilio, *então* o app sugere a fatura pelas datas
     (ou pelo `DTEND`).
   - Estimativa: 5 · **Must** · Dependências: RCN-3
-- 🔵 **RCN-5** Resolver a diferença.
+- ✅ **RCN-5** Resolver a diferença. → parcela já lançada vira duplicada na prévia; importar só o que falta.
+  - Feito assim: na prévia de fatura de cartão, a linha "n/m" com o valor da parcela `n` de uma compra em `m`
+    vezes já lançada no mesmo cartão (mesma divisão da fatura: arredondada para baixo, sobra na primeira;
+    compra de até `n` meses e 45 dias antes da linha, ou até 3 dias depois; cada parcela de uma compra uma vez)
+    fica **duplicada**, fora da importação e com `duplicateOf` = a compra (`InstallmentLines`,
+    `ListInstallmentPurchasesAsync`). Vale também para quem importa a fatura sem conciliar, e a conciliação a
+    casa pela chave. Importar só o que falta usa a confirmação que já existe: a tela manda incluídas só as
+    linhas "só no banco" (as outras, `included: false`); os atalhos de editar e excluir ficam na RCN-6. Smoke
+    passo 24f (parcela 02/03 duplicada apontando a compra; 53 passos).
   - *Dado* uma conciliação com 2 linhas só no banco, *quando* importo o que falta, *então* só essas 2
     viram lançamento no cartão; as casadas (inclusive as parcelas) ficam de fora como já lançadas, e a
     diferença da fatura cai para o que sobrou.
