@@ -75,6 +75,8 @@ export interface InvoiceReconciliation {
   appTotal: number;
   difference: number;
   reconciledAtUtc: string;
+  /** RCN-8: o total do app mudou depois da conferência. */
+  changedSince?: boolean;
 }
 
 export type ReconciliationGroup = 'Matched' | 'DifferentAmount' | 'OnlyInBank' | 'OnlyInApp';

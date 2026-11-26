@@ -72,10 +72,13 @@ public sealed record ReconciliationDetailDto(
     IReadOnlyList<ReconciliationEntryDto> Entries);
 
 /// <summary>A conferencia guardada: total do banco, total do app naquele momento, a diferenca aceita e a data.</summary>
-public sealed record InvoiceReconciliationDto(decimal BankTotal, decimal AppTotal, decimal Difference, DateTimeOffset ReconciledAtUtc)
+/// <param name="ChangedSince">RCN-8: o total do app agora e outro que o da conferencia (algo entrou ou saiu do ciclo).</param>
+public sealed record InvoiceReconciliationDto(
+    decimal BankTotal, decimal AppTotal, decimal Difference, DateTimeOffset ReconciledAtUtc, bool ChangedSince = false)
 {
-    public static InvoiceReconciliationDto? From(InvoiceReconciliation? r) =>
-        r is null ? null : new(r.BankTotal, r.AppTotal, r.Difference, r.ReconciledAtUtc);
+    /// <param name="currentAppTotal">Total da fatura do app agora.</param>
+    public static InvoiceReconciliationDto? From(InvoiceReconciliation? r, decimal currentAppTotal) =>
+        r is null ? null : new(r.BankTotal, r.AppTotal, r.Difference, r.ReconciledAtUtc, currentAppTotal != r.AppTotal);
 }
 
 /// <summary>
@@ -270,5 +273,5 @@ public sealed class InvoiceReconciliationHandler(
         appTotal,
         stored?.BankTotal,
         stored is null ? null : stored.BankTotal - appTotal,
-        InvoiceReconciliationDto.From(stored));
+        InvoiceReconciliationDto.From(stored, appTotal));
 }

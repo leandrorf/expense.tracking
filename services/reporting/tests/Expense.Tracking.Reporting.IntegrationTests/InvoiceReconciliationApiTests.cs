@@ -161,4 +161,31 @@ public sealed class InvoiceReconciliationApiTests(InvoicesApiFactory factory) : 
         Assert.Equal((HttpStatusCode.BadRequest, "reconciliation.batch_card_mismatch"), await ProblemOf(bankStatement.Id));
         Assert.Equal((HttpStatusCode.NotFound, "reconciliation.batch_not_found"), await ProblemOf(ofAnother.Id));
     }
+
+    [Fact]
+    public async Task Reconciliation_IsMarkedChangedWhenTheInvoiceChangesAfterIt_UntilReconciledAgain()
+    {
+        // RCN-8: conferida em 3.180; entra uma compra no ciclo; conferir de novo limpa a marca.
+        var (client, cardId) = await CardWithDecemberInvoiceAsync();
+        var owner = Guid.Parse(client.DefaultRequestHeaders.GetValues(TestAuthHandler.SubHeader).Single());
+        var url = $"/reports/cards/{cardId}/invoices/2026-12/reconciliation";
+        await client.PutAsJsonAsync(url, new { bankTotal = 3180m });
+
+        async Task<JsonElement> DecemberAsync() =>
+            (await client.GetFromJsonAsync<JsonElement>($"/reports/cards/{cardId}/invoices")).GetProperty("invoices").EnumerateArray()
+            .Single(i => i.GetProperty("dueMonth").GetString() == "2026-12").GetProperty("reconciliation");
+
+        Assert.False((await DecemberAsync()).GetProperty("changedSince").GetBoolean());
+
+        _factory.EventFeed.CardPurchase(Guid.NewGuid(), owner, cardId, 40m, "2026-11-25", description: "Farmacia");
+        await _factory.DrainFeedAsync();
+
+        Assert.True((await DecemberAsync()).GetProperty("changedSince").GetBoolean());
+        var view = await client.GetFromJsonAsync<JsonElement>(url);
+        Assert.Equal((3220m, -40m, true), (view.GetProperty("appTotal").GetDecimal(), view.GetProperty("difference").GetDecimal(),
+            view.GetProperty("reconciliation").GetProperty("changedSince").GetBoolean()));
+
+        await client.PutAsJsonAsync(url, new { bankTotal = 3220m });
+        Assert.False((await DecemberAsync()).GetProperty("changedSince").GetBoolean());
+    }
 }

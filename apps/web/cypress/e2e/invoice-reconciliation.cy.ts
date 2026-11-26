@@ -1,6 +1,6 @@
 // RCN-6 (ADR-0011): conferir a fatura do cartao com a do banco pelo total. A compra de hoje cai na fatura atual;
 // informar o total do banco com R$ 10,00 a mais marca a fatura como conferida com a diferenca aceita, a fatura
-// ganha o selo e desfazer tira a marca.
+// ganha o selo; uma compra nova depois deixa a fatura "alterada depois da conferencia" (RCN-8); desfazer tira a marca.
 describe('Fatura: conferir pelo total do banco', () => {
   const pad = (n: number) => String(n).padStart(2, '0');
   const today = new Date();
@@ -46,6 +46,8 @@ describe('Fatura: conferir pelo total do banco', () => {
     cy.contains('[data-cy=cards-table] tr', card).find('[data-cy=card-invoices]').click();
     // A compra de hoje esta na fatura atual, onde a tela abre; a projecao leva um instante.
     const findPurchase = (attempts = 20) => {
+      // Espera a fatura carregar antes de procurar a compra.
+      cy.get('[data-cy=invoice-figures]').should('exist');
       cy.get('body').then(($body) => {
         if ($body.find(`[data-cy=invoice-item]:contains("${purchase}")`).length > 0) return;
         if (attempts <= 1) throw new Error('A compra nao chegou a fatura.');
@@ -65,6 +67,34 @@ describe('Fatura: conferir pelo total do banco', () => {
     cy.get('[data-cy=reconciliation-notice]').should('contain', 'diferença de').and('contain', '10,00');
     cy.get('[data-cy=invoice-reconciled]').should('contain', 'Conferida').and('contain', '10,00');
     cy.get('[data-cy=reconciliation-done]').should('contain', '160,00');
+
+    // RCN-8: uma compra nova no ciclo depois da conferencia: a fatura fica "alterada depois da conferencia".
+    cy.get('[data-cy=tab-transactions]').click();
+    cy.get('[data-cy=tx-account]').select(account);
+    cy.get('[data-cy=tx-payment-method]').select('CreditCard');
+    cy.get('[data-cy=tx-card]').find('option').contains(card).then(($o) => cy.get('[data-cy=tx-card]').select($o.val() as string));
+    cy.get('[data-cy=tx-description]').type(`${purchase} extra`);
+    cy.get('[data-cy=tx-category]').type(`Compras ${stamp}`);
+    cy.get('[data-cy=tx-amount]').type('20');
+    cy.get('[data-cy=tx-date]').clear().type(iso);
+    cy.get('[data-cy=tx-submit]').click();
+    cy.get('[data-cy=tx-table]').contains('td', `${purchase} extra`).should('be.visible');
+    cy.get('[data-cy=tab-cards]').click();
+    const waitChanged = (attempts = 20) => {
+      cy.contains('[data-cy=cards-table] tr', card).find('[data-cy=card-invoices]').click();
+      cy.get('[data-cy=invoice-figures]').should('exist');
+      cy.get('[data-cy=invoice-reconciled]').then(($badge) => {
+        if ($badge.attr('data-changed') === 'true') return;
+        if (attempts <= 1) throw new Error('A fatura nao ficou alterada depois da conferencia.');
+        cy.wait(1000);
+        cy.get('[data-cy=invoices-back]').click();
+        waitChanged(attempts - 1);
+      });
+    };
+    waitChanged();
+    cy.get('[data-cy=invoice-reconciled]').should('contain', 'Alterada depois da conferência');
+    cy.get('[data-cy=invoice-reconcile]').click();
+    cy.get('[data-cy=reconciliation-changed]').should('contain', '150,00').and('contain', '170,00');
 
     cy.get('[data-cy=reconciliation-undo]').click();
     cy.get('[data-cy=reconciliation-notice]').should('contain', 'Conferência desfeita');

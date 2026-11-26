@@ -217,16 +217,26 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
             <span className={`health-badge ${STATUS[invoice.status].tone}`} data-cy="invoice-status" data-status={invoice.status}>
               {STATUS[invoice.status].label}
             </span>
-            {invoice.reconciliation && (
-              <span
-                className="health-badge paid"
-                data-cy="invoice-reconciled"
-                title={`Total do banco ${money(invoice.reconciliation.bankTotal, currency)}`}
-              >
-                Conferida
-                {invoice.reconciliation.difference !== 0 && ` (dif. ${money(invoice.reconciliation.difference, currency)})`}
-              </span>
-            )}
+            {invoice.reconciliation &&
+              (invoice.reconciliation.changedSince ? (
+                <span
+                  className="health-badge warning"
+                  data-cy="invoice-reconciled"
+                  data-changed="true"
+                  title={`Conferida com ${money(invoice.reconciliation.appTotal, currency)}; o total agora é ${money(invoice.total, currency)}`}
+                >
+                  Alterada depois da conferência
+                </span>
+              ) : (
+                <span
+                  className="health-badge paid"
+                  data-cy="invoice-reconciled"
+                  title={`Total do banco ${money(invoice.reconciliation.bankTotal, currency)}`}
+                >
+                  Conferida
+                  {invoice.reconciliation.difference !== 0 && ` (dif. ${money(invoice.reconciliation.difference, currency)})`}
+                </span>
+              ))}
           </div>
 
           <div className="cards-row" data-cy="invoice-figures">

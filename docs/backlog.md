@@ -2285,7 +2285,7 @@ ainda não veio. Could = RJT-9 (2 pts). Total: 34 pts.
 **Ordem sugerida:** RJT-1 → RJT-2 → RJT-3 (com o `reporting` implantado antes do `transactions` que publica
 o `RecurrenceSaved` v2) → RJT-4 → RJT-5 → RJT-10 (fecha o Must) → RJT-6 → RJT-7 → RJT-8 → RJT-9.
 
-## 🟡 EPIC RCN — Conciliação da fatura do cartão  · *In Progress*
+## 🟢 EPIC RCN — Conciliação da fatura do cartão  · *Done*
 **Problema:** a fatura do cartão é calculada pelo app a partir do que foi lançado (INV): compras,
 parcelas, estornos e pagamentos, no ciclo do cartão. A fatura do banco quase nunca bate de primeira:
 falta uma compra que ninguém lançou, uma compra foi lançada duas vezes ou caiu no ciclo errado, aparece
@@ -2477,7 +2477,12 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
     aparecem só no banco, *então* vêm marcadas como encargo, com a categoria "Encargos do cartão" sugerida
     (e a "ANUIDADE 3/12" não é tomada por parcela de compra).
   - Estimativa: 2 · **Should** · Dependências: RCN-4
-- 🔵 **RCN-8** Alterada depois da conferência.
+- ✅ **RCN-8** Alterada depois da conferência. → `changedSince` na conferência.
+  - Feito assim: a conferência devolvida (na lista de faturas e na rota da conferência) traz `changedSince`
+    quando o total do app agora difere do total guardado na conferência. A fatura troca o selo "Conferida" por
+    "Alterada depois da conferência" (com o total da conferência e o de agora no título), e o painel diz quanto
+    era e quanto é; conferir de novo atualiza a marca. E2E `invoice-reconciliation.cy.ts`: uma compra nova no
+    ciclo depois da conferência deixa a fatura alterada (150 → 170).
   - *Dado* uma fatura conferida em R$ 3.214,50, *quando* entra um lançamento novo naquele ciclo, *então* a
     fatura mostra "alterada depois da conferência" com o total novo; *e* conferir de novo atualiza a marca.
   - Estimativa: 2 · **Should** · Dependências: RCN-2

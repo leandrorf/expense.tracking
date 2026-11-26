@@ -177,6 +177,11 @@ export function InvoiceReconciliationPanel({ card, dueMonth, currency, onChanged
           Conferida em {new Date(view.reconciliation.reconciledAtUtc).toLocaleDateString('pt-BR')} com o total do banco de{' '}
           {money(view.reconciliation.bankTotal)}
           {view.reconciliation.difference !== 0 && ` (diferença aceita de ${money(view.reconciliation.difference)})`}.{' '}
+          {view.reconciliation.changedSince && (
+            <strong data-cy="reconciliation-changed">
+              A fatura mudou depois: o total do app era {money(view.reconciliation.appTotal)} e agora é {money(view.appTotal)}.{' '}
+            </strong>
+          )}
           <button className="link" type="button" data-cy="reconciliation-undo" disabled={busy} onClick={handleUndo}>
             desfazer
           </button>

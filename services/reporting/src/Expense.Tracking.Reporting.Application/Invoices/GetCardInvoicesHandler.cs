@@ -107,10 +107,12 @@ public sealed class GetCardInvoicesHandler(
         }
 
         // RCN-2 (ADR-0011, decisao 8): cada fatura traz a conferencia guardada, quando ha.
+        // RCN-8: com o total de agora, para dizer se mudou depois da conferencia.
+        var totals = invoices.ToDictionary(i => i.Period.DueMonth, i => i.Total);
         var reconciled = reconciliations is null
             ? new Dictionary<DateOnly, InvoiceReconciliationDto?>()
             : (await reconciliations.ListAsync(ownerUserId, cardId, cancellationToken))
-                .ToDictionary(r => r.DueMonth, InvoiceReconciliationDto.From);
+                .ToDictionary(r => r.DueMonth, r => InvoiceReconciliationDto.From(r, totals.GetValueOrDefault(r.DueMonth)));
 
         var from = fromDueMonth is { } f ? CardCycle.FirstDayOf(f) : current.AddMonths(-InvoiceOptions.DefaultMonthsBack);
         var to = toDueMonth is { } t ? CardCycle.FirstDayOf(t) : DateOnly.MaxValue;
