@@ -23,7 +23,8 @@ public static partial class InstallmentLines
         var used = new HashSet<(Guid, int)>();
         foreach (var line in lines.OrderBy(l => l.Number))
         {
-            if (InstallmentOf(line.Description) is not { } installment)
+            // RCN-7: "ANUIDADE 3/12" e encargo, nao parcela de compra.
+            if (CardChargeHints.Matches(line.Description) || InstallmentOf(line.Description) is not { } installment)
             {
                 continue;
             }

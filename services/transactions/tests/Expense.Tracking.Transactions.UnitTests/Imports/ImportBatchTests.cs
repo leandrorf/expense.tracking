@@ -381,4 +381,23 @@ public sealed class ImportBatchTests
 
         Assert.Null(batch.StatedTotal);
     }
+
+    // ---------- RCN-7 (ADR-0011, decisao 5): encargos do cartao ----------
+
+    [Fact]
+    public void Create_CardCharges_ComeWithTheChargesCategory_UnlessTheHistoryHasOne()
+    {
+        var statement = new ParsedStatement(StatementKind.CreditCard, "BRL",
+            [StatementLine.Valid(1, new DateOnly(2026, 11, 8), -0.98m, "IOF COMPRA INTERNACIONAL", "C-1"),
+             StatementLine.Valid(2, new DateOnly(2026, 11, 8), -35m, "ANUIDADE 3/12", "C-2"),
+             StatementLine.Valid(3, new DateOnly(2026, 11, 8), -12m, "JUROS ROTATIVO", "C-3"),
+             StatementLine.Valid(4, new DateOnly(2026, 11, 8), -20m, "IOFINHO LANCHES", "C-4")]);
+        var history = new Dictionary<string, string> { [Transaction.DescriptionKeyOf("JUROS ROTATIVO")] = "Juros" };
+
+        var batch = ImportBatch.Create(Owner, Account, Guid.NewGuid(), null, ImportFormat.Ofx, statement,
+            new HashSet<string>(), Now, history).Value;
+
+        Assert.Equal(["Encargos do cartão", "Encargos do cartão", "Juros", null],
+            batch.Lines.OrderBy(l => l.Number).Select(l => l.Category));
+    }
 }

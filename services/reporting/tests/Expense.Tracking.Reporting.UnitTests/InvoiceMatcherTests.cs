@@ -106,4 +106,18 @@ public sealed class InvoiceMatcherTests
         Assert.Equal(2, InvoiceMatcher.Similarity("CAFÉ & COWORKING 12", "cafe coworking ltda"));
         Assert.Equal(0, InvoiceMatcher.Similarity("UBER", "99 Taxi"));
     }
+
+    [Fact]
+    public void Charges_AreMarked_AndNeverMatchedAsInstallments()
+    {
+        var purchase = Item("2026-09-01", 35m, "Loja anual", installment: 3, installments: 12);
+        var annuity = Line("2026-11-08", 35m, "ANUIDADE 3/12");
+        var iof = Line("2026-11-08", 0.98m, "IOF COMPRA INTERNACIONAL");
+
+        var entries = InvoiceMatcher.Match([annuity, iof], [purchase]);
+
+        Assert.Equal((ReconciliationGroup.OnlyInBank, true), (Of(entries, annuity).Group, Of(entries, annuity).IsCharge));
+        Assert.True(Of(entries, iof).IsCharge);
+        Assert.False(Assert.Single(entries, e => e.Group == ReconciliationGroup.OnlyInApp).IsCharge);
+    }
 }

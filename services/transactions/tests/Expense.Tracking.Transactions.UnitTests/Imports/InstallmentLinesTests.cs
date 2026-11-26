@@ -38,4 +38,12 @@ public sealed class InstallmentLinesTests
         Assert.Empty(InstallmentLines.Match([(1, new DateOnly(2026, 9, 1), 33.33m, "LOJA 2/3")], [NotebookIn3]));
         Assert.Empty(InstallmentLines.Match([(1, new DateOnly(2027, 6, 1), 33.33m, "LOJA 2/3")], [NotebookIn3]));
     }
+
+    [Fact]
+    public void Match_NeverTakesAChargeForAnInstallment()
+    {
+        var annuityLike = new InstallmentPurchase(Guid.NewGuid(), 420m, 12, new DateOnly(2026, 9, 1));
+
+        Assert.Empty(InstallmentLines.Match([(1, new DateOnly(2026, 11, 8), 35m, "ANUIDADE 3/12")], [annuityLike]));
+    }
 }

@@ -31,6 +31,9 @@ public enum ReconciliationGroup
 /// <summary>Uma entrada do resultado: a linha do banco, o item do app, ou os dois quando casaram.</summary>
 public sealed record ReconciliationEntry(ReconciliationGroup Group, BankLine? Line, InvoiceItem? Item, MatchRule? Rule)
 {
+    /// <summary>RCN-7: a linha do banco e um encargo (IOF, juros, anuidade...).</summary>
+    public bool IsCharge => CardChargeHints.Matches(Line?.Description);
+
     /// <summary>Quanto a entrada explica da diferenca banco - app.</summary>
     public decimal Explains => (Line?.Amount ?? 0m) - (Item?.Amount ?? 0m);
 }
@@ -73,7 +76,8 @@ public static partial class InvoiceMatcher
         // (2) Parcela "n/m": primeiro com o mesmo valor; depois, valor diferente com descricao parecida.
         foreach (var line in lines.Where(freeLines.Contains).ToList())
         {
-            if (InstallmentOf(line.Description) is not { } installment)
+            // RCN-7: "ANUIDADE 3/12" e encargo, nao parcela de compra.
+            if (CardChargeHints.Matches(line.Description) || InstallmentOf(line.Description) is not { } installment)
             {
                 continue;
             }

@@ -93,6 +93,8 @@ describe('Fatura: conferencia com o arquivo do banco (jornada)', () => {
     group('OnlyInApp').should('contain', bakery);
     group('OnlyInBank').find('[data-cy=reconciliation-entry]').should('have.length', 2);
     group('OnlyInBank').should('contain', pharmacy).and('contain', 'IOF');
+    // RCN-7: o IOF vem marcado como encargo do banco.
+    group('OnlyInBank').find('[data-cy=reconciliation-charge]').should('have.length', 1);
     cy.get('[data-cy=reconciliation-file-difference]').should('contain', '15,38');
 
     // O atalho "editar" abre a padaria na aba Lancamentos.

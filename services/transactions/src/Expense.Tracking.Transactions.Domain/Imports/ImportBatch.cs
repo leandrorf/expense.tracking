@@ -581,6 +581,12 @@ public sealed class ImportLine
         {
             line.Category = category;
         }
+        else if (line.CanBeIncluded && kind == StatementKind.CreditCard && line.Type == TransactionType.Expense
+            && CardChargeHints.Matches(line.Description))
+        {
+            // RCN-7: encargo do banco na fatura, sem categoria no historico.
+            line.Category = CardChargeHints.Category;
+        }
 
         // INV-11: saida de conta com "PAG FATURA" e afins vem sugerida como pagamento de fatura; com
         // um so cartao na conta, ja vem com ele e com a fatura de vencimento mais proximo.

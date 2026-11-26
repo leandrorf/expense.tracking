@@ -262,6 +262,11 @@ export function InvoiceReconciliationPanel({ card, dueMonth, currency, onChanged
                         <td>{day(e.bankDate ?? e.appDate)}</td>
                         <td>
                           {e.bankDescription ?? e.appDescription ?? '—'}
+                          {e.charge && (
+                            <span className="sub" data-cy="reconciliation-charge">
+                              encargo do banco
+                            </span>
+                          )}
                           {e.bankDescription && e.appDescription && <span className="sub">no app: {e.appDescription}</span>}
                           {e.installments && e.installments > 1 && (
                             <span className="sub">

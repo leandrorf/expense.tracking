@@ -50,7 +50,8 @@ public sealed record ReconciliationEntryDto(
     string? AppDescription,
     int? Installment,
     int? Installments,
-    decimal Explains);
+    decimal Explains,
+    bool Charge = false);
 
 /// <summary>RCN-4: quanto da diferenca cada grupo explica; <see cref="Unexplained"/> e o resto (total declarado pelo banco).</summary>
 public sealed record ReconciliationExplanationDto(decimal OnlyInBank, decimal OnlyInApp, decimal DifferentAmount, decimal Unexplained);
@@ -173,7 +174,7 @@ public sealed class InvoiceReconciliationHandler(
                 .Select(e => new ReconciliationEntryDto(
                     e.Group.ToString(), e.Rule?.ToString(), e.Line?.LineId, e.Line?.Number, e.Line?.Date, e.Line?.Amount,
                     e.Line?.Description, e.Item?.TransactionId, e.Item?.PurchaseDate, e.Item?.Amount, e.Item?.Description,
-                    e.Item?.Installment, e.Item?.Installments, e.Explains))
+                    e.Item?.Installment, e.Item?.Installments, e.Explains, e.IsCharge))
                 .ToList());
     }
 

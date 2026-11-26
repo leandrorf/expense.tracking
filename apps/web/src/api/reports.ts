@@ -96,6 +96,8 @@ export interface ReconciliationEntry {
   installments: number | null;
   /** Quanto da diferença (banco − app) esta entrada explica. */
   explains: number;
+  /** RCN-7: a linha do banco é um encargo (IOF, juros, anuidade, tarifa...). */
+  charge?: boolean;
 }
 
 export interface ReconciliationDetail {

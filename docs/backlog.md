@@ -2467,7 +2467,12 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
     ou envio o arquivo, vejo os grupos e os totais, importo o que falta, uso os atalhos e marco como
     conferida; a fatura passa a mostrar o selo "conferida" (com a diferença aceita, se houver).
   - Estimativa: 5 · **Must** · Dependências: RCN-2, RCN-5
-- 🔵 **RCN-7** Encargos do cartão reconhecidos.
+- ✅ **RCN-7** Encargos do cartão reconhecidos. → `CardChargeHints` nos dois serviços.
+  - Feito assim: descrição com a palavra inteira IOF, JUROS, MULTA, MORA, ANUIDADE, TARIFA ou ENCARGO(S) é
+    encargo. Na prévia de fatura de cartão, a saída que é encargo e não tem categoria no histórico vem com
+    "Encargos do cartão" (o histórico continua valendo antes); encargo nunca é parcela de compra (nem na
+    prévia, nem na conciliação: "ANUIDADE 3/12" fica só no banco). A conciliação marca a entrada (`charge`), e
+    o painel mostra "encargo do banco"; a jornada da RCN-9 confere a marca no IOF.
   - *Dado* linhas "IOF COMPRA INTERNACIONAL", "JUROS ROTATIVO", "ANUIDADE 3/12" ou "TARIFA", *quando*
     aparecem só no banco, *então* vêm marcadas como encargo, com a categoria "Encargos do cartão" sugerida
     (e a "ANUIDADE 3/12" não é tomada por parcela de compra).
