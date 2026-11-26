@@ -129,4 +129,24 @@ public sealed class CardCycleTests
         card.Deactivate(Now);
         Assert.Equal("card.inactive", card.ChangeCycle(25, 5, D("2027-01-01"), Today, Now).Error.Code);
     }
+
+    // ---------- CYC-2: dados do cartao ----------
+
+    [Fact]
+    public void Edit_CorrectsTheData_WithTheCreationRules_AndKeepsTheCycle()
+    {
+        var card = Card();
+
+        Assert.True(card.Edit("  Nubank Black ", "Mastercard", "98-76", 8000m, Now.AddDays(1)).IsSuccess);
+
+        Assert.Equal(("Nubank Black", "Mastercard", "9876", 8000m, 10, 17, Now.AddDays(1)),
+            (card.Label, card.Brand, card.LastFourDigits, card.CreditLimit, card.ClosingDay, card.DueDay, card.UpdatedAtUtc));
+        Assert.Equal("card.last_four_invalid", card.Edit("Nubank", "Visa", "123", 8000m, Now).Error.Code);
+        Assert.Equal("card.limit_negative", card.Edit("Nubank", "Visa", "1234", -1m, Now).Error.Code);
+        Assert.Equal("card.label_required", card.Edit(" ", "Visa", "1234", 1m, Now).Error.Code);
+        Assert.Equal("Nubank Black", card.Label);
+
+        card.Deactivate(Now);
+        Assert.Equal("card.inactive", card.Edit("Outro", "Visa", "1234", 1m, Now).Error.Code);
+    }
 }

@@ -61,6 +61,21 @@ public static class CreditCardsEndpoints
                 : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        // CYC-2 (ADR-0012, decisao 7): corrigir nome, bandeira, final e limite.
+        group.MapPut("/{id:guid}", async (
+            Guid id, EditCreditCardRequest request, HttpContext http, EditCreditCardHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(
+                new EditCreditCardCommand(id, owner.Value, request.Label, request.Brand, request.LastFourDigits, request.CreditLimit), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         // CYC-3 (ADR-0012, decisoes 3, 4 e 8): troca de ciclo a partir de uma fatura, e desfazer a pendente.
         group.MapPut("/{id:guid}/cycle", async (
             Guid id, ChangeCardCycleRequest request, HttpContext http, ChangeCreditCardCycleHandler handler, CancellationToken ct) =>
@@ -120,6 +135,9 @@ public static class CreditCardsEndpoints
         DateOnly.TryParseExact((value ?? string.Empty) + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out month);
 }
+
+/// <summary>CYC-2: dados do cartao (a conta e o ciclo nao mudam aqui).</summary>
+public sealed record EditCreditCardRequest(string? Label, string? Brand, string? LastFourDigits, decimal CreditLimit);
 
 /// <summary>CYC-3: ciclo novo (dias de 1 a 28) e a fatura (mes de vencimento, <c>yyyy-MM</c>) em que comeca.</summary>
 public sealed record ChangeCardCycleRequest(int ClosingDay, int DueDay, string? FromDueMonth);

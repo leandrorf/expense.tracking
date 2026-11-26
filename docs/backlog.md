@@ -2589,7 +2589,12 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
     uma cópia no `accounts`, com os mesmos testes de exemplo. Cartão desativado não é editado (400
     `card.inactive`).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **CYC-2** Editar nome, bandeira, final e limite.
+- ✅ **CYC-2** Editar nome, bandeira, final e limite. → `PUT /credit-cards/{id}`.
+  - Feito assim: `PUT /credit-cards/{id}` (`{ label, brand, lastFourDigits, creditLimit }`) corrige os dados com as
+    regras e os códigos da criação (`card.label_required`, `card.label_too_long`, `card.last_four_invalid`,
+    `card.limit_negative`); a conta e o ciclo não mudam aqui. Cartão de outro dono = 404 `card.not_found`;
+    desativado = 400 `card.inactive`. Sem histórico do limite: o `reporting` lê o cartão a cada consulta, então o
+    disponível muda na hora. Smoke passo 24h (limite 5.000 → 8.000 sobe o disponível em 3.000; 55 passos).
   - *Dado* um cartão com limite de R$ 5.000, *quando* corrijo o nome e mudo o limite para R$ 8.000, *então*
     a lista e a fatura mostram o nome novo e o disponível sobe R$ 3.000 na hora.
   - *Dado* dados inválidos (final sem 4 dígitos, limite negativo, nome vazio), *quando* salvo, *então* recebo

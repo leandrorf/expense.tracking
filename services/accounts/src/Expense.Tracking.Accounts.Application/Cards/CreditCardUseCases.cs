@@ -72,6 +72,36 @@ internal static class CardErrors
     public static readonly Error NotFound = Error.NotFound("card.not_found", "Cartao nao encontrado.");
 }
 
+public sealed record EditCreditCardCommand(
+    Guid Id, Guid OwnerUserId, string? Label, string? Brand, string? LastFourDigits, decimal CreditLimit);
+
+/// <summary>
+/// CYC-2 (ADR-0012, decisao 7): corrige nome, bandeira, final e limite com as regras da criacao. Sem historico: o
+/// limite novo vale para o disponivel na hora (o reporting le o cartao a cada consulta).
+/// </summary>
+public sealed class EditCreditCardHandler(
+    ICreditCardRepository cards, IUnitOfWork unitOfWork, AppCalendar calendar, TimeProvider timeProvider)
+{
+    public async Task<Result<CreditCardDto>> HandleAsync(EditCreditCardCommand command, CancellationToken cancellationToken)
+    {
+        var card = await cards.GetAsync(command.Id, command.OwnerUserId, cancellationToken);
+        if (card is null)
+        {
+            return Result.Failure<CreditCardDto>(CardErrors.NotFound);
+        }
+
+        var edited = card.Edit(command.Label, command.Brand, command.LastFourDigits, command.CreditLimit, timeProvider.GetUtcNow());
+        if (edited.IsFailure)
+        {
+            return Result.Failure<CreditCardDto>(edited.Error);
+        }
+
+        cards.Update(card);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return CreditCardDto.From(card, calendar.Today(timeProvider));
+    }
+}
+
 public sealed record ChangeCreditCardCycleCommand(Guid Id, Guid OwnerUserId, int ClosingDay, int DueDay, DateOnly FromDueMonth);
 
 /// <summary>

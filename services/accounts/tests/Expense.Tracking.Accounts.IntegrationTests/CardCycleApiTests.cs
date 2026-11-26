@@ -97,4 +97,29 @@ public sealed class CardCycleApiTests(AccountsApiFactory factory) : IClassFixtur
         Assert.Equal((HttpStatusCode.NotFound, "card.not_found"),
             await ProblemOf(await ClientFor(Guid.NewGuid()).PutAsJsonAsync(url, new { closingDay = 25, dueDay = 5, fromDueMonth = Month(OpenDueMonth.AddMonths(1)) })));
     }
+
+    // ---------- CYC-2: dados do cartao ----------
+
+    [Fact]
+    public async Task Edit_CorrectsNameAndLimit_AndRefusesInvalidDataAndCardsOfOthers()
+    {
+        var (client, _, cardId) = await CardAsync();
+
+        var edited = await client.PutAsJsonAsync($"/credit-cards/{cardId}",
+            new { label = "Nubank Black", brand = "Mastercard", lastFourDigits = "9876", creditLimit = 8000 });
+
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        var card = await client.GetFromJsonAsync<JsonElement>($"/credit-cards/{cardId}");
+        Assert.Equal(("Nubank Black", "Mastercard", "9876", 8000m, 10), (card.GetProperty("label").GetString(), card.GetProperty("brand").GetString(),
+            card.GetProperty("lastFourDigits").GetString(), card.GetProperty("creditLimit").GetDecimal(), card.GetProperty("closingDay").GetInt32()));
+
+        Assert.Equal((HttpStatusCode.BadRequest, "card.last_four_invalid"), await ProblemOf(await client.PutAsJsonAsync($"/credit-cards/{cardId}",
+            new { label = "Nubank", brand = "Visa", lastFourDigits = "12", creditLimit = 8000 })));
+        Assert.Equal((HttpStatusCode.NotFound, "card.not_found"), await ProblemOf(await ClientFor(Guid.NewGuid()).PutAsJsonAsync($"/credit-cards/{cardId}",
+            new { label = "Nubank", brand = "Visa", lastFourDigits = "1234", creditLimit = 8000 })));
+
+        await client.DeleteAsync($"/credit-cards/{cardId}");
+        Assert.Equal((HttpStatusCode.BadRequest, "card.inactive"), await ProblemOf(await client.PutAsJsonAsync($"/credit-cards/{cardId}",
+            new { label = "Nubank", brand = "Visa", lastFourDigits = "1234", creditLimit = 8000 })));
+    }
 }

@@ -633,6 +633,20 @@ async function main() {
     `troca de ciclo a partir de ${cycleFrom}: PUT ${cycleRes.status} (${cycled.cycles?.length} ciclos, hoje fecha ${cycled.closingDay}); `
       + `fatura da troca fecha ${transition?.closingDate}; desfeita ${cycleUndo.status}`);
 
+  // 24h) Editar o cartao (CYC-2): limite de 5.000 para 8.000 sobe o disponivel em 3.000 na hora; volta a 5.000.
+  const availableOf = async () => ((await (await fetch(`${GATEWAY}/api/reports/cards/limits`, { headers: auth })).json())
+    .find((l) => l.cardId === card.id) ?? {}).availableLimit;
+  const availableBefore = await availableOf();
+  const editCard = (creditLimit) => fetch(`${GATEWAY}/api/credit-cards/${card.id}`, {
+    method: 'PUT', headers: auth,
+    body: JSON.stringify({ label: card.label, brand: card.brand, lastFourDigits: card.lastFourDigits, creditLimit }),
+  });
+  const editRes = await editCard(8000);
+  const availableAfter = await availableOf();
+  await editCard(5000);
+  ok(editRes.status === 200 && Math.round((availableAfter - availableBefore) * 100) / 100 === 3000,
+    `editar o cartao: PUT ${editRes.status}, disponivel ${availableBefore} -> ${availableAfter}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {
