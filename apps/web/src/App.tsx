@@ -35,6 +35,8 @@ export function App() {
   const [repeatFrom, setRepeatFrom] = useState<Transaction | null>(null);
   // NTF-3: fatura que um aviso pediu para abrir na aba Cartões.
   const [invoiceTarget, setInvoiceTarget] = useState<{ cardId: string; dueMonth: string } | null>(null);
+  // RCN-6: lançamento que a conferência da fatura mandou editar.
+  const [editTarget, setEditTarget] = useState<string | null>(null);
   // NTF-8: resultado da confirmação do e-mail dos avisos (link do e-mail).
   const [emailConfirmation, setEmailConfirmation] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -189,6 +191,8 @@ export function App() {
               setRepeatFrom(t);
               setTab('recurrences');
             }}
+            editId={editTarget}
+            onEditOpened={() => setEditTarget(null)}
           />
         )}
         {tab === 'recurrences' && (
@@ -202,7 +206,16 @@ export function App() {
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
         {tab === 'accounts' && <AccountsView />}
-        {tab === 'cards' && <CardsView openInvoice={invoiceTarget} onInvoiceOpened={() => setInvoiceTarget(null)} />}
+        {tab === 'cards' && (
+          <CardsView
+            openInvoice={invoiceTarget}
+            onInvoiceOpened={() => setInvoiceTarget(null)}
+            onEditTransaction={(id) => {
+              setEditTarget(id);
+              setTab('transactions');
+            }}
+          />
+        )}
         {tab === 'accounting' && <AccountingExportView />}
       </main>
     </div>

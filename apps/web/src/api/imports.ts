@@ -26,6 +26,8 @@ export interface ImportLine {
   recurrenceId?: string | null;
   recurrencePeriod?: string | null;
   recurrenceDescription?: string | null;
+  /** RCN-3/RCN-5: na linha duplicada, o lançamento que ela repete (inclusive a compra da parcela). */
+  duplicateOf?: string | null;
 }
 
 export interface ImportSummary {
@@ -53,6 +55,10 @@ export interface ImportBatch {
   undoneAtUtc: string | null;
   summary: ImportSummary;
   lines: ImportLine[];
+  /** RCN-3: o que a fatura do banco declara no OFX (total e período). */
+  statedTotal?: number | null;
+  statementStart?: string | null;
+  statementEnd?: string | null;
 }
 
 export interface CsvColumnMapping {

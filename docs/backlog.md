@@ -2453,7 +2453,16 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* um item só no app ou com valor diferente, *quando* uso o atalho, *então* chego à edição (ou à
     exclusão) daquele lançamento.
   - Estimativa: 3 · **Must** · Dependências: RCN-4
-- 🔵 **RCN-6** Conferir na SPA.
+- ✅ **RCN-6** Conferir na SPA. → `InvoiceReconciliationPanel`, `invoice-reconciliation.cy.ts`.
+  - Feito assim: na fatura (aba Cartões), "Conferir com o banco" abre o painel: total do banco (vem preenchido
+    com o do app, ou com o do arquivo) e a diferença enquanto digita, "Marcar como conferida" (`PUT`) e
+    "desfazer"; a fatura ganha o selo "Conferida" (com a diferença aceita, se houver). O arquivo é o OFX da
+    fatura (CSV continua pela aba Importar, sem o painel): o painel cria o lote no cartão e mostra os totais
+    (arquivo, app, diferença), o aviso de "o arquivo parece ser da fatura de …" com atalho, a parte não
+    explicada e os grupos (só no banco, só no app, valor diferente, conferidas). "Importar o que falta"
+    confirma o lote com só as linhas "só no banco" incluídas (categoria sugerida pelo histórico ou a digitada)
+    e recarrega até a projeção casá-las. "Só no app" e "valor diferente" têm "editar" (abre o lançamento em
+    edição na aba Lançamentos) e "excluir". E2E: conferir pelo total com R$ 10 de diferença, selo e desfazer.
   - *Dado* a aba Cartões, *quando* abro uma fatura e escolho "Conferir com o banco", *então* informo o total
     ou envio o arquivo, vejo os grupos e os totais, importo o que falta, uso os atalhos e marco como
     conferida; a fatura passa a mostrar o selo "conferida" (com a diferença aceita, se houver).

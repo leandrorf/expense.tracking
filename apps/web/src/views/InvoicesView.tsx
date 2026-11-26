@@ -3,6 +3,7 @@ import { ApiError } from '../api/client';
 import { invoicesApi, type CardInvoices, type Invoice, type InvoiceStatus } from '../api/reports';
 import { cardPaymentsApi } from '../api/transactions';
 import type { Account, CreditCard } from '../api/types';
+import { InvoiceReconciliationPanel } from './InvoiceReconciliationPanel';
 
 const STATUS: Record<InvoiceStatus, { label: string; tone: string }> = {
   Open: { label: 'Aberta', tone: 'open' },
@@ -42,19 +43,23 @@ interface Props {
   onBack: () => void;
   /** NTF-3: abre nesta fatura (`yyyy-MM`) em vez da atual, se ela existir. */
   initialDueMonth?: string;
+  /** RCN-6: atalho para editar um lançamento (aba Lançamentos). */
+  onEditTransaction?: (transactionId: string) => void;
 }
 
 /**
  * INV-7 (ADR-0005): faturas de um cartão. Abre na fatura atual e navega pelas anteriores e
  * próximas; registra e exclui pagamentos (INV-6), que abatem a fatura sem virar gasto.
  */
-export function InvoicesView({ card, accounts, onBack, initialDueMonth }: Props) {
+export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTransaction }: Props) {
   const [data, setData] = useState<CardInvoices | null>(null);
   const [dueMonth, setDueMonth] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [busy, setBusy] = useState(false);
+  // RCN-6: painel de conferência com a fatura do banco.
+  const [reconciling, setReconciling] = useState(false);
 
   const activeAccounts = accounts.filter((a) => a.isActive);
   const [accountId, setAccountId] = useState(card.accountId);
@@ -212,6 +217,16 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth }: Props)
             <span className={`health-badge ${STATUS[invoice.status].tone}`} data-cy="invoice-status" data-status={invoice.status}>
               {STATUS[invoice.status].label}
             </span>
+            {invoice.reconciliation && (
+              <span
+                className="health-badge paid"
+                data-cy="invoice-reconciled"
+                title={`Total do banco ${money(invoice.reconciliation.bankTotal, currency)}`}
+              >
+                Conferida
+                {invoice.reconciliation.difference !== 0 && ` (dif. ${money(invoice.reconciliation.difference, currency)})`}
+              </span>
+            )}
           </div>
 
           <div className="cards-row" data-cy="invoice-figures">
@@ -234,6 +249,28 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth }: Props)
               </span>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="ghost"
+            data-cy="invoice-reconcile"
+            aria-expanded={reconciling}
+            onClick={() => setReconciling((open) => !open)}
+          >
+            {reconciling ? 'Fechar conferência' : 'Conferir com o banco'}
+          </button>
+          {reconciling && (
+            <InvoiceReconciliationPanel
+              card={card}
+              dueMonth={invoice.dueMonth}
+              currency={currency}
+              onChanged={load}
+              onEditTransaction={onEditTransaction}
+              onShowInvoice={(month) => {
+                if (invoices.some((i) => i.dueMonth === month)) setDueMonth(month);
+              }}
+            />
+          )}
 
           {invoice.remaining > 0 && !paying && (
             <button

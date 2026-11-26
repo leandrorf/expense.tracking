@@ -65,6 +65,59 @@ export interface Invoice {
   status: InvoiceStatus;
   items: InvoiceItem[];
   payments: InvoicePayment[];
+  /** RCN-2: conferência com a fatura do banco, quando marcada. */
+  reconciliation?: InvoiceReconciliation | null;
+}
+
+/** RCN-2 (ADR-0011): conferência guardada: total do banco, total do app na hora e a diferença aceita. */
+export interface InvoiceReconciliation {
+  bankTotal: number;
+  appTotal: number;
+  difference: number;
+  reconciledAtUtc: string;
+}
+
+export type ReconciliationGroup = 'Matched' | 'DifferentAmount' | 'OnlyInBank' | 'OnlyInApp';
+
+/** RCN-4: uma entrada da conciliação: linha do banco, item do app, ou os dois (casados). */
+export interface ReconciliationEntry {
+  group: ReconciliationGroup;
+  rule: 'Key' | 'Installment' | 'AmountAndDate' | null;
+  lineId: string | null;
+  lineNumber: number | null;
+  bankDate: string | null;
+  bankAmount: number | null;
+  bankDescription: string | null;
+  transactionId: string | null;
+  appDate: string | null;
+  appAmount: number | null;
+  appDescription: string | null;
+  installment: number | null;
+  installments: number | null;
+  /** Quanto da diferença (banco − app) esta entrada explica. */
+  explains: number;
+}
+
+export interface ReconciliationDetail {
+  batchId: string;
+  /** Total do banco pelo arquivo: o declarado no OFX ou a soma das linhas. */
+  fileTotal: number;
+  statedTotal: number | null;
+  linesTotal: number;
+  difference: number;
+  suggestedDueMonth: string | null;
+  explanation: { onlyInBank: number; onlyInApp: number; differentAmount: number; unexplained: number };
+  entries: ReconciliationEntry[];
+}
+
+export interface InvoiceReconciliationView {
+  dueMonth: string;
+  /** Total da fatura do app agora. */
+  appTotal: number;
+  bankTotal: number | null;
+  difference: number | null;
+  reconciliation: InvoiceReconciliation | null;
+  detail?: ReconciliationDetail | null;
 }
 
 export interface CardInvoices {
@@ -95,6 +148,22 @@ export const invoicesApi = {
   list: (cardId: string) => apiFetch<CardInvoices>(`/api/reports/cards/${cardId}/invoices`),
 
   limits: () => apiFetch<CardLimit[]>('/api/reports/cards/limits'),
+
+  /** RCN-2/RCN-4: a fatura vista para conferir; com `batchId`, o detalhe contra o arquivo do banco. */
+  reconciliation: (cardId: string, dueMonth: string, batchId?: string) =>
+    apiFetch<InvoiceReconciliationView>(
+      `/api/reports/cards/${cardId}/invoices/${dueMonth}/reconciliation${batchId ? `?batchId=${batchId}` : ''}`,
+    ),
+
+  /** RCN-2: marca (ou substitui) a conferência com o total da fatura do banco. */
+  reconcile: (cardId: string, dueMonth: string, bankTotal: number) =>
+    apiFetch<InvoiceReconciliationView>(`/api/reports/cards/${cardId}/invoices/${dueMonth}/reconciliation`, {
+      method: 'PUT',
+      body: JSON.stringify({ bankTotal }),
+    }),
+
+  undoReconciliation: (cardId: string, dueMonth: string) =>
+    apiFetch<void>(`/api/reports/cards/${cardId}/invoices/${dueMonth}/reconciliation`, { method: 'DELETE' }),
 };
 
 /** INV-8: fluxo de um mês num escopo. `result` = entradas − saídas − faturas (total). */
