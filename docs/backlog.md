@@ -2416,7 +2416,20 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* uma linha do arquivo que repete um lançamento já importado, *quando* vejo a prévia, *então* a
     linha duplicada informa qual lançamento ela repete.
   - Estimativa: 3 · **Must** · Dependências: RCN-1
-- 🔵 **RCN-4** Conciliação linha a linha.
+- ✅ **RCN-4** Conciliação linha a linha. → `GET .../reconciliation?batchId=`, `InvoiceMatcher`.
+  - Feito assim: com `batchId`, o `reporting` lê o lote em `GET /imports/{id}` do `transactions` (a rota é
+    `/imports`, não `/transactions/imports` como a ADR escreveu; no gateway, `/api/imports`) repassando o token
+    do usuário (`TransactionsImportBatchReader`); lote de outro dono = 404 `reconciliation.batch_not_found`,
+    extrato de conta ou fatura de outro cartão = 400 `reconciliation.batch_card_mismatch`. Entram as linhas
+    válidas; crédito com cara de pagamento ("PAGAMENTO", "PAGTO", "PGTO") fica fora, e os outros créditos
+    entram como estorno (valor negativo, casando com o estorno lançado no app). O `InvoiceMatcher` (função
+    pura) casa na ordem da ADR: chave (`duplicateOf` ou o lançamento que a linha criou); parcela "n/m"
+    ("PARCELA 03/10", "PARC 3/10", "PARC.03/12", "3 DE 10"; n ≤ m, m ≥ 2) com o mesmo valor ou, com valor
+    diferente, só com descrição parecida; mesmo valor e até 3 dias, o mais perto primeiro. O resultado
+    (`detail`) traz o total do arquivo (`statedTotal` ou a soma das linhas), a diferença para o app, a fatura
+    sugerida (pelo `statementEnd`; sem ele, a que recebe mais compras que não são parcela), as entradas com
+    grupo, regra, linha e item, e quanto cada grupo explica (com o `unexplained`, quando o total declarado
+    difere da soma das linhas). Smoke: passo 24d confere a linha casada pela chave no Docker (52 passos).
   - *Dado* o arquivo da fatura de dezembro com 20 linhas e a fatura do app com 19 itens, *quando* concilio,
     *então* cada linha e cada item caem num grupo (conferido, valor diferente, só no banco, só no app), pela
     ordem de casamento da decisão 3, com os totais e a diferença explicada por grupo.

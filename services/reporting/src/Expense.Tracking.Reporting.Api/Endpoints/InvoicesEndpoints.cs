@@ -39,8 +39,9 @@ public static class InvoicesEndpoints
 
         // RCN-2 (ADR-0011, decisoes 7 e 8): conferir a fatura com a do banco pelo total.
         var reconciliation = app.MapGroup("/reports/cards/{id:guid}/invoices/{dueMonth}/reconciliation").WithTags("Reports");
+        // RCN-4: com batchId, o detalhe linha a linha contra a fatura do banco importada.
         reconciliation.MapGet("/", async (
-            Guid id, string dueMonth, ClaimsPrincipal user, InvoiceReconciliationHandler handler, CancellationToken ct) =>
+            Guid id, string dueMonth, Guid? batchId, ClaimsPrincipal user, InvoiceReconciliationHandler handler, CancellationToken ct) =>
         {
             if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
             {
@@ -52,7 +53,7 @@ public static class InvoicesEndpoints
                 return HttpResults.Problem(InvalidMonth);
             }
 
-            var result = await handler.GetAsync(ownerUserId, id, month.Value, ct);
+            var result = await handler.GetAsync(ownerUserId, id, month.Value, ct, batchId);
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 

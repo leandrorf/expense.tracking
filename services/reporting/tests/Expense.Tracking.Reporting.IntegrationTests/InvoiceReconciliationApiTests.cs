@@ -84,4 +84,81 @@ public sealed class InvoiceReconciliationApiTests(InvoicesApiFactory factory) : 
         Assert.Equal(0m, (await client.GetFromJsonAsync<JsonElement>($"/reports/cards/{cardId}/invoices/2027-05/reconciliation"))
             .GetProperty("appTotal").GetDecimal());
     }
+
+    // ---------- RCN-4 (ADR-0011, decisoes 1 a 6): com o arquivo ----------
+
+    private static Expense.Tracking.Reporting.Application.Invoices.ImportLineSnapshot BankLine(
+        int number, string date, decimal amount, string description, string type = "Expense", Guid? duplicateOf = null,
+        string status = "New") =>
+        new(Guid.NewGuid(), number, status, DateOnly.Parse(date, System.Globalization.CultureInfo.InvariantCulture), type, amount,
+            description, null, duplicateOf);
+
+    [Fact]
+    public async Task Reconcile_WithTheBankFile_GroupsEveryLineAndItem_AndExplainsTheDifference()
+    {
+        // Fatura 2026-12 do app: notebook 3x de 1000 (parcela 1), mercado 180 (lancado a mao), padaria 25 (a mais).
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17);
+        var (notebook, market, bakery) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        _factory.EventFeed.CardPurchase(notebook, owner, card.Id, 3000m, "2026-11-12", installments: 3, description: "Notebook Loja");
+        _factory.EventFeed.CardPurchase(market, owner, card.Id, 180m, "2026-11-20", description: "Mercado");
+        _factory.EventFeed.CardPurchase(bakery, owner, card.Id, 25m, "2026-11-21", description: "Padaria");
+        await _factory.DrainFeedAsync();
+
+        // Fatura do banco: parcela, mercado (2 dias depois), uma compra que faltou, IOF, o pagamento anterior.
+        var batch = _factory.ImportBatches.Add(owner, new(Guid.NewGuid(), "CreditCard", card.Id, 1219.40m, null, new DateOnly(2026, 12, 10),
+        [
+            BankLine(1, "2026-11-12", 1000m, "LOJA NOTEBOOK PARCELA 01/03"),
+            BankLine(2, "2026-11-22", 180m, "SUPERMERCADO BOM PRECO"),
+            BankLine(3, "2026-11-25", 39.40m, "FARMACIA"),
+            BankLine(4, "2026-11-26", 0.98m, "IOF COMPRA INTERNACIONAL"),
+            BankLine(5, "2026-11-18", 900m, "PAGAMENTO RECEBIDO", type: "Income", status: "ExcludedByDefault"),
+            BankLine(6, "2026-11-30", 0m, "LINHA INVALIDA", status: "Invalid"),
+        ]));
+
+        var body = await ClientFor(owner).GetFromJsonAsync<JsonElement>(
+            $"/reports/cards/{card.Id}/invoices/2026-12/reconciliation?batchId={batch.Id}");
+
+        Assert.Equal(1205m, body.GetProperty("appTotal").GetDecimal());
+        var detail = body.GetProperty("detail");
+        Assert.Equal((1219.40m, 1220.38m, 14.40m, "2026-12"), (detail.GetProperty("fileTotal").GetDecimal(),
+            detail.GetProperty("linesTotal").GetDecimal(), detail.GetProperty("difference").GetDecimal(),
+            detail.GetProperty("suggestedDueMonth").GetString()));
+        var groups = detail.GetProperty("entries").EnumerateArray()
+            .Select(e => (e.GetProperty("group").GetString(), e.GetProperty("lineNumber").ValueKind == JsonValueKind.Number ? e.GetProperty("lineNumber").GetInt32() : 0,
+                e.GetProperty("transactionId").ValueKind == JsonValueKind.String ? e.GetProperty("transactionId").GetGuid() : Guid.Empty))
+            .ToList();
+        Assert.Equal(
+        [
+            ("Matched", 1, notebook), ("Matched", 2, market),
+            ("OnlyInBank", 3, Guid.Empty), ("OnlyInBank", 4, Guid.Empty),
+            ("OnlyInApp", 0, bakery),
+        ], groups);
+        var explanation = detail.GetProperty("explanation");
+        // 40,38 so no banco - 25 so no app = 15,38; o banco declara 0,98 a menos que a soma das linhas.
+        Assert.Equal((40.38m, -25m, 0m, -0.98m), (explanation.GetProperty("onlyInBank").GetDecimal(),
+            explanation.GetProperty("onlyInApp").GetDecimal(), explanation.GetProperty("differentAmount").GetDecimal(),
+            explanation.GetProperty("unexplained").GetDecimal()));
+    }
+
+    [Fact]
+    public async Task Reconcile_WithABatchOfAnotherCardOrUser_IsRefused()
+    {
+        var (client, cardId) = await CardWithDecemberInvoiceAsync();
+        var owner = Guid.Parse(client.DefaultRequestHeaders.GetValues(TestAuthHandler.SubHeader).Single());
+        var otherCard = _factory.ImportBatches.Add(owner, new(Guid.NewGuid(), "CreditCard", Guid.NewGuid(), null, null, null, []));
+        var bankStatement = _factory.ImportBatches.Add(owner, new(Guid.NewGuid(), "BankAccount", null, null, null, null, []));
+        var ofAnother = _factory.ImportBatches.Add(Guid.NewGuid(), new(Guid.NewGuid(), "CreditCard", cardId, null, null, null, []));
+        var url = $"/reports/cards/{cardId}/invoices/2026-12/reconciliation?batchId=";
+
+        async Task<(HttpStatusCode, string?)> ProblemOf(Guid batchId)
+        {
+            var r = await client.GetAsync(url + batchId);
+            return (r.StatusCode, (await Json(r)).GetProperty("title").GetString());
+        }
+
+        Assert.Equal((HttpStatusCode.BadRequest, "reconciliation.batch_card_mismatch"), await ProblemOf(otherCard.Id));
+        Assert.Equal((HttpStatusCode.BadRequest, "reconciliation.batch_card_mismatch"), await ProblemOf(bankStatement.Id));
+        Assert.Equal((HttpStatusCode.NotFound, "reconciliation.batch_not_found"), await ProblemOf(ofAnother.Id));
+    }
 }

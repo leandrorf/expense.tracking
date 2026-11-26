@@ -106,6 +106,10 @@ public static class DependencyInjection
             client.BaseAddress = ToBaseUri(transactionsBaseUrl))
             .AddHttpMessageHandler<ServiceTokenHandler>();
 
+        // RCN-4 (ADR-0011, decisao 1): o lote de importacao lido no transactions com o token do usuario.
+        services.AddHttpClient<IImportBatchReader, TransactionsImportBatchReader>(client =>
+            client.BaseAddress = ToBaseUri(transactionsBaseUrl));
+
         // INV-4 (ADR-0005, decisao 3): ciclo do cartao lido no accounts com o token do usuario.
         var accountsBaseUrl = configuration["Services:AccountsBaseUrl"] ?? "http://localhost:5090";
         services.AddHttpClient<ICardDirectory, AccountsCardDirectory>(client =>

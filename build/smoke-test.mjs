@@ -563,6 +563,18 @@ async function main() {
   ok(ccRes.status === 201 && ccBatch.statedTotal === 61.1 && ccBatch.statementEnd === isoDay(new Date())
     && ccLaunched && ccDuplicateOf === ccLaunched,
     `fatura OFX: total declarado ${ccBatch.statedTotal}, fim ${ccBatch.statementEnd}; reimportada aponta o lancamento (${ccDuplicateOf === ccLaunched})`);
+  // RCN-4: a conciliacao com o arquivo le o lote no transactions (token do usuario) e casa a linha pela chave.
+  const ccMonth = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json()).currentDueMonth;
+  let ccRecon = {};
+  for (let i = 0; i < 30; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices/${ccMonth}/reconciliation?batchId=${ccAgain.id}`, { headers: auth });
+    ccRecon = res.status === 200 ? await res.json() : { status: res.status };
+    if (ccRecon.detail?.entries?.some((e) => e.group === 'Matched' && e.transactionId === ccLaunched)) break;
+  }
+  const ccMatched = ccRecon.detail?.entries?.find((e) => e.transactionId === ccLaunched);
+  ok(ccMatched?.group === 'Matched' && ccMatched?.rule === 'Key' && ccRecon.detail?.fileTotal === 61.1,
+    `conciliacao com o arquivo (${ccMonth}): linha ${ccMatched?.group}/${ccMatched?.rule}, total do arquivo ${ccRecon.detail?.fileTotal}`);
   if (ccBatch.id) await fetch(`${GATEWAY}/api/imports/${ccBatch.id}/undo`, { method: 'POST', headers: auth });
 
   // 24e) Conferir a fatura pelo total do banco (RCN-2): guarda a diferenca aceita, aparece na fatura e se desfaz.
