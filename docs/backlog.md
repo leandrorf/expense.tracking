@@ -2285,7 +2285,7 @@ ainda não veio. Could = RJT-9 (2 pts). Total: 34 pts.
 **Ordem sugerida:** RJT-1 → RJT-2 → RJT-3 (com o `reporting` implantado antes do `transactions` que publica
 o `RecurrenceSaved` v2) → RJT-4 → RJT-5 → RJT-10 (fecha o Must) → RJT-6 → RJT-7 → RJT-8 → RJT-9.
 
-## 🔵 EPIC RCN — Conciliação da fatura do cartão  · *To Do*
+## 🟡 EPIC RCN — Conciliação da fatura do cartão  · *In Progress*
 **Problema:** a fatura do cartão é calculada pelo app a partir do que foi lançado (INV): compras,
 parcelas, estornos e pagamentos, no ciclo do cartão. A fatura do banco quase nunca bate de primeira:
 falta uma compra que ninguém lançou, uma compra foi lançada duas vezes ou caiu no ciclo errado, aparece
@@ -2330,7 +2330,7 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   `accounts` por HTTP com o token do usuário; o `transactions` chama o `accounts`. Nenhum serviço chama o
   `reporting`.
 
-**Decisões em aberto (a RCN-1 registra a ADR-0011; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0011](adr/0011-conciliacao-da-fatura-do-cartao.md), RCN-1; ficou a recomendação de cada uma, com os refinamentos da RCN-1):**
 1. **Onde a conciliação é calculada.** Opções: (a) no **`reporting`**, dono da fatura calculada, lendo as
    linhas do lote no `transactions` por HTTP com o token do usuário (mesma direção da dependência de hoje,
    via feed); (b) no `transactions`, dono do arquivo, recalculando a fatura (duplicaria ciclo, parcelas e
@@ -2373,10 +2373,20 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
    rotas cabem em `/api/reports/**` e `/api/transactions/**`) nem no `identity` (o `reporting` usa o token
    do próprio usuário para ler o lote).
 
-- 🔵 **RCN-1** ADR: conciliação da fatura do cartão.
+- ✅ **RCN-1** ADR: conciliação da fatura do cartão. → [ADR-0011](adr/0011-conciliacao-da-fatura-do-cartao.md), Aceita.
   - *Dado* as decisões em aberto 1 a 8 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0011 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado) e o PO ajusta as
     histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: o `reporting` lê o lote em
+    `GET /transactions/imports/{id}` repassando o token do usuário (os três serviços aceitam o mesmo token)
+    pelo `Services:TransactionsBaseUrl` que já existe; lote de outro dono = 404
+    `reconciliation.batch_not_found`, de outro cartão = 400 `reconciliation.batch_card_mismatch`. Com OFX,
+    a tela vem com o `LEDGERBAL` como total do banco; sem ele, a soma das linhas sem os pagamentos.
+    Parcela casa sem olhar a data da linha (desempate pela descrição e pela data da compra); "descrição
+    parecida" = mais palavras em comum depois de normalizar. Estornos lançados entram na comparação; os
+    créditos fora por padrão, não. Linha "n/m" sem compra no app entra como compra de 1 parcela; "ANUIDADE
+    3/12" é encargo. Campos novos no lote: `statedTotal`, `statementStart`, `statementEnd` e, na linha
+    duplicada, `duplicateOf`. `GET /reports/cards/{id}/invoices` passa a trazer a conferência.
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **RCN-2** Conferir pelo total do banco.
   - *Dado* a fatura de dezembro calculada em R$ 3.180,00, *quando* informo que a do banco é R$ 3.214,50,
