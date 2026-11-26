@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Expense.Tracking.Reporting.Application.Abstractions;
+using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Infrastructure.Clients;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,32 @@ public sealed class InvoicesApiTests(InvoicesApiFactory factory) : IClassFixture
     }
 
     private static List<JsonElement> InvoicesOf(JsonElement body) => body.GetProperty("invoices").EnumerateArray().ToList();
+
+    [Fact]
+    public async Task Invoices_FollowTheCycleOfEachPeriod_AfterACycleChange()
+    {
+        // CYC-4: fecha 10/vence 17 ate a fatura de 2027-01; a partir de 2027-02, fecha 25 e vence 5 do mes seguinte.
+        // A fatura da troca (2027-02) vai de 11/01 (dia seguinte ao fechamento antigo de janeiro) a 25/01, e vence 05/02.
+        var owner = Guid.NewGuid();
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17,
+            cycles: [new CardCycleInfo(null, 10, 17), new CardCycleInfo("2027-02", 25, 5)]);
+        var feed = _factory.EventFeed;
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 100m, "2026-12-05", description: "Antes do fechamento");
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 40m, "2026-12-20", description: "Ultima fatura do ciclo antigo");
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 60m, "2027-01-20", description: "Na fatura da troca");
+        feed.InvoicePaid(Guid.NewGuid(), owner, card.Id, "2026-12", 100m);
+        await _factory.DrainFeedAsync();
+
+        var invoices = InvoicesOf(await ClientFor(owner).GetFromJsonAsync<JsonElement>($"/reports/cards/{card.Id}/invoices?from=2026-12"));
+
+        Assert.Equal(
+            [("2026-12", "2026-11-11", "2026-12-10", "2026-12-17", 100m, 100m),
+             ("2027-01", "2026-12-11", "2027-01-10", "2027-01-17", 40m, 0m),
+             ("2027-02", "2027-01-11", "2027-01-25", "2027-02-05", 60m, 0m)],
+            invoices.Take(3).Select(i => (i.GetProperty("dueMonth").GetString(), i.GetProperty("startDate").GetString(),
+                i.GetProperty("closingDate").GetString(), i.GetProperty("dueDate").GetString(), i.GetProperty("total").GetDecimal(),
+                i.GetProperty("paid").GetDecimal())));
+    }
 
     [Fact]
     public async Task Invoices_GroupPurchasesByCycle_WithInstallmentsRefundsAndStatus()

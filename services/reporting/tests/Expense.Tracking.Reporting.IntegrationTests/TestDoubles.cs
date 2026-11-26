@@ -41,9 +41,12 @@ public sealed class CardRegistry
     private readonly ConcurrentDictionary<Guid, (Guid Owner, CardInfo Card, string Scope)> _cards = new();
     private readonly ConcurrentDictionary<Guid, (Guid Owner, AccountInfo Account)> _accounts = new();
 
-    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m, string scope = "Personal", Guid? accountId = null)
+    /// <param name="cycles">CYC-4: historico de ciclos (o primeiro com <c>FromDueMonth</c> nulo), como o accounts devolve.</param>
+    public CardInfo Add(Guid owner, int closingDay, int dueDay, decimal limit = 5000m, string scope = "Personal", Guid? accountId = null,
+        IReadOnlyList<CardCycleInfo>? cycles = null)
     {
-        var card = new CardInfo(Guid.NewGuid(), accountId ?? Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true);
+        var card = new CardInfo(Guid.NewGuid(), accountId ?? Guid.NewGuid(), "Cartao teste", "4242", limit, closingDay, dueDay, IsActive: true,
+            cycles);
         _cards[card.Id] = (owner, card, scope);
         return card;
     }

@@ -26,7 +26,7 @@ public static class CardInvoiceSource
         var charges = await projection.GetCardTransactionsAsync(ownerUserId, card.Id, cancellationToken);
         var payments = await projection.GetCardPaymentsAsync(ownerUserId, card.Id, cancellationToken);
         var invoices = InvoiceCalculator.Calculate(
-            new CardCycle(card.ClosingDay, card.DueDay),
+            card.Schedule(),
             GetCardInvoicesHandler.ChargesOf(charges),
             payments.Select(p => new InvoicePayment(p.InvoiceDueMonth, p.Amount)),
             today);

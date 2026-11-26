@@ -4,9 +4,26 @@ using Expense.Tracking.Reporting.Domain.Invoices;
 
 namespace Expense.Tracking.Reporting.Application.Invoices;
 
-/// <summary>Cartao como o accounts o devolve ao dono (so o que a fatura usa).</summary>
+/// <summary>CYC-4 (ADR-0012, decisao 5): um ciclo do cartao como o accounts o devolve (<c>fromDueMonth</c> nulo = desde sempre).</summary>
+public sealed record CardCycleInfo(string? FromDueMonth, int ClosingDay, int DueDay);
+
+/// <summary>
+/// Cartao como o accounts o devolve ao dono (so o que a fatura usa). <see cref="ClosingDay"/>/<see cref="DueDay"/> sao o
+/// ciclo de hoje; <see cref="Cycles"/> (CYC-4), o historico (sem ele, o ciclo de hoje vale desde sempre).
+/// </summary>
 public sealed record CardInfo(
-    Guid Id, Guid AccountId, string Label, string LastFourDigits, decimal CreditLimit, int ClosingDay, int DueDay, bool IsActive);
+    Guid Id, Guid AccountId, string Label, string LastFourDigits, decimal CreditLimit, int ClosingDay, int DueDay, bool IsActive,
+    IReadOnlyList<CardCycleInfo>? Cycles = null)
+{
+    /// <summary>CYC-4: os ciclos do cartao com vigencia.</summary>
+    public CardCycleSchedule Schedule() => Cycles is { Count: > 0 } cycles && cycles.Any(c => c.FromDueMonth is null)
+        ? new CardCycleSchedule(cycles.Select(c => new CardCycleTerm(
+            c.FromDueMonth is null
+                ? null
+                : DateOnly.ParseExact(c.FromDueMonth + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            c.ClosingDay, c.DueDay)))
+        : CardCycleSchedule.Single(ClosingDay, DueDay);
+}
 
 /// <summary>INV-8: cartao do usuario com o escopo PF/PJ da conta dele (nulo se a conta nao veio).</summary>
 public sealed record ScopedCard(CardInfo Card, string? Scope);
@@ -84,7 +101,7 @@ public sealed class GetCardInvoicesHandler(
             return Result.Failure<CardInvoicesDto>(CardNotFound);
         }
 
-        var cycle = new CardCycle(card.ClosingDay, card.DueDay);
+        var cycle = card.Schedule();
         var today = CardInvoiceSource.Today(timeProvider, options);
         var current = cycle.DueMonthOf(today);
 

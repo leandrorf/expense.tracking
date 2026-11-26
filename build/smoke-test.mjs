@@ -615,11 +615,23 @@ async function main() {
     method: 'PUT', headers: auth, body: JSON.stringify({ closingDay: 25, dueDay: 5, fromDueMonth: cycleFrom }),
   });
   const cycled = cycleRes.status === 200 ? await cycleRes.json() : {};
+  // CYC-4: uma compra em 3x hoje tem a 3a parcela na fatura da troca, que fecha no dia 25 do mes anterior.
+  const cycleParcel = await (await installmentPurchase('CreditCard', card.id, 3)).json().catch(() => ({}));
+  const [fy, fm] = cycleFrom.split('-').map(Number);
+  const expectedClosing = `${fm === 1 ? fy - 1 : fy}-${String(fm === 1 ? 12 : fm - 1).padStart(2, '0')}-25`;
+  let transition;
+  for (let i = 0; i < 30 && transition?.closingDate !== expectedClosing; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    transition = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json())
+      .invoices?.find((inv) => inv.dueMonth === cycleFrom);
+  }
+  if (cycleParcel.id) await fetch(`${GATEWAY}/api/transactions/${cycleParcel.id}`, { method: 'DELETE', headers: auth });
   const cycleUndo = await fetch(`${GATEWAY}/api/credit-cards/${card.id}/cycle/${cycleFrom}`, { method: 'DELETE', headers: auth });
   const uncycled = cycleUndo.status === 200 ? await cycleUndo.json() : {};
   ok(cycleRes.status === 200 && cycled.cycles?.length === 2 && cycled.cycles?.[1]?.fromDueMonth === cycleFrom
-    && cycled.closingDay === 10 && uncycled.cycles?.length === 1,
-    `troca de ciclo a partir de ${cycleFrom}: PUT ${cycleRes.status} (${cycled.cycles?.length} ciclos, hoje fecha ${cycled.closingDay}); desfeita ${cycleUndo.status}`);
+    && cycled.closingDay === 10 && transition?.closingDate === expectedClosing && uncycled.cycles?.length === 1,
+    `troca de ciclo a partir de ${cycleFrom}: PUT ${cycleRes.status} (${cycled.cycles?.length} ciclos, hoje fecha ${cycled.closingDay}); `
+      + `fatura da troca fecha ${transition?.closingDate}; desfeita ${cycleUndo.status}`);
 
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));

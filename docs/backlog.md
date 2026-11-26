@@ -2614,7 +2614,15 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
   - *Dado* uma fatura já fechada, *quando* tento mudar o ciclo a partir dela, *então* recebo 400; *e* mudar
     de novo antes de valer substitui a mudança pendente, que também pode ser desfeita.
   - Estimativa: 3 · **Must** · Dependências: CYC-1
-- 🔵 **CYC-4** Faturas pelo ciclo de cada período.
+- ✅ **CYC-4** Faturas pelo ciclo de cada período. → `CardCycleSchedule` no `reporting`.
+  - Feito assim: o `CardInfo` lido do `accounts` traz `cycles` (sem eles, o ciclo de hoje vale desde sempre) e
+    `CardInfo.Schedule()` monta a sequência de ciclos, com a mesma regra e os mesmos exemplos de teste do
+    `accounts`. O `InvoiceCalculator` usa o ciclo de cada período: compra na fatura que existe e cujo período
+    contém a data, e cada parcela na fatura seguinte que existe (pula o mês de vencimento que some). Faturas,
+    limite, avisos (pelas faturas carregadas, também no resumo por e-mail), previsão (compras e recorrências no
+    cartão) e a fatura sugerida na conciliação passam a usar a sequência. Pagamentos e conferências continuam
+    no mês de vencimento deles. Smoke passo 24g: uma compra em 3x tem a 3ª parcela na fatura da troca, que fecha
+    no dia 25 do ciclo novo.
   - *Dado* compras antes e depois da troca, *quando* consulto as faturas, *então* as fechadas continuam
     iguais (itens, total, pagamento, conferência), a da troca vai do dia seguinte ao último fechamento
     antigo até o primeiro fechamento novo, e as seguintes seguem o ciclo novo.
