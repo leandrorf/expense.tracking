@@ -2635,7 +2635,16 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
     de vencimento (no app e no resumo por e-mail) e a fatura sugerida na conciliação, *então* todos usam o
     ciclo de cada período.
   - Estimativa: 5 · **Must** · Dependências: CYC-3
-- 🔵 **CYC-5** Editar o cartão e o ciclo na SPA.
+- ✅ **CYC-5** Editar o cartão e o ciclo na SPA. → `CardEditRow`, `card-edit.cy.ts`.
+  - Feito assim: "editar" no cartão (aba Cartões) abre uma linha com os dados (nome, bandeira, final, limite) e a
+    troca de ciclo (fecha dia, vence dia, a partir da fatura de). A fatura sugerida é a primeira possível e
+    acompanha os dias digitados até o usuário escolher o mês (o E2E pegou a sugestão presa ao ciclo antigo). A
+    prévia mostra o período e o vencimento da fatura da troca, avisa quando uma fatura deixa de existir (o
+    vencimento pula) e quando a troca pendente será substituída; com a fatura já fechada, a prévia diz isso e o
+    botão fica desligado. A prévia usa uma terceira cópia da regra, em TypeScript (`cardCycle.ts`), só
+    informativa: quem valida é o `accounts`. A troca pendente aparece na coluna Fecha/Vence ("a partir de
+    03/2027: 25/5") e na edição, com "desfazer". E2E: corrige nome e limite, recusa a fatura do mês passado,
+    troca a partir da sugerida e desfaz.
   - *Dado* a aba Cartões, *quando* edito um cartão, *então* corrijo nome, bandeira, final e limite; *e* ao
     mudar o fechamento e o vencimento escolho a partir de qual fatura vale e vejo a fatura da troca ("a
     fatura de março vai de 26/01 a 25/02 e vence 05/03") antes de confirmar.
