@@ -2511,6 +2511,122 @@ reconhecidos e o selo de alterada depois da conferência. Total: 28 pts.
 
 **Ordem sugerida:** RCN-1 → RCN-3 → RCN-2 → RCN-4 → RCN-5 → RCN-6 → RCN-9 (fecha o Must) → RCN-7 → RCN-8.
 
+## 🔵 EPIC CYC — Editar o cartão e o ciclo da fatura  · *To Do*
+**Problema:** o cartão não tem edição nenhuma: nome, final, limite e ciclo (dia de fechamento e de
+vencimento) são definidos ao criar, e para mudar qualquer um o usuário precisa criar outro cartão. O
+outro cartão não traz as compras, as parcelas, os pagamentos nem as conferências do antigo, e a fatura
+fica partida em dois. Mudar o vencimento é comum: o banco oferece a troca, o usuário alinha com o dia do
+salário, e o limite sobe ou desce algumas vezes por ano.
+**Objetivo (outcome):** o usuário corrige o nome, o final e o limite do cartão, e muda o fechamento e o
+vencimento a partir de uma fatura, sem mexer nas faturas que já fecharam. As faturas antigas continuam
+com as compras, os pagamentos e as conferências de sempre; a fatura da troca mostra o período maior ou
+menor que o banco cobra; previsão, avisos, limite e conciliação passam a usar o ciclo novo dali em diante.
+**Métricas de sucesso:** (1) depois de mudar o ciclo, nenhuma fatura já fechada muda de total, de itens,
+de pagamento ou de conferência; (2) a fatura da troca vai do dia seguinte ao último fechamento antigo até
+o primeiro fechamento novo, sem dia de compra sem fatura nem em duas; (3) mudar o limite muda o
+disponível na hora; (4) a jornada "mudar o vencimento e conferir as faturas" passa no E2E do CI.
+**Rastreabilidade:** `docs/PROMPT.md` → controle do cartão de crédito; Won't do épico INV ("editar o
+ciclo do cartão (continua sendo criar outro cartão)"); ADR-0005, decisão 3 ("se o cartão ganhar edição do
+ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido do dono do produto
+(2026-11-26).
+
+**Achados no código que moldam o épico:**
+- **O cartão só é criado e desativado.** O `accounts` tem `POST /credit-cards` e `DELETE` (desativa); não
+  há `PUT`. Nome, bandeira, final, limite, fechamento e vencimento são fixos.
+- **A fatura é recalculada a cada consulta com o ciclo de hoje.** O `reporting` lê o cartão no `accounts`
+  na hora (ADR-0005, decisão 3) e o `InvoiceCalculator` monta todas as faturas com um `CardCycle` só.
+  Trocar o ciclo sem histórico reposicionaria todas as compras do passado: faturas pagas perderiam itens,
+  faturas vencidas ganhariam outros.
+- **Pagamentos, conferências e avisos são guardados pelo mês de vencimento** (`card_payments`,
+  `invoice_reconciliations`, chave `invoice:{cartão}:{mês}` do NTF). Se a fatura de um mês muda de
+  período, o pagamento e a conferência continuam no mesmo mês: o histórico precisa manter os períodos.
+- **Quem usa o ciclo:** no `reporting`, faturas, limite disponível, previsão (compras e recorrências no
+  cartão), avisos de vencimento (pelo token do usuário e pelo endpoint interno do resumo por e-mail) e a
+  fatura sugerida na conciliação (RCN); no `transactions`, o mês de vencimento sugerido para o pagamento de
+  fatura importado (só o dia de vencimento); na SPA, a mesma sugestão na tela de importação.
+- **O `accounts` não publica eventos.** O ciclo chega a quem precisa pela leitura na hora; não há projeção
+  para atualizar.
+
+**Decisões em aberto (a CYC-1 registra a ADR-0012; recomendação do PO em cada uma):**
+1. **Como guardar a mudança de ciclo.** Opções: (a) **ciclo com vigência**: o cartão guarda uma lista de
+   ciclos, cada um valendo a partir de um mês de vencimento; (b) trocar o ciclo e recalcular tudo
+   (simples, mas reescreve o passado); (c) guardar as faturas fechadas (cópia dos períodos e dos totais) e
+   calcular só as abertas. *Recomendação: (a)*, no mesmo padrão do limite dos orçamentos e do valor das
+   recorrências. O primeiro ciclo vale desde sempre; o cartão continua expondo `closingDay`/`dueDay` (o
+   ciclo de hoje) para quem só precisa dele.
+2. **A partir de quando vale.** *Recomendação:* a partir de uma fatura (mês de vencimento) **ainda aberta**
+   ou futura: a atual, se o fechamento novo dela ainda não passou, ou a seguinte. Fatura fechada nunca
+   muda (400). Mudar de novo antes de valer substitui a mudança pendente.
+3. **A fatura da troca.** *Recomendação:* os períodos continuam encadeados: a fatura que inaugura o ciclo
+   novo começa no dia seguinte ao último fechamento do ciclo antigo e termina no primeiro fechamento do
+   novo. Ela pode ficar mais curta ou mais longa que um mês; se o fechamento novo cair antes do último
+   fechamento antigo (período vazio ou negativo), a troca é recusada para aquela fatura e o app sugere a
+   seguinte. Uma compra sempre cai numa fatura só.
+4. **Onde mora e como chega.** *Recomendação:* o histórico mora no `accounts` (tabela `card_cycles`) e
+   vem junto do cartão (`cycles: [{ fromDueMonth, closingDay, dueDay }]`) nas rotas que o `reporting` já
+   chama, com o token do usuário e no endpoint interno do resumo. Mantém a ADR-0005, decisão 3 (leitura na
+   hora, sem evento nem projeção), e substitui a regra 4 dela pela do ciclo de cada período.
+5. **Os outros campos.** *Recomendação:* `PUT /credit-cards/{id}` corrige nome, bandeira, final e
+   limite, sem histórico (o limite novo vale para o disponível na hora). A conta do cartão não muda.
+6. **Rotas.** *Recomendação:* `PUT /credit-cards/{id}` (dados) e `PUT /credit-cards/{id}/cycle`
+   (`{ closingDay, dueDay, fromDueMonth }`), mais `DELETE /credit-cards/{id}/cycle/{fromDueMonth}` para
+   desfazer uma troca que ainda não valeu. Nada novo no gateway (`/api/credit-cards/**` já passa) nem no
+   `identity`.
+
+- 🔵 **CYC-1** ADR: editar o cartão e o ciclo da fatura.
+  - *Dado* as decisões em aberto 1 a 6 deste épico, *quando* o dono do produto revisa as opções, *então* a
+    ADR-0012 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), reabrindo a ADR-0005
+    (decisão 3 e regra 4), e o PO ajusta as histórias seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **CYC-2** Editar nome, bandeira, final e limite.
+  - *Dado* um cartão com limite de R$ 5.000, *quando* corrijo o nome e mudo o limite para R$ 8.000, *então*
+    a lista e a fatura mostram o nome novo e o disponível sobe R$ 3.000 na hora.
+  - *Dado* dados inválidos (final sem 4 dígitos, limite negativo, nome vazio), *quando* salvo, *então* recebo
+    400 com as mesmas regras da criação.
+  - Estimativa: 3 · **Should** · Dependências: —
+- 🔵 **CYC-3** Ciclo com vigência no `accounts`.
+  - *Dado* um cartão que fecha dia 10 e vence dia 17, *quando* mudo para fechar dia 25 e vencer dia 5 a
+    partir da fatura de março, *então* o cartão guarda os dois ciclos (o antigo desde sempre, o novo desde
+    março) e o `GET` devolve `cycles` e o ciclo de hoje em `closingDay`/`dueDay`.
+  - *Dado* uma fatura já fechada, *quando* tento mudar o ciclo a partir dela, *então* recebo 400; *e* mudar
+    de novo antes de valer substitui a mudança pendente, que também pode ser desfeita.
+  - Estimativa: 3 · **Must** · Dependências: CYC-1
+- 🔵 **CYC-4** Faturas pelo ciclo de cada período.
+  - *Dado* compras antes e depois da troca, *quando* consulto as faturas, *então* as fechadas continuam
+    iguais (itens, total, pagamento, conferência), a da troca vai do dia seguinte ao último fechamento
+    antigo até o primeiro fechamento novo, e as seguintes seguem o ciclo novo.
+  - *Dado* o ciclo novo, *quando* consulto o limite, a previsão (com as recorrências no cartão), os avisos
+    de vencimento (no app e no resumo por e-mail) e a fatura sugerida na conciliação, *então* todos usam o
+    ciclo de cada período.
+  - Estimativa: 5 · **Must** · Dependências: CYC-3
+- 🔵 **CYC-5** Editar o cartão e o ciclo na SPA.
+  - *Dado* a aba Cartões, *quando* edito um cartão, *então* corrijo nome, bandeira, final e limite; *e* ao
+    mudar o fechamento e o vencimento escolho a partir de qual fatura vale e vejo a fatura da troca ("a
+    fatura de março vai de 26/01 a 25/02 e vence 05/03") antes de confirmar.
+  - *Dado* uma troca pendente, *quando* abro o cartão, *então* vejo "a partir da fatura de março: fecha dia
+    25, vence dia 5" e posso desfazer.
+  - Estimativa: 5 · **Must** · Dependências: CYC-3, CYC-4
+- 🔵 **CYC-6** Sugestão do mês da fatura paga pelo ciclo do período.
+  - *Dado* um pagamento de fatura no extrato, *quando* o app sugere qual fatura ele paga (importação no
+    `transactions` e na SPA), *então* usa o vencimento do ciclo que vale para aquela data.
+  - Estimativa: 2 · **Could** · Dependências: CYC-3
+- 🔵 **CYC-7** E2E Cypress: mudar o vencimento e conferir as faturas.
+  - *Dado* um cartão com compras e uma fatura paga, *quando* mudo o fechamento e o vencimento a partir da
+    próxima fatura pela SPA, *então* a fatura paga continua igual, a da troca tem o período e o vencimento
+    novos, uma compra nova cai na fatura do ciclo novo e o limite novo aparece no disponível.
+  - Estimativa: 3 · **Must** · Dependências: CYC-5
+
+**Fora do escopo (Won't, nesta versão):** mudar a conta do cartão; trocar o cartão por outro mantendo o
+histórico (fusão de cartões); calendário de dias úteis e feriados no fechamento e no vencimento (continua
+como na ADR-0005); histórico do limite (o limite novo vale na hora); mudar o ciclo de uma fatura já
+fechada; aviso de que o ciclo vai mudar.
+
+**Priorização (MoSCoW):** Must = CYC-1, CYC-3, CYC-4, CYC-5 e CYC-7 (18 pts): mudar o ciclo sem
+reescrever o passado, com a fatura da troca e todo o app usando o ciclo de cada período, provado ponta a
+ponta. Should = CYC-2 (3 pts): editar nome, final e limite. Could = CYC-6 (2 pts). Total: 23 pts.
+
+**Ordem sugerida:** CYC-1 → CYC-3 → CYC-4 → CYC-2 → CYC-5 → CYC-7 (fecha o Must) → CYC-6.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
@@ -2519,4 +2635,4 @@ Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (Lembretes de vencimento viraram o épico NTF, em 2026-11-23.)
 - (Reajuste das recorrências virou o épico RJT, em 2026-11-25.)
 - (Conciliação da fatura virou o épico RCN, em 2026-11-26.)
-- Editar o ciclo do cartão (hoje é criar outro cartão; ADR-0005, decisão 3, pede reabrir a decisão).
+- (Editar o cartão e o ciclo da fatura virou o épico CYC, em 2026-11-26.)
