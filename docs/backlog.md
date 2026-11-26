@@ -2476,7 +2476,13 @@ fica fora do épico"); ideia de produto promovida a pedido do dono do produto (2
   - *Dado* uma fatura conferida em R$ 3.214,50, *quando* entra um lançamento novo naquele ciclo, *então* a
     fatura mostra "alterada depois da conferência" com o total novo; *e* conferir de novo atualiza a marca.
   - Estimativa: 2 · **Should** · Dependências: RCN-2
-- 🔵 **RCN-9** E2E Cypress: conferir a fatura com o arquivo do banco.
+- ✅ **RCN-9** E2E Cypress: conferir a fatura com o arquivo do banco. → `invoice-reconciliation-journey.cy.ts`.
+  - Feito assim: cartão novo com notebook 300 em 3x, mercado 80 e padaria 25 lançados hoje; o OFX traz a
+    parcela 01/03 (100), o supermercado (80), uma farmácia (39,40), um IOF (0,98) e o total declarado
+    (220,38). A conciliação mostra 2 conferidas (parcela pela chave da prévia, mercado por valor e data),
+    a padaria só no app e farmácia e IOF só no banco (diferença 15,38); "editar" abre a padaria na aba
+    Lançamentos. Importar o que falta e excluir a padaria deixam 4 conferidas e diferença 0; marcar como
+    conferida usa o total do arquivo e a fatura fica com o selo, sem diferença. Fecha o Must do épico.
   - *Dado* um cartão com uma compra parcelada e duas compras lançadas, *quando* envio o OFX da fatura com a
     parcela, uma das compras, uma compra que faltava e um IOF, *então* a conciliação mostra a parcela e a
     compra conferidas, a outra compra só no app e as duas linhas só no banco; *e* importar o que falta e
