@@ -596,7 +596,7 @@ public sealed class ImportLine
             if (onlyAccountCard is not null)
             {
                 line.InvoiceCardId = onlyAccountCard.CardId;
-                line.InvoiceDueMonth = InvoicePaymentHints.SuggestDueMonth(line.OccurredOn!.Value, onlyAccountCard.DueDay);
+                line.InvoiceDueMonth = InvoicePaymentHints.SuggestDueMonth(line.OccurredOn!.Value, onlyAccountCard.DueDayOf);
             }
         }
 

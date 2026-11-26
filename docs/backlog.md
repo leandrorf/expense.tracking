@@ -2511,7 +2511,7 @@ reconhecidos e o selo de alterada depois da conferência. Total: 28 pts.
 
 **Ordem sugerida:** RCN-1 → RCN-3 → RCN-2 → RCN-4 → RCN-5 → RCN-6 → RCN-9 (fecha o Must) → RCN-7 → RCN-8.
 
-## 🟡 EPIC CYC — Editar o cartão e o ciclo da fatura  · *In Progress*
+## 🟢 EPIC CYC — Editar o cartão e o ciclo da fatura  · *Done*
 **Problema:** o cartão não tem edição nenhuma: nome, final, limite e ciclo (dia de fechamento e de
 vencimento) são definidos ao criar, e para mudar qualquer um o usuário precisa criar outro cartão. O
 outro cartão não traz as compras, as parcelas, os pagamentos nem as conferências do antigo, e a fatura
@@ -2651,7 +2651,12 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
   - *Dado* uma troca pendente, *quando* abro o cartão, *então* vejo "a partir da fatura de março: fecha dia
     25, vence dia 5" e posso desfazer.
   - Estimativa: 5 · **Must** · Dependências: CYC-3, CYC-4
-- 🔵 **CYC-6** Sugestão do mês da fatura paga pelo ciclo do período.
+- ✅ **CYC-6** Sugestão do mês da fatura paga pelo ciclo do período. → `InvoiceCardHint.DueDayOf`.
+  - Feito assim: o `transactions` lê o histórico dos ciclos no cartão do `accounts` e a sugestão de qual fatura
+    o pagamento importado quita compara a data paga com o vencimento de cada mês candidato pelo ciclo daquele
+    mês (sem histórico, o vencimento de hoje); a tela de importação faz o mesmo ao trocar a linha para
+    pagamento de fatura. Ex.: vence 17 hoje e 5 a partir de fev/2027; um pagamento em 30/01/2027 sugere a fatura
+    de fevereiro (5/2 está mais perto que 17/1).
   - *Dado* um pagamento de fatura no extrato, *quando* o app sugere qual fatura ele paga (importação no
     `transactions` e na SPA), *então* usa o vencimento do ciclo que vale para aquela data.
   - Estimativa: 2 · **Could** · Dependências: CYC-3

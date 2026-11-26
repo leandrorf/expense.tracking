@@ -155,4 +155,17 @@ public sealed class InvoicePaymentImportTests
 
         Assert.Equal("import.invoice_payment_invalid", result.Error.Code);
     }
+
+    [Fact]
+    public void SuggestDueMonth_UsesTheDueDayOfTheCycleOfEachMonth()
+    {
+        // CYC-6: vence dia 17 hoje; a partir da fatura de fev/2027, vence dia 5.
+        var card = new InvoiceCardHint(Guid.NewGuid(), 17,
+            [new CardDueDayFrom(null, 17), new CardDueDayFrom(new DateOnly(2027, 2, 1), 5)]);
+        var paidOn = new DateOnly(2027, 1, 30);
+
+        Assert.Equal(new DateOnly(2027, 2, 1), InvoicePaymentHints.SuggestDueMonth(paidOn, card.DueDayOf));
+        Assert.Equal(new DateOnly(2027, 1, 1), InvoicePaymentHints.SuggestDueMonth(paidOn, card.DueDay));
+        Assert.Equal((17, 5), (card.DueDayOf(new DateOnly(2027, 1, 1)), card.DueDayOf(new DateOnly(2027, 3, 1))));
+    }
 }

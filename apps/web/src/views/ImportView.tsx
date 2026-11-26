@@ -58,16 +58,26 @@ const draftOf = (line: ImportLine): LineDraft => ({
   recurrence: !!line.recurrenceId,
 });
 
-/** Mesma regra do servidor: a fatura de vencimento mais próximo da data paga. */
-function suggestDueMonth(paidOn: string | null, dueDay: number): string {
+/** CYC-6: o dia de vencimento do ciclo da fatura do mês (`yyyy-MM`); sem histórico, o de hoje. */
+function dueDayOf(card: CreditCard, month: string): number {
+  const cycle = [...(card.cycles ?? [])]
+    .sort((a, b) => (a.fromDueMonth ?? '').localeCompare(b.fromDueMonth ?? ''))
+    .filter((c) => c.fromDueMonth === null || c.fromDueMonth <= month)
+    .pop();
+  return cycle?.dueDay ?? card.dueDay;
+}
+
+/** Mesma regra do servidor: a fatura de vencimento mais próximo da data paga, pelo ciclo de cada mês (CYC-6). */
+function suggestDueMonth(paidOn: string | null, card: CreditCard): string {
   if (!paidOn) return '';
   const [y, m, d] = paidOn.split('-').map(Number);
   const paid = Date.UTC(y, m - 1, d);
   const candidates = [-1, 0, 1].map((offset) => {
     const first = new Date(Date.UTC(y, m - 1 + offset, 1));
     const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-    const due = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(dueDay, lastDay));
-    return { month: `${first.getUTCFullYear()}-${String(first.getUTCMonth() + 1).padStart(2, '0')}`, distance: Math.abs(due - paid) };
+    const month = `${first.getUTCFullYear()}-${String(first.getUTCMonth() + 1).padStart(2, '0')}`;
+    const due = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(dueDayOf(card, month), lastDay));
+    return { month, distance: Math.abs(due - paid) };
   });
   return candidates.reduce((best, c) => (c.distance < best.distance ? c : best)).month;
 }
@@ -233,7 +243,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
       const card = only?.length === 1 ? only[0] : null;
       updateDraft(line.id, {
         invoicePayment: true,
-        ...(card ? { invoiceCardId: card.id, invoiceDueMonth: suggestDueMonth(line.occurredOn, card.dueDay) } : {}),
+        ...(card ? { invoiceCardId: card.id, invoiceDueMonth: suggestDueMonth(line.occurredOn, card) } : {}),
       });
       return;
     }
@@ -244,7 +254,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     const card = cards.find((c) => c.id === cardId);
     updateDraft(line.id, {
       invoiceCardId: cardId,
-      invoiceDueMonth: card ? suggestDueMonth(line.occurredOn, card.dueDay) : drafts[line.id].invoiceDueMonth,
+      invoiceDueMonth: card ? suggestDueMonth(line.occurredOn, card) : drafts[line.id].invoiceDueMonth,
     });
   }
 

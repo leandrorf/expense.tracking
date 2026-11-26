@@ -46,7 +46,14 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
         }
 
         var cards = await response.Content.ReadFromJsonAsync<List<CardResponse>>(cancellationToken) ?? [];
-        return cards.Where(c => c.IsActive).Select(c => new InvoiceCardHint(c.Id, c.DueDay)).ToList();
+        // CYC-6: com o historico dos ciclos, a sugestao usa o vencimento do ciclo de cada mes.
+        return cards.Where(c => c.IsActive)
+            .Select(c => new InvoiceCardHint(c.Id, c.DueDay, c.Cycles?.Select(y => new CardDueDayFrom(
+                y.FromDueMonth is null
+                    ? null
+                    : DateOnly.ParseExact(y.FromDueMonth + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                y.DueDay)).ToList()))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<AccountInfo>> ListAccountsAsync(CancellationToken cancellationToken)
@@ -89,5 +96,7 @@ internal sealed class AccountsHttpClient(HttpClient httpClient, IUserTokenAccess
     private sealed record AccountResponse(string? Scope, bool? IsActive);
 
     /// <summary>INV-11: so o que a sugestao de fatura usa do cartao.</summary>
-    private sealed record CardResponse(Guid Id, int DueDay, bool IsActive);
+    private sealed record CardResponse(Guid Id, int DueDay, bool IsActive, IReadOnlyList<CardCycleResponse>? Cycles = null);
+
+    private sealed record CardCycleResponse(string? FromDueMonth, int DueDay);
 }
