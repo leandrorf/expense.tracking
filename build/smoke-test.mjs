@@ -607,6 +607,20 @@ async function main() {
   ok(reconRes.status === 200 && recon.difference === 12.34 && shown?.difference === 12.34 && undoRecon === 204,
     `conferencia da fatura ${reconMonth}: PUT ${reconRes.status}, diferenca ${recon.difference}, na fatura ${shown?.difference}, desfeita ${undoRecon}`);
 
+  // 24g) Troca de ciclo do cartao (CYC-3): a partir de duas faturas depois da atual, fica pendente com o
+  // historico; desfeita, volta ao ciclo da criacao.
+  const [cy, cm] = reconMonth.split('-').map(Number);
+  const cycleFrom = `${cm >= 11 ? cy + 1 : cy}-${String(((cm + 1) % 12) + 1).padStart(2, '0')}`;
+  const cycleRes = await fetch(`${GATEWAY}/api/credit-cards/${card.id}/cycle`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ closingDay: 25, dueDay: 5, fromDueMonth: cycleFrom }),
+  });
+  const cycled = cycleRes.status === 200 ? await cycleRes.json() : {};
+  const cycleUndo = await fetch(`${GATEWAY}/api/credit-cards/${card.id}/cycle/${cycleFrom}`, { method: 'DELETE', headers: auth });
+  const uncycled = cycleUndo.status === 200 ? await cycleUndo.json() : {};
+  ok(cycleRes.status === 200 && cycled.cycles?.length === 2 && cycled.cycles?.[1]?.fromDueMonth === cycleFrom
+    && cycled.closingDay === 10 && uncycled.cycles?.length === 1,
+    `troca de ciclo a partir de ${cycleFrom}: PUT ${cycleRes.status} (${cycled.cycles?.length} ciclos, hoje fecha ${cycled.closingDay}); desfeita ${cycleUndo.status}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

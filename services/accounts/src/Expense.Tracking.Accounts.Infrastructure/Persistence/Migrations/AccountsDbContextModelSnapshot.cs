@@ -50,7 +50,7 @@ namespace Expense.Tracking.Accounts.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("opening_balance");
 
-                    b.Property<DateOnly?>("OpeningBalanceOn")
+                    b.Property<DateTime?>("OpeningBalanceOn")
                         .HasColumnType("date")
                         .HasColumnName("opening_balance_on");
 
@@ -144,6 +144,37 @@ namespace Expense.Tracking.Accounts.Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerUserId");
 
                     b.ToTable("credit_cards", (string)null);
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Accounts.Domain.Cards.CreditCard", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Accounts.Domain.Cards.CardCycleChange", "_cycleChanges", b1 =>
+                        {
+                            b1.Property<Guid>("CardId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("card_id");
+
+                            b1.Property<DateTime>("FromDueMonth")
+                                .HasColumnType("date")
+                                .HasColumnName("from_due_month");
+
+                            b1.Property<int>("ClosingDay")
+                                .HasColumnType("int")
+                                .HasColumnName("closing_day");
+
+                            b1.Property<int>("DueDay")
+                                .HasColumnType("int")
+                                .HasColumnName("due_day");
+
+                            b1.HasKey("CardId", "FromDueMonth");
+
+                            b1.ToTable("card_cycles", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CardId");
+                        });
+
+                    b.Navigation("_cycleChanges");
                 });
 #pragma warning restore 612, 618
         }

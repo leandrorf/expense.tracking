@@ -2578,9 +2578,11 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
     ADR-0012 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), reabrindo a ADR-0005
     (decisão 3 e regra 4), e o PO ajusta as histórias seguintes ao que foi decidido.
   - Refinamentos registrados na ADR além das recomendações: o primeiro ciclo continua nas colunas do cartão
-    (vale desde sempre) e as trocas vão para `card_cycles`; a troca vale de um mês cuja fatura não fechou
-    nem pelo ciclo antigo nem pelo novo e cujo período não fica vazio, senão 400 `card.cycle_change_invalid`
-    com a próxima fatura possível; "hoje" no fuso do app, que o `accounts` passa a ler (`TimeZone`). Pendente
+    (vale desde sempre) e as trocas vão para `card_cycles`; a fatura antiga que fecharia no mesmo dia ou
+    depois do primeiro fechamento novo deixa de existir (o mês de vencimento pula, achado ao escrever os
+    exemplos da CYC-3), então a da troca nunca fica vazia; a troca vale de um mês em que o primeiro
+    fechamento novo não passou e a fatura substituída não fechou, senão 400 `card.cycle_change_invalid` com a
+    próxima fatura possível; "hoje" no fuso do app, que o `accounts` passa a ler (`TimeZone`). Pendente
     = vigência cuja fatura ainda não começou (trocar de novo substitui; `DELETE` desfaz). O cartão sai com o
     ciclo de hoje em `closingDay`/`dueDay` e o histórico em `cycles` (o primeiro com `fromDueMonth` nulo),
     também no `/internal/credit-cards`. A regra dos períodos encadeados fica no `reporting` e, para validar,
@@ -2593,7 +2595,19 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
   - *Dado* dados inválidos (final sem 4 dígitos, limite negativo, nome vazio), *quando* salvo, *então* recebo
     400 com as mesmas regras da criação.
   - Estimativa: 3 · **Should** · Dependências: —
-- 🔵 **CYC-3** Ciclo com vigência no `accounts`.
+- ✅ **CYC-3** Ciclo com vigência no `accounts`. → `card_cycles`, `PUT/DELETE /credit-cards/{id}/cycle`.
+  - Feito assim: o ciclo da criação continua nas colunas do cartão e as trocas ficam em `card_cycles` (cartão +
+    mês de vencimento de início, migration `CardCycles`). `CardCycleSchedule` (domínio) encadeia os períodos: a
+    fatura antiga que fecharia no mesmo dia ou depois do primeiro fechamento novo não existe (o mês pula), e o
+    início de cada fatura é o dia seguinte ao fechamento da anterior que existe; a ADR-0012 foi corrigida com
+    essa regra, achada ao escrever os exemplos. `PUT /credit-cards/{id}/cycle` (`{ closingDay, dueDay,
+    fromDueMonth }`) troca a partir de um mês em que o primeiro fechamento novo não passou e a fatura substituída
+    não fechou (senão 400 `card.cycle_change_invalid`, com a próxima fatura possível), substituindo as trocas
+    pendentes; `DELETE .../cycle/{yyyy-MM}` desfaz uma pendente (400 `card.cycle_already_started`, 404
+    `card.cycle_not_found`); mês inválido = 400 `card.month_invalid`, dias fora de 1 a 28 = 400
+    `card.day_invalid`, cartão desativado = 400 `card.inactive`. O cartão sai com o ciclo de hoje em
+    `closingDay`/`dueDay` e o histórico em `cycles`, também no `/internal/credit-cards`. O `accounts` passa a ler
+    `TimeZone` (compose: `APP_TIME_ZONE`). Smoke passo 24g (troca pendente e desfeita; 54 passos).
   - *Dado* um cartão que fecha dia 10 e vence dia 17, *quando* mudo para fechar dia 25 e vencer dia 5 a
     partir da fatura de março, *então* o cartão guarda os dois ciclos (o antigo desde sempre, o novo desde
     março) e o `GET` devolve `cycles` e o ciclo de hoje em `closingDay`/`dueDay`.

@@ -54,14 +54,18 @@ As regras abaixo valem para as histórias CYC-2 a CYC-7.
    ciclo de uma fatura é o da última vigência com início até o mês de vencimento dela. Dias de 1 a 28, como
    na criação.
 2. **Períodos encadeados** (substitui a regra 4 da ADR-0005). O fechamento e o vencimento de cada fatura
-   vêm do ciclo dela; o início é o dia seguinte ao fechamento da fatura anterior (pelo ciclo da anterior).
-   Uma compra cai na fatura cujo período contém a data. A fatura da troca pode ficar mais curta ou mais
-   longa que um mês.
-3. **A partir de quando.** A troca vale a partir de um mês de vencimento cuja fatura **ainda não fechou**
-   nem pelo ciclo antigo nem pelo novo (o fechamento das duas contas é hoje ou depois), e cujo período fica
-   não vazio (fechamento novo depois do fechamento da fatura anterior). Fora disso, 400
+   vêm do ciclo dela. Uma fatura do ciclo antigo que fecharia no mesmo dia ou depois do primeiro fechamento
+   do ciclo novo **não existe**: o mês de vencimento pula (ex.: de "fecha 5, vence 15" para "fecha 3, vence
+   1 do mês seguinte", a fatura de março some e a de abril vai de 6/2 a 3/3). O início de cada fatura é o
+   dia seguinte ao fechamento da fatura anterior que existe. Uma compra cai na fatura que existe e cujo
+   período contém a data. A fatura da troca pode ficar mais curta ou mais longa que um mês, nunca vazia.
+3. **A partir de quando.** A troca vale a partir de um mês de vencimento em que o **primeiro fechamento
+   novo é hoje ou depois** e a fatura que ela substitui (a do mesmo mês pelo ciclo de antes), se existe,
+   **ainda não fechou**; nenhuma troca já começada pode ser desse mês em diante. Fora disso, 400
    `card.cycle_change_invalid`, com a próxima fatura possível na mensagem. "Hoje" é no fuso do app
-   (`TimeZone`, o mesmo do `transactions` e do `reporting`), que o `accounts` passa a ler.
+   (`TimeZone`, o mesmo do `transactions` e do `reporting`), que o `accounts` passa a ler. Um pagamento já
+   registrado numa fatura que deixa de existir continua no mês dele e aparece como fatura só com
+   pagamento (excluível).
 4. **Pendente.** Uma vigência cuja fatura ainda não começou (o início dela é depois de hoje) é pendente:
    trocar de novo substitui as pendentes, e `DELETE` desfaz uma. Uma vigência que já começou não sai.
 5. **Leitura.** O cartão sai com `closingDay`/`dueDay` = o ciclo de hoje (quem só precisa do ciclo atual

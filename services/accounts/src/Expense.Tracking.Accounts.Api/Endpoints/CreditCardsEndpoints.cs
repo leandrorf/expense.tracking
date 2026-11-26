@@ -1,5 +1,6 @@
 using Expense.Tracking.Accounts.Api.Setup;
 using Expense.Tracking.Accounts.Application.Cards;
+using Expense.Tracking.Accounts.Domain.Common;
 
 namespace Expense.Tracking.Accounts.Api.Endpoints;
 
@@ -60,6 +61,44 @@ public static class CreditCardsEndpoints
                 : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.WritePolicy);
 
+        // CYC-3 (ADR-0012, decisoes 3, 4 e 8): troca de ciclo a partir de uma fatura, e desfazer a pendente.
+        group.MapPut("/{id:guid}/cycle", async (
+            Guid id, ChangeCardCycleRequest request, HttpContext http, ChangeCreditCardCycleHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseMonth(request.FromDueMonth, out var month))
+            {
+                return HttpResults.Problem(MonthInvalid);
+            }
+
+            var result = await handler.HandleAsync(
+                new ChangeCreditCardCycleCommand(id, owner.Value, request.ClosingDay, request.DueDay, month), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
+        group.MapDelete("/{id:guid}/cycle/{fromDueMonth}", async (
+            Guid id, string fromDueMonth, HttpContext http, RemoveCreditCardCycleHandler handler, CancellationToken ct) =>
+        {
+            var owner = http.User.GetUserId();
+            if (owner is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!TryParseMonth(fromDueMonth, out var month))
+            {
+                return HttpResults.Problem(MonthInvalid);
+            }
+
+            var result = await handler.HandleAsync(id, owner.Value, month, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.WritePolicy);
+
         group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, DeactivateCreditCardHandler handler, CancellationToken ct) =>
         {
             var owner = http.User.GetUserId();
@@ -74,4 +113,13 @@ public static class CreditCardsEndpoints
 
         return app;
     }
+
+    private static readonly Error MonthInvalid = Error.Validation("card.month_invalid", "Mes invalido: use o formato 'yyyy-MM'.");
+
+    private static bool TryParseMonth(string? value, out DateOnly month) =>
+        DateOnly.TryParseExact((value ?? string.Empty) + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out month);
 }
+
+/// <summary>CYC-3: ciclo novo (dias de 1 a 28) e a fatura (mes de vencimento, <c>yyyy-MM</c>) em que comeca.</summary>
+public sealed record ChangeCardCycleRequest(int ClosingDay, int DueDay, string? FromDueMonth);
