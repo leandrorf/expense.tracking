@@ -3105,7 +3105,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   - *Dado* o fim da história, *quando* rodo a suíte, *então* o Cypress fica 100% verde e o bundle é medido
     contra a meta.
   - Estimativa: 5 · **Must** · Dependências: MUI-1
-- 🔵 **MUI-3** Resumo e Previsão. → `SummaryView`, `ForecastView`.
+- ✅ **MUI-3** Resumo e Previsão. → `SummaryView`, `ForecastView`. Bundle medido: 137,8 → 165,6 KB gzip (+28 KB, com `TextField`, `Table`, `Grid` e `Chip`, que as próximas telas reaproveitam; acumulado +80 KB de 150).
   - *Dado* o Resumo e a Previsão, *quando* abro as abas, *então* os cartões de totais, as quebras por
     categoria, escopo e meio, a tabela da previsão (com "previsto", "falta pagar", meta e saldo) e o cartão da
     meta do mês usam o tema e os componentes do projeto, com os mesmos números, e a tabela rola dentro do
