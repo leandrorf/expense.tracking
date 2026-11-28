@@ -69,7 +69,7 @@ describe('Metas', () => {
     // Arquivar tira da lista; "mostrar arquivados" traz de volta para reabrir.
     row().find('[data-cy=objective-archive]').click();
     row().should('not.exist');
-    cy.get('[data-cy=objectives-show-archived]').check();
+    cy.get('[data-cy=objectives-show-archived]').check({ force: true });
     row().should('have.attr', 'data-archived', 'true');
     row().find('[data-cy=objective-unarchive]').click();
     row().should('have.attr', 'data-archived', 'false');

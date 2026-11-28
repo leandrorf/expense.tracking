@@ -19,3 +19,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 | [0011](0011-conciliacao-da-fatura-do-cartao.md) | Conciliação da fatura do cartão calculada no reporting, com o arquivo do banco lido do lote de importação (épico RCN) | Aceito | 2026-11-26 |
 | [0012](0012-editar-cartao-e-ciclo-da-fatura.md) | Edição do cartão e ciclo da fatura com vigência, guardado no accounts e lido na hora pelo reporting (épico CYC) | Aceito | 2026-11-26 |
 | [0013](0013-metas-de-gastos-e-de-economia.md) | Metas de gastos e de economia no reporting, com o resultado da previsão e objetivos medidos por aportes (épico MET) | Aceito | 2026-11-28 |
+| [0014](0014-material-ui-na-spa.md) | Material UI na SPA, com campos nativos, componentes do projeto e migração tela a tela (épico MUI) | Aceito | 2026-11-28 |

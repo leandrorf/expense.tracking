@@ -55,8 +55,8 @@ describe('Recategorizar em lote', () => {
 
     // Sem selecao nao ha barra; marcar mostra quantos.
     cy.get('[data-cy=tx-bulk]').should('not.exist');
-    row(`Padaria ${stamp}`).find('[data-cy=tx-select]').check();
-    row(`Feira ${stamp}`).find('[data-cy=tx-select]').check();
+    row(`Padaria ${stamp}`).find('[data-cy=tx-select]').check({ force: true });
+    row(`Feira ${stamp}`).find('[data-cy=tx-select]').check({ force: true });
     cy.get('[data-cy=tx-bulk-count]').should('have.text', '2 selecionados');
 
     // Os dois mudam de uma vez; o terceiro fica.
@@ -70,8 +70,8 @@ describe('Recategorizar em lote', () => {
     cy.get('[data-cy=tx-bulk]').should('not.exist');
 
     // Outra aba recategoriza o "Acougue" depois que a lista foi lida: ele nao e sobrescrito.
-    row(`Padaria ${stamp}`).find('[data-cy=tx-select]').check();
-    row(`Acougue ${stamp}`).find('[data-cy=tx-select]').check();
+    row(`Padaria ${stamp}`).find('[data-cy=tx-select]').check({ force: true });
+    row(`Acougue ${stamp}`).find('[data-cy=tx-select]').check({ force: true });
     recategorizeElsewhere(`Acougue ${stamp}`, `Carnes ${stamp}`);
     cy.get('[data-cy=tx-bulk-category]').type(`Feira livre ${stamp}`);
     cy.get('[data-cy=tx-bulk-apply]').click();
@@ -89,7 +89,7 @@ describe('Recategorizar em lote', () => {
     row(`Acougue ${stamp}`).should('contain', `Feira livre ${stamp}`);
 
     // "Selecionar todos" e "Limpar selecao".
-    cy.get('[data-cy=tx-select-all]').check();
+    cy.get('[data-cy=tx-select-all]').check({ force: true });
     cy.get('[data-cy=tx-select]').should('be.checked');
     cy.get('[data-cy=tx-bulk-clear]').click();
     cy.get('[data-cy=tx-select]:checked').should('not.exist');

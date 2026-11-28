@@ -1,6 +1,14 @@
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import { recurrencesApi, type Recurrence } from '../api/recurrences';
+import { Field, MonthField, Notice, SelectField, TextAction } from '../ui';
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const INDEX_LABEL: Record<string, string> = {
@@ -91,8 +99,7 @@ export function RecurrenceValuesRow({
     }
   }
 
-  function handleAddAmount(e: React.FormEvent) {
-    e.preventDefault();
+  function handleAddAmount() {
     void run(
       () => recurrencesApi.setAmount(rule.id, fromPeriod, Number(amount), rule.version),
       `${rule.description}: ${money(Number(amount))} a partir de ${periodLabel(fromPeriod)}.`,
@@ -103,8 +110,7 @@ export function RecurrenceValuesRow({
     });
   }
 
-  function handleApply(e: React.FormEvent) {
-    e.preventDefault();
+  function handleApply() {
     if (!pending) return;
     const value = Number(adjustValue);
     void run(
@@ -118,30 +124,36 @@ export function RecurrenceValuesRow({
     );
   }
 
+  const formSx = { display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1.5 } as const;
+
   return (
-    <tr className="budget-edit" data-cy="rec-values">
-      <td colSpan={colSpan}>
+    <TableRow data-cy="rec-values">
+      <TableCell colSpan={colSpan} sx={{ bgcolor: 'background.default' }}>
         {pending && (
-          <form
-            className="row-form"
-            onSubmit={handleApply}
+          <Box
+            component="form"
+            sx={formSx}
+            onSubmit={(e: React.FormEvent) => {
+              e.preventDefault();
+              handleApply();
+            }}
             data-cy="rec-adjust-form"
             aria-label={`Reajuste de ${rule.description}`}
           >
-            <span data-cy="rec-adjust-summary">
+            <Typography component="span" variant="body2" data-cy="rec-adjust-summary" sx={{ flexBasis: '100%' }}>
               Reajuste de {periodLabel(pending.period)}: {money(pending.currentAmount)}
               {pending.suggestedAmount != null && pending.rate != null
                 ? ` → ${money(pending.suggestedAmount)} (${indexName ? `${indexName} ` : ''}${percentLabel(pending.rate)})`
                 : pending.waitingFor
                   ? ` → aguardando o ${indexName ?? 'índice'} de ${periodLabel(pending.waitingFor)}; informe o percentual ou o valor novo`
                   : ' → informe o percentual ou o valor novo'}
-            </span>
-            <select
-              data-cy="rec-adjust-by"
-              aria-label="Reajustar por"
+            </Typography>
+            <SelectField
+              dataCy="rec-adjust-by"
+              label="Reajustar por"
               value={adjustBy}
-              onChange={(e) => {
-                const by = e.target.value as 'rate' | 'amount';
+              onChange={(v) => {
+                const by = v as 'rate' | 'amount';
                 setAdjustBy(by);
                 setAdjustValue(
                   by === 'rate'
@@ -153,37 +165,40 @@ export function RecurrenceValuesRow({
                       : '',
                 );
               }}
-            >
-              <option value="rate">percentual</option>
-              <option value="amount">valor novo</option>
-            </select>
-            <input
-              data-cy="rec-adjust-value"
-              aria-label={adjustBy === 'rate' ? 'Percentual do reajuste' : 'Valor novo'}
-              type="number"
-              step={adjustBy === 'rate' ? '0.0001' : '0.01'}
-              value={adjustValue}
-              onChange={(e) => setAdjustValue(e.target.value)}
-              required
+              options={[
+                { value: 'rate', label: 'percentual' },
+                { value: 'amount', label: 'valor novo' },
+              ]}
+              sx={{ width: 150 }}
             />
-            <button data-cy="rec-adjust-confirm" className="primary small" type="submit" disabled={saving}>
+            <Field
+              dataCy="rec-adjust-value"
+              label={adjustBy === 'rate' ? 'Percentual do reajuste' : 'Valor novo'}
+              type="number"
+              value={adjustValue}
+              onChange={setAdjustValue}
+              required
+              slotProps={{ htmlInput: { step: adjustBy === 'rate' ? '0.0001' : '0.01' } }}
+              sx={{ width: 190 }}
+            />
+            <Button data-cy="rec-adjust-confirm" variant="contained" type="submit" disabled={saving}>
               Confirmar reajuste
-            </button>
-          </form>
+            </Button>
+          </Box>
         )}
 
-        <table className="data compact" data-cy="rec-amounts">
-          <tbody>
+        <Table data-cy="rec-amounts" sx={{ mb: 1.5, maxWidth: 520 }}>
+          <TableBody>
             {rule.amounts.map((a, i) => {
               const started = a.fromPeriod <= now;
               return (
-                <tr key={a.fromPeriod} data-cy="rec-amount-row" data-period={a.fromPeriod}>
-                  <td>{i === 0 ? `desde ${periodLabel(a.fromPeriod)} (início)` : `a partir de ${periodLabel(a.fromPeriod)}`}</td>
-                  <td className="right">{money(a.amount)}</td>
-                  <td className="row-actions">
+                <TableRow key={a.fromPeriod} data-cy="rec-amount-row" data-period={a.fromPeriod}>
+                  <TableCell>{i === 0 ? `desde ${periodLabel(a.fromPeriod)} (início)` : `a partir de ${periodLabel(a.fromPeriod)}`}</TableCell>
+                  <TableCell align="right">{money(a.amount)}</TableCell>
+                  <TableCell align="right">
                     {i > 0 && !started && (
-                      <button
-                        className="link-danger"
+                      <TextAction
+                        danger
                         data-cy="rec-amount-remove"
                         disabled={saving}
                         onClick={() =>
@@ -194,68 +209,62 @@ export function RecurrenceValuesRow({
                         }
                       >
                         remover
-                      </button>
+                      </TextAction>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
-        <form
-          className="row-form"
-          onSubmit={handleAddAmount}
+        <Box
+          component="form"
+          sx={formSx}
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            handleAddAmount();
+          }}
           data-cy="rec-amount-form"
           aria-label={`Novo valor de ${rule.description}`}
         >
-          <input
-            data-cy="rec-amount-value"
-            aria-label="Novo valor"
-            placeholder="Novo valor"
+          <Field
+            dataCy="rec-amount-value"
+            label="Novo valor"
             type="number"
-            step="0.01"
-            min="0.01"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={setAmount}
             required
+            slotProps={{ htmlInput: { step: '0.01', min: '0.01' } }}
+            sx={{ width: 150 }}
           />
-          <label className="inline-label">
-            a partir de
-            {yearly ? (
-              <input
-                data-cy="rec-amount-from"
-                type="number"
-                min="1900"
-                max="9999"
-                placeholder="ano"
-                value={fromPeriod}
-                onChange={(e) => setFromPeriod(e.target.value)}
-                required
-              />
-            ) : (
-              <input
-                data-cy="rec-amount-from"
-                type="month"
-                value={fromPeriod}
-                onChange={(e) => setFromPeriod(e.target.value)}
-                required
-              />
-            )}
-          </label>
-          <button data-cy="rec-amount-save" className="primary small" type="submit" disabled={saving}>
+          {yearly ? (
+            <Field
+              dataCy="rec-amount-from"
+              label="a partir de (ano)"
+              type="number"
+              value={fromPeriod}
+              onChange={setFromPeriod}
+              required
+              slotProps={{ htmlInput: { min: '1900', max: '9999' } }}
+              sx={{ width: 160 }}
+            />
+          ) : (
+            <MonthField dataCy="rec-amount-from" label="a partir de" value={fromPeriod} onChange={setFromPeriod} required sx={{ width: 180 }} />
+          )}
+          <Button data-cy="rec-amount-save" variant="contained" type="submit" disabled={saving}>
             Salvar valor
-          </button>
-          <button className="ghost small" type="button" onClick={onClose} disabled={saving}>
+          </Button>
+          <Button variant="outlined" color="inherit" type="button" onClick={onClose} disabled={saving}>
             Fechar
-          </button>
-        </form>
+          </Button>
+        </Box>
         {error && (
-          <p className="error" role="alert" data-cy="rec-values-error">
+          <Notice severity="error" role="alert" dataCy="rec-values-error">
             {error}
-          </p>
+          </Notice>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

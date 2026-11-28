@@ -3018,7 +3018,7 @@ MET-8 (6 pts): histórico e meta na previsão e no Resumo. Could = MET-9 e MET-1
 **Ordem sugerida:** MET-1 → MET-2 → MET-3 → MET-5 → MET-6 → MET-7 → MET-11 (fecha o Must) → MET-4 → MET-8 →
 MET-9 → MET-10.
 
-## 🔵 EPIC MUI — Interface com Material UI  · *To Do*
+## 🟡 EPIC MUI — Interface com Material UI  · *In Progress*
 **Problema:** a SPA cresceu para 18 telas, mas o visual continua sendo um CSS próprio de 1.100 linhas, escrito
 tela a tela. Cada épico novo reinventa botões, campos, selos de situação, tabelas e avisos. O resultado é uma
 interface irregular (espaçamentos, alturas e estados de foco diferentes), sem padrão de acessibilidade, difícil
@@ -3057,7 +3057,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   vira um `Popover`.
 - **Bundle hoje:** 84 KB gzip de JS e 3,3 KB de CSS.
 
-**Decisões em aberto (a registrar na ADR-0014, MUI-1; a recomendação de cada uma vem com o motivo):**
+**Decisões (aceitas na [ADR-0014](adr/0014-material-ui-na-spa.md), MUI-1; ficou a recomendação de cada uma, com os refinamentos da MUI-1):**
 1. **Pacotes.** *Recomendação:* `@mui/material` v7, `@emotion/react`, `@emotion/styled` e `@mui/icons-material`,
    todos MIT. O MUI X fica de fora: o Data Grid e os Date Pickers Pro/Premium são pagos, e as versões grátis
    trazem peso e um adaptador de datas que os campos nativos dispensam. A tabela é a `Table` do `@mui/material`.
@@ -3091,12 +3091,12 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
 9. **Escopo.** *Recomendação:* só aparência e componentes. Os fluxos, os textos e as regras continuam iguais,
    sem roteador novo, sem i18n e sem tela nova; melhorias de fluxo viram histórias de outros épicos.
 
-- 🔵 **MUI-1** ADR: Material UI na SPA. → ADR-0014.
+- ✅ **MUI-1** ADR: Material UI na SPA. → [ADR-0014](adr/0014-material-ui-na-spa.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0014 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), e o PO ajusta as histórias
     seguintes ao que foi decidido.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **MUI-2** Fundação: tema, barra do app e componentes do projeto. → `src/theme.ts`, `src/ui/`.
+- ✅ **MUI-2** Fundação: tema, barra do app e componentes do projeto. → `src/theme.ts`, `src/ui/`. Bundle medido: 85,8 → 137,8 KB gzip (+52 KB; meta +150 KB). No celular, as abas vão para uma linha própria e o texto "sessão ativa" se esconde (abaixo de 600 px).
   - *Dado* o app, *quando* instalo os pacotes e envolvo a SPA no `ThemeProvider` com o `CssBaseline`, *então* a
     barra do topo (abas, sino, sessão, sair) e a tela de login usam o MUI. As abas rolam no celular. As telas
     ainda não migradas continuam com o visual atual.
@@ -3105,42 +3105,42 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   - *Dado* o fim da história, *quando* rodo a suíte, *então* o Cypress fica 100% verde e o bundle é medido
     contra a meta.
   - Estimativa: 5 · **Must** · Dependências: MUI-1
-- 🔵 **MUI-3** Resumo e Previsão. → `SummaryView`, `ForecastView`.
+- ✅ **MUI-3** Resumo e Previsão. → `SummaryView`, `ForecastView`. Bundle medido: 137,8 → 165,6 KB gzip (+28 KB, com `TextField`, `Table`, `Grid` e `Chip`, que as próximas telas reaproveitam; acumulado +80 KB de 150).
   - *Dado* o Resumo e a Previsão, *quando* abro as abas, *então* os cartões de totais, as quebras por
     categoria, escopo e meio, a tabela da previsão (com "previsto", "falta pagar", meta e saldo) e o cartão da
     meta do mês usam o tema e os componentes do projeto, com os mesmos números, e a tabela rola dentro do
     próprio contêiner no celular.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-4** Lançamentos. → `TransactionsView`.
+- ✅ **MUI-4** Lançamentos. → `TransactionsView`. Bundle medido: 168,6 KB gzip (+2,2 KB, com o `Checkbox`). Os 5 `.check()` da recategorização em lote viraram `.check({ force: true })` (ADR-0014, decisão 5); a célula do valor mantém as classes `positive`/`negative`, que um teste lê.
   - *Dado* a aba Lançamentos, *quando* cadastro, edito, excluo, recategorizo em lote e "repito todo mês",
     *então* tudo funciona como hoje, com formulário, tabela, filtros e mensagens do MUI.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-5** Recorrências. → `RecurrencesView`, `RecurrenceValuesRow`.
+- ✅ **MUI-5** Recorrências. → `RecurrencesView`, `RecurrenceValuesRow`. Feita em paralelo (worktree), sem mudar spec.
   - *Dado* a aba Recorrências, *quando* cadastro uma regra, lanço, pulo, mudo valores por vigência e confirmo
     um reajuste, *então* tudo funciona como hoje com os componentes do projeto.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-6** Contas e Cartões. → `AccountsView`, `CardsView`, `CardEditRow`.
+- ✅ **MUI-6** Contas e Cartões. → `AccountsView`, `CardsView`, `CardEditRow`. Bundle medido: 165,9 KB gzip (+0,3 KB). Entraram em `src/ui/` o `TextAction` (as ações "editar"/"remover" das linhas) e o `TableBox` (tabela que rola no celular).
   - *Dado* as abas Contas e Cartões, *quando* cadastro, informo o saldo, edito o cartão e troco o ciclo (com a
     prévia), *então* tudo funciona como hoje com os componentes do projeto.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-7** Faturas e conciliação. → `InvoicesView`, `InvoiceReconciliationPanel`.
+- ✅ **MUI-7** Faturas e conciliação. → `InvoicesView`, `InvoiceReconciliationPanel`. Bundle medido: 166,4 KB gzip (+0,5 KB). Entrou em `src/ui/` o `Stat` (cartão de número, também no Resumo). O arquivo OFX continua num `<input type="file">` transparente sobre o botão (os testes usam `selectFile`). Corrigido o E2E da exportação contábil, que falhava com os dados zerados (uma conta PJ só: a tela não mostra o seletor de conta).
   - *Dado* a fatura de um cartão, *quando* navego entre os meses, pago e confiro com o arquivo do banco ou com
     o total, *então* os grupos da conciliação, os selos e as ações usam o MUI, com o mesmo comportamento.
   - Estimativa: 5 · **Must** · Dependências: MUI-6
-- 🔵 **MUI-8** Orçamentos e Metas. → `BudgetsView`, `GoalsView`.
+- ✅ **MUI-8** Orçamentos e Metas. → `BudgetsView`, `GoalsView`. Feita em paralelo (worktree). Selos viraram `StatusChip` e as barras `LinearProgress`; o cadastro de orçamento e os formulários em linha das Metas usam `Box component="form"` (o `RowForm` não aceita `aria-label`) e a navegação de mês das Metas tem botões próprios (precisa desabilitar nos limites). `objectives-show-archived` passou a `.check({ force: true })`.
   - *Dado* as abas Orçamentos e Metas, *quando* acompanho o mês, cadastro e altero orçamentos, defino a meta e
     registro aportes, *então* as barras de progresso (`LinearProgress`), os selos (`StatusChip`) e os
     formulários usam o MUI.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-9** Importar e Contador. → `ImportView`, `CsvMappingStep`, `AccountingExportView`, `LedgerAccountsSection`.
+- ✅ **MUI-9** Importar e Contador. → `ImportView`, `CsvMappingStep`, `AccountingExportView`, `LedgerAccountsSection`. Feita em paralelo (worktree). O arquivo continua num `<input type="file">` transparente sobre o botão; o modo do valor do CSV virou `RadioGroup` (`csv-map-mode-split` com `.check({ force: true })`).
   - *Dado* a importação (envio, mapeamento do CSV, prévia, confirmação) e a exportação contábil, *quando* faço
     cada passo, *então* tudo funciona como hoje, com o envio de arquivo e as tabelas do MUI.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-10** Sino de avisos e preferências. → `RemindersBell` com `Badge` e `Popover`.
+- ✅ **MUI-10** Sino de avisos e preferências. → `RemindersBell` com `Badge` e painel não modal. Feita em paralelo (worktree). **Sem `Popover`:** o fundo invisível dele bloquearia o clique no sino e nas abas com o painel aberto (os specs fecham o painel clicando de novo no sino), e o `Popper` custaria +12,6 KB gzip. O painel é um `Paper` com `ClickAwayListener`: foco vai para ele ao abrir, Esc fecha e devolve o foco ao sino, clicar fora fecha; no celular fica fixo no canto da janela. Os `.check()`/`.uncheck()` das preferências passaram a `{ force: true }`. Com as MUI-5, 8, 9 e 10 juntas, o `styles.css` ficou sem uso e foi removido (bundle: 175,9 KB gzip de JS e nenhum CSS; acumulado +90 KB de 150).
   - *Dado* o sino, *quando* abro o painel, dispenso um aviso, mudo as preferências e o e-mail, *então* o painel
     é um `Popover` acessível por teclado (abre, navega e fecha com Esc), com os mesmos atalhos para cada aviso.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-11** Limpeza, acessibilidade e celular. → sem `styles.css`.
+- ✅ **MUI-11** Limpeza, acessibilidade e celular. → sem `styles.css`. O CSS saiu na integração das MUI-5/8/9/10. As 10 abas a 360 px não rolam na horizontal (as tabelas rolam dentro do quadro). Todo campo tem rótulo ou `aria-label`. Foco por teclado com contorno explícito em botões, abas e itens clicáveis. O índigo de destaque passou de `#6366f1` (3,3:1 como texto nos cartões) para `#818cf8` (4,9 a 6,0:1, AA), com texto escuro nos botões cheios. Bundle final: 175,9 KB gzip de JS e nenhum CSS (+90 KB de 150).
   - *Dado* todas as telas migradas, *quando* fecho o épico, *então* o `styles.css` é removido, cada tela é
     usável com 360 px de largura, todo campo tem rótulo, o foco é visível e o bundle está dentro da meta.
   - Estimativa: 3 · **Should** · Dependências: MUI-3 a MUI-10

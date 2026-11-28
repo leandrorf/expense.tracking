@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Notifications from '@mui/icons-material/Notifications';
+import Badge from '@mui/material/Badge';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
+import Checkbox from '@mui/material/Checkbox';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import { remindersApi, type Reminder, type ReminderEmail, type ReminderSettings, type Reminders } from '../api/reminders';
+import { Field, Notice, SelectField, TextAction } from '../ui';
 
 /** `2026-11-23` → `23/11`. */
 function shortDate(iso: string): string {
@@ -63,6 +76,7 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
   const [emailText, setEmailText] = useState('');
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(() => {
     remindersApi
@@ -81,14 +95,11 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
     return () => window.removeEventListener('focus', onFocus);
   }, [load]);
 
-  // Fecha ao clicar fora do painel.
+  // MUI-10: ao abrir, o foco vai para o painel (Tab navega pelos avisos; Esc fecha e volta ao sino).
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    const id = requestAnimationFrame(() => panelRef.current?.focus());
+    return () => cancelAnimationFrame(id);
   }, [open]);
 
   /** NTF-5: some na hora (otimista) e relê; se falhar, a releitura o traz de volta. */
@@ -147,186 +158,278 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
 
   const items = reminders?.items ?? [];
   const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: reminders?.currency ?? 'BRL' });
+  const hasOverdue = !!reminders && reminders.overdue > 0;
+
+  function close(returnFocus = true) {
+    setOpen(false);
+    if (returnFocus) bellRef.current?.focus();
+  }
 
   return (
-    <div className="reminders" ref={panelRef}>
-      <button
-        type="button"
-        className={`ghost bell${reminders && reminders.overdue > 0 ? ' has-overdue' : ''}`}
+    <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+      <IconButton
+        ref={bellRef}
+        className={`bell${hasOverdue ? ' has-overdue' : ''}`}
         data-cy="reminders-bell"
         aria-label={items.length === 0 ? 'Avisos: nenhum' : `Avisos: ${items.length}`}
         aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={() => {
           if (!open) load();
           setOpen(!open);
         }}
+        sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
       >
-        <span aria-hidden="true">🔔</span>
-        {items.length > 0 && (
-          <span className="badge" data-cy="reminders-count">
-            {items.length}
-          </span>
-        )}
-      </button>
+        <Badge
+          badgeContent={items.length}
+          color={hasOverdue ? 'error' : 'info'}
+          max={99}
+          slotProps={{ badge: (items.length > 0 ? { 'data-cy': 'reminders-count' } : {}) as object }}
+        >
+          <Notifications fontSize="small" />
+        </Badge>
+      </IconButton>
+      {/*
+        MUI-10: painel não modal logo abaixo do sino, em vez de Popover. O Popover cobre a página com um fundo
+        invisível, e o sino e as abas deixariam de ser clicáveis com o painel aberto (os testes fecham o
+        painel clicando de novo no sino); o Popper traria +12 KB gzip só para posicionar. O painel recebe o
+        foco ao abrir e fecha com Esc ou clique fora.
+      */}
       {open && (
-        <div className="reminders-panel" data-cy="reminders-panel" role="dialog" aria-label="Avisos">
-          <div className="reminders-head">
-            <strong>Avisos</strong>
-            <button type="button" className="link" data-cy="reminders-settings-toggle" onClick={() => void toggleSettings()}>
-              {settings ? 'fechar preferências' : 'preferências'}
-            </button>
-          </div>
-          {settingsError && <p className="error">{settingsError}</p>}
-          {settings && (
-            <form className="reminders-settings" data-cy="reminders-settings" onSubmit={saveSettings}>
-              <label>
-                Avisar com{' '}
-                <input
-                  data-cy="reminders-lead-days"
+        <ClickAwayListener
+          onClickAway={(e) => {
+            if (bellRef.current?.contains(e.target as Node)) return;
+            close(false);
+          }}
+        >
+          <Paper
+            ref={panelRef}
+            elevation={8}
+            data-cy="reminders-panel"
+            role="dialog"
+            aria-label="Avisos"
+            tabIndex={-1}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                close();
+              }
+            }}
+            sx={{
+              // No celular o sino fica longe da borda direita: o painel vai para o canto da janela.
+              position: { xs: 'fixed', sm: 'absolute' },
+              top: { xs: 52, sm: '100%' },
+              right: { xs: 8, sm: 0 },
+              zIndex: 'modal',
+              mt: 1,
+              p: 1.5,
+              width: 'min(22rem, 90vw)',
+              maxHeight: '70vh',
+              overflowY: 'auto',
+              outline: 'none',
+              color: 'text.primary',
+              whiteSpace: 'normal',
+            }}
+          >
+            <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography component="strong" sx={{ fontWeight: 700 }}>
+                Avisos
+              </Typography>
+              <TextAction data-cy="reminders-settings-toggle" onClick={() => void toggleSettings()}>
+                {settings ? 'fechar preferências' : 'preferências'}
+              </TextAction>
+            </Stack>
+            {settingsError && <Notice severity="error">{settingsError}</Notice>}
+            {settings && (
+              <Box
+                component="form"
+                data-cy="reminders-settings"
+                onSubmit={saveSettings}
+                sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1.5, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}
+              >
+                <Field
+                  dataCy="reminders-lead-days"
+                  label="Avisar com quantos dias de antecedência"
                   type="number"
-                  min={0}
-                  max={15}
                   value={leadDaysText}
-                  onChange={(e) => setLeadDaysText(e.target.value)}
+                  onChange={setLeadDaysText}
                   required
-                />{' '}
-                dias de antecedência
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  data-cy="reminders-kind-invoices"
-                  checked={settings.invoices}
-                  onChange={(e) => setSettings({ ...settings, invoices: e.target.checked })}
-                />{' '}
-                faturas
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  data-cy="reminders-kind-recurrences"
-                  checked={settings.recurrences}
-                  onChange={(e) => setSettings({ ...settings, recurrences: e.target.checked })}
-                />{' '}
-                recorrências
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  data-cy="reminders-kind-budgets"
-                  checked={settings.budgets}
-                  onChange={(e) => setSettings({ ...settings, budgets: e.target.checked })}
-                />{' '}
-                orçamentos e metas
-              </label>
-              <fieldset className="reminders-email" data-cy="reminders-email-section">
-                <legend>Resumo diário por e-mail</legend>
-                <input
-                  data-cy="reminders-email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  aria-label="E-mail para o resumo"
-                  value={emailText}
-                  onChange={(e) => setEmailText(e.target.value)}
+                  slotProps={{ htmlInput: { min: 0, max: 15 } }}
+                  sx={{ mt: 1, mb: 0.5 }}
                 />
-                <label>
-                  <input
-                    type="checkbox"
-                    data-cy="reminders-email-enabled"
-                    checked={email?.enabled ?? false}
-                    onChange={(e) => email && setEmail({ ...email, enabled: e.target.checked })}
-                  />{' '}
-                  receber às{' '}
-                  <select
-                    data-cy="reminders-email-hour"
-                    aria-label="Hora do resumo"
-                    value={email?.sendHour ?? 8}
-                    onChange={(e) => email && setEmail({ ...email, sendHour: Number(e.target.value) })}
-                  >
-                    {Array.from({ length: 24 }, (_, h) => (
-                      <option key={h} value={h}>
-                        {String(h).padStart(2, '0')}h
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {email?.email && (
-                  <span className="sub" data-cy="reminders-email-status" data-confirmed={email.emailConfirmed}>
-                    {email.emailConfirmed ? (
-                      'e-mail confirmado'
-                    ) : (
-                      <>
-                        aguardando confirmação: abra o link enviado para {email.email}{' '}
-                        <button
-                          type="button"
-                          className="link"
-                          data-cy="reminders-email-resend"
-                          onClick={() =>
-                            void remindersApi
-                              .resendEmail()
-                              .then(() => setEmailNotice(`Link reenviado para ${email.email}.`))
-                              .catch((err: unknown) => setSettingsError(err instanceof Error ? err.message : 'Erro inesperado.'))
-                          }
-                        >
-                          reenviar link
-                        </button>
-                      </>
-                    )}
-                  </span>
-                )}
-                {emailNotice && (
-                  <span className="sub" data-cy="reminders-email-notice">
-                    {emailNotice}
-                  </span>
-                )}
-              </fieldset>
-              <button type="submit" className="primary small" data-cy="reminders-settings-save">
-                Salvar
-              </button>
-            </form>
-          )}
-          {!reminders ? (
-            <p className="muted" data-cy="reminders-loading">
-              Carregando…
-            </p>
-          ) : items.length === 0 ? (
-            <p className="muted" data-cy="reminders-empty">
-              Nada vencendo nos próximos {reminders?.leadDays ?? 3} dias.
-            </p>
-          ) : (
-            <ul>
-              {items.map((r) => (
-                <li key={r.key} className="reminder-row" data-cy="reminder-row">
-                  <button
-                    type="button"
-                    className={`reminder ${r.urgency.toLowerCase()}`}
-                    data-cy="reminder-item"
-                    data-kind={r.kind}
-                    data-urgency={r.urgency}
-                    onClick={() => {
-                      setOpen(false);
-                      onOpen(r);
-                    }}
-                  >
-                    <span className="reminder-title">{r.title}</span>
-                    <span className="sub">{detailOf(r, money)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="link dismiss"
-                    data-cy="reminder-dismiss"
-                    title={r.kind === 'InvoiceDue' ? 'Dispensar (volta se a fatura vencer sem pagamento)' : 'Dispensar este aviso'}
-                    aria-label={`Dispensar: ${r.title}`}
-                    onClick={() => void dismiss(r.key)}
-                  >
-                    dispensar
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                <KindCheck
+                  dataCy="reminders-kind-invoices"
+                  label="faturas"
+                  checked={settings.invoices}
+                  onChange={(checked) => setSettings({ ...settings, invoices: checked })}
+                />
+                <KindCheck
+                  dataCy="reminders-kind-recurrences"
+                  label="recorrências"
+                  checked={settings.recurrences}
+                  onChange={(checked) => setSettings({ ...settings, recurrences: checked })}
+                />
+                <KindCheck
+                  dataCy="reminders-kind-budgets"
+                  label="orçamentos e metas"
+                  checked={settings.budgets}
+                  onChange={(checked) => setSettings({ ...settings, budgets: checked })}
+                />
+                <Box
+                  component="fieldset"
+                  data-cy="reminders-email-section"
+                  sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, m: 0, mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}
+                >
+                  <Box component="legend" sx={{ px: 0.5, fontSize: '0.8rem', color: 'text.secondary' }}>
+                    Resumo diário por e-mail
+                  </Box>
+                  <Field
+                    dataCy="reminders-email"
+                    label="E-mail para o resumo"
+                    type="email"
+                    placeholder="seu@email.com"
+                    value={emailText}
+                    onChange={setEmailText}
+                  />
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <KindCheck
+                      dataCy="reminders-email-enabled"
+                      label="receber às"
+                      checked={email?.enabled ?? false}
+                      onChange={(checked) => email && setEmail({ ...email, enabled: checked })}
+                    />
+                    <SelectField
+                      dataCy="reminders-email-hour"
+                      label="Hora do resumo"
+                      value={String(email?.sendHour ?? 8)}
+                      onChange={(v) => email && setEmail({ ...email, sendHour: Number(v) })}
+                      options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}h` }))}
+                      sx={{ width: 110 }}
+                    />
+                  </Stack>
+                  {email?.email && (
+                    <Box
+                      component="span"
+                      data-cy="reminders-email-status"
+                      data-confirmed={email.emailConfirmed}
+                      sx={{ fontSize: '0.75rem', color: email.emailConfirmed ? 'success.main' : 'text.secondary' }}
+                    >
+                      {email.emailConfirmed ? (
+                        'e-mail confirmado'
+                      ) : (
+                        <>
+                          aguardando confirmação: abra o link enviado para {email.email}{' '}
+                          <TextAction
+                            type="button"
+                            data-cy="reminders-email-resend"
+                            onClick={() =>
+                              void remindersApi
+                                .resendEmail()
+                                .then(() => setEmailNotice(`Link reenviado para ${email.email}.`))
+                                .catch((err: unknown) => setSettingsError(err instanceof Error ? err.message : 'Erro inesperado.'))
+                            }
+                          >
+                            reenviar link
+                          </TextAction>
+                        </>
+                      )}
+                    </Box>
+                  )}
+                  {emailNotice && (
+                    <Box component="span" data-cy="reminders-email-notice" sx={{ fontSize: '0.75rem', color: 'info.main' }}>
+                      {emailNotice}
+                    </Box>
+                  )}
+                </Box>
+                <Button type="submit" variant="contained" data-cy="reminders-settings-save" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+                  Salvar
+                </Button>
+              </Box>
+            )}
+            {!reminders ? (
+              <Typography variant="body2" color="text.secondary" data-cy="reminders-loading">
+                Carregando…
+              </Typography>
+            ) : items.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" data-cy="reminders-empty">
+                Nada vencendo nos próximos {reminders?.leadDays ?? 3} dias.
+              </Typography>
+            ) : (
+              <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 0.75 }}>
+                {items.map((r) => (
+                  <Box component="li" key={r.key} data-cy="reminder-row" sx={{ display: 'flex', alignItems: 'stretch', gap: 0.5 }}>
+                    <ButtonBase
+                      className={`reminder ${r.urgency.toLowerCase()}`}
+                      data-cy="reminder-item"
+                      data-kind={r.kind}
+                      data-urgency={r.urgency}
+                      onClick={() => {
+                        close(false);
+                        onOpen(r);
+                      }}
+                      sx={{
+                        flex: 1,
+                        display: 'block',
+                        textAlign: 'left',
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: 'background.default',
+                        borderLeft: 3,
+                        borderLeftColor: r.urgency === 'Overdue' ? 'error.main' : r.urgency === 'Today' ? 'warning.main' : 'info.main',
+                        '&:hover, &.Mui-focusVisible': { bgcolor: 'action.hover' },
+                      }}
+                    >
+                      <Box component="span" sx={{ display: 'block', fontWeight: 600, fontSize: '0.875rem' }}>
+                        {r.title}
+                      </Box>
+                      <Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {detailOf(r, money)}
+                      </Box>
+                    </ButtonBase>
+                    <TextAction
+                      type="button"
+                      data-cy="reminder-dismiss"
+                      title={r.kind === 'InvoiceDue' ? 'Dispensar (volta se a fatura vencer sem pagamento)' : 'Dispensar este aviso'}
+                      aria-label={`Dispensar: ${r.title}`}
+                      onClick={() => void dismiss(r.key)}
+                    >
+                      dispensar
+                    </TextAction>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Paper>
+        </ClickAwayListener>
       )}
-    </div>
+    </Box>
+  );
+}
+
+/** Tipo de aviso (ou o e-mail) ligado/desligado: Checkbox do MUI com o `data-cy` no `<input>`. */
+function KindCheck({
+  dataCy,
+  label,
+  checked,
+  onChange,
+}: {
+  dataCy: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <FormControlLabel
+      label={label}
+      sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
+      control={
+        <Checkbox
+          size="small"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          slotProps={{ input: { 'data-cy': dataCy } as object }}
+        />
+      }
+    />
   );
 }

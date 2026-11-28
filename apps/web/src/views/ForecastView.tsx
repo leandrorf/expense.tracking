@@ -1,8 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableFooter from '@mui/material/TableFooter';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
 import { ApiError } from '../api/client';
 import { goalsApi, type MonthlyGoal } from '../api/goals';
 import { forecastApi, type CashForecast, type MonthFlow } from '../api/reports';
 import { goalOfMonth, termFor } from '../goalMath';
+import { Notice, SelectField } from '../ui';
 
 type Scope = 'total' | 'personal' | 'business';
 
@@ -67,141 +80,144 @@ export function ForecastView() {
 
   return (
     <section data-cy="forecast">
-      <h2>Previsão de caixa</h2>
+      <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+        Previsão de caixa
+      </Typography>
 
-      <div className="filters">
-        <label htmlFor="forecast-scope">Escopo:</label>
-        <select id="forecast-scope" data-cy="forecast-scope" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
-          {SCOPES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="forecast-months">Meses:</label>
-        <select
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+        <SelectField
+          id="forecast-scope"
+          label="Escopo"
+          dataCy="forecast-scope"
+          value={scope}
+          onChange={(v) => setScope(v as Scope)}
+          options={SCOPES}
+          sx={{ minWidth: 160 }}
+        />
+        <SelectField
           id="forecast-months"
-          data-cy="forecast-months"
-          value={months}
-          onChange={(e) => setMonths(Number(e.target.value))}
-        >
-          {HORIZONS.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-        </select>
-        <button className="ghost small" data-cy="forecast-refresh" onClick={() => void load(months)}>
+          label="Meses"
+          dataCy="forecast-months"
+          value={String(months)}
+          onChange={(v) => setMonths(Number(v))}
+          options={HORIZONS.map((h) => ({ value: String(h), label: h }))}
+          sx={{ minWidth: 90 }}
+        />
+        <Button variant="outlined" color="inherit" data-cy="forecast-refresh" onClick={() => void load(months)}>
           atualizar
-        </button>
-      </div>
+        </Button>
+      </Stack>
 
       {forecast && (
-        <p className="notice" data-cy="forecast-notice">
+        <Notice dataCy="forecast-notice">
           {forecast.notice} Compras no cartão entram pela fatura, no mês do vencimento.{' '}
           <span data-cy="forecast-recurring-notice">
             Recorrências entram como "previsto" de hoje em diante, até você lançar ou pular cada ocorrência (aba
             Recorrências); se você importar o extrato, pule a ocorrência que veio por ele para não contar duas vezes. O
             reajuste anual ainda não confirmado entra estimado, pelo último acumulado do índice ou pelo percentual fixo.
           </span>
-        </p>
+        </Notice>
       )}
       {forecast && forecast.accountsWithoutBalance > 0 && (
-        <p className="notice" data-cy="forecast-balance-notice">
+        <Notice severity="warning" dataCy="forecast-balance-notice">
           {forecast.accountsWithoutBalance === 1
             ? '1 conta ativa está sem saldo informado e fica fora do saldo projetado.'
             : `${forecast.accountsWithoutBalance} contas ativas estão sem saldo informado e ficam fora do saldo projetado.`}{' '}
           Informe o saldo na aba Contas.
-        </p>
+        </Notice>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {loading && !forecast ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : (
-        <div className="table-scroll">
-          <table className="data" data-cy="forecast-table">
-            <thead>
-              <tr>
-                <th>Mês</th>
-                <th className="right">Entradas</th>
-                <th className="right">Saídas</th>
-                <th className="right">Faturas</th>
-                <th className="right">Resultado</th>
+        // A tabela rola dentro do próprio contêiner no celular (MUI-3).
+        <TableContainer component={Paper} variant="outlined">
+          <Table data-cy="forecast-table" sx={{ minWidth: 720 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Mês</TableCell>
+                <TableCell align="right">Entradas</TableCell>
+                <TableCell align="right">Saídas</TableCell>
+                <TableCell align="right">Faturas</TableCell>
+                <TableCell align="right">Resultado</TableCell>
                 {showGoal && (
-                  <th className="right" title="Meta mensal do escopo e quanto sobra do resultado depois dela (aba Metas)">
+                  <TableCell align="right" title="Meta mensal do escopo e quanto sobra do resultado depois dela (aba Metas)">
                     Meta
-                  </th>
+                  </TableCell>
                 )}
-                <th className="right" title="Saldo das contas com saldo informado, no fim do mês">
+                <TableCell align="right" title="Saldo das contas com saldo informado, no fim do mês">
                   Saldo no fim do mês
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {rows.map(({ month, flow }) => (
-                <tr key={month} data-cy="forecast-row" data-month={month}>
-                  <td>{monthLabel(month)}</td>
-                  <td className="right" data-cy="forecast-income">
+                <TableRow key={month} data-cy="forecast-row" data-month={month} sx={{ verticalAlign: 'top' }}>
+                  <TableCell>{monthLabel(month)}</TableCell>
+                  <TableCell align="right" data-cy="forecast-income">
                     {money(flow.income)}
                     {flow.recurringIncome > 0 && (
-                      <span className="sub recurring" data-cy="forecast-income-recurring">
+                      <Sub recurring dataCy="forecast-income-recurring">
                         {money(flow.recurringIncome)} previsto
-                      </span>
+                      </Sub>
                     )}
-                  </td>
-                  <td className="right" data-cy="forecast-expense">
+                  </TableCell>
+                  <TableCell align="right" data-cy="forecast-expense">
                     {money(flow.expense)}
                     {flow.recurringExpense > 0 && (
-                      <span className="sub recurring" data-cy="forecast-expense-recurring">
+                      <Sub recurring dataCy="forecast-expense-recurring">
                         {money(flow.recurringExpense)} previsto
-                      </span>
+                      </Sub>
                     )}
-                  </td>
-                  <td className="right" data-cy="forecast-invoices">
+                  </TableCell>
+                  <TableCell align="right" data-cy="forecast-invoices">
                     {money(flow.invoices)}
                     {flow.invoices > 0 && (
-                      <span className="sub" data-cy="forecast-invoices-remaining">
+                      <Sub dataCy="forecast-invoices-remaining">
                         {flow.invoicesRemaining > 0 ? `falta pagar ${money(flow.invoicesRemaining)}` : 'paga'}
-                      </span>
+                      </Sub>
                     )}
                     {flow.recurringInvoices !== 0 && (
-                      <span className="sub recurring" data-cy="forecast-invoices-recurring">
+                      <Sub recurring dataCy="forecast-invoices-recurring">
                         {money(flow.recurringInvoices)} previsto
-                      </span>
+                      </Sub>
                     )}
-                  </td>
-                  <td className={`right ${flow.result < 0 ? 'negative' : flow.result > 0 ? 'positive' : ''}`} data-cy="forecast-result">
+                  </TableCell>
+                  <TableCell align="right" data-cy="forecast-result" sx={{ color: tone(flow.result, true), fontWeight: 600 }}>
                     {money(flow.result)}
                     {flow.estimatedRecurring > 0 && (
-                      <span className="sub recurring" data-cy="forecast-estimated" title="Reajuste anual ainda não confirmado na aba Recorrências">
+                      <Sub recurring dataCy="forecast-estimated" title="Reajuste anual ainda não confirmado na aba Recorrências">
                         inclui {money(flow.estimatedRecurring)} de reajuste estimado
-                      </span>
+                      </Sub>
                     )}
-                  </td>
+                  </TableCell>
                   {showGoal && <GoalCell term={goalRows[rows.findIndex((r) => r.month === month)]} flow={flow} money={money} />}
-                  <td
-                    className={`right ${flow.balance !== null && flow.balance < 0 ? 'negative' : ''}`}
-                    data-cy="forecast-balance"
-                  >
-                    {flow.balance === null ? <span className="muted">sem saldo</span> : money(flow.balance)}
-                  </td>
-                </tr>
+                  <TableCell align="right" data-cy="forecast-balance" sx={{ color: tone(flow.balance) }}>
+                    {flow.balance === null ? (
+                      <Box component="span" sx={{ color: 'text.secondary' }}>
+                        sem saldo
+                      </Box>
+                    ) : (
+                      money(flow.balance)
+                    )}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-            <tfoot>
-              <tr data-cy="forecast-sum">
-                <th>Período</th>
-                <th className="right">{money(sum((f) => f.income))}</th>
-                <th className="right">{money(sum((f) => f.expense))}</th>
-                <th className="right">{money(sum((f) => f.invoices))}</th>
-                <th className="right">{money(sum((f) => f.result))}</th>
-                {showGoal && <th />}
-                <th />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+            </TableBody>
+            <TableFooter>
+              <TableRow data-cy="forecast-sum" sx={{ '& th': { fontWeight: 700, color: 'text.primary', fontSize: '0.875rem' } }}>
+                <TableCell component="th">Período</TableCell>
+                <TableCell component="th" align="right">{money(sum((f) => f.income))}</TableCell>
+                <TableCell component="th" align="right">{money(sum((f) => f.expense))}</TableCell>
+                <TableCell component="th" align="right">{money(sum((f) => f.invoices))}</TableCell>
+                <TableCell component="th" align="right">{money(sum((f) => f.result))}</TableCell>
+                {showGoal && <TableCell component="th" />}
+                <TableCell component="th" />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </TableContainer>
       )}
     </section>
   );
@@ -219,20 +235,44 @@ function GoalCell({
 }) {
   if (!term) {
     return (
-      <td className="right muted" data-cy="forecast-goal">
+      <TableCell align="right" data-cy="forecast-goal" sx={{ color: 'text.secondary' }}>
         sem meta
-      </td>
+      </TableCell>
     );
   }
 
   const { target, left } = goalOfMonth(term, flow);
   const label = term.kind === 'SpendCeiling' ? `teto ${money(target)}` : `guardar ${money(target)}`;
   return (
-    <td className={`right ${left < 0 ? 'negative' : ''}`} data-cy="forecast-goal">
+    <TableCell align="right" data-cy="forecast-goal" sx={{ color: left < 0 ? 'error.main' : undefined }}>
       {label}
-      <span className="sub" data-cy="forecast-goal-left">
-        {left < 0 ? `faltam ${money(-left)}` : `sobra ${money(left)}`}
-      </span>
-    </td>
+      <Sub dataCy="forecast-goal-left">{left < 0 ? `faltam ${money(-left)}` : `sobra ${money(left)}`}</Sub>
+    </TableCell>
   );
+}
+
+/** Linha menor dentro da célula: "previsto" (recorrência, em itálico), "falta pagar", a sobra da meta. */
+function Sub({ children, dataCy, recurring, title }: { children: ReactNode; dataCy?: string; recurring?: boolean; title?: string }) {
+  return (
+    <Box
+      component="span"
+      data-cy={dataCy}
+      title={title}
+      sx={{
+        display: 'block',
+        fontSize: '0.75rem',
+        color: recurring ? '#a78bfa' : 'text.secondary',
+        fontStyle: recurring ? 'italic' : undefined,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/** Cor do valor: negativo em vermelho, positivo em verde (resultado). */
+function tone(value: number | null, positive = false) {
+  if (value === null) return undefined;
+  if (value < 0) return 'error.main';
+  return positive && value > 0 ? 'success.main' : undefined;
 }

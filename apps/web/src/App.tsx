@@ -1,4 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import { Notice } from './ui';
 import {
   beginLogin,
   completeLogin,
@@ -26,6 +36,31 @@ import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
 type Tab = 'summary' | 'forecast' | 'budgets' | 'goals' | 'accounts' | 'cards' | 'transactions' | 'recurrences' | 'import' | 'accounting';
+
+/** Abas na ordem da barra; o `data-cy` de cada uma é `tab-<valor>`. */
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'summary', label: 'Resumo' },
+  { value: 'forecast', label: 'Previsão' },
+  { value: 'transactions', label: 'Lançamentos' },
+  { value: 'recurrences', label: 'Recorrências' },
+  { value: 'import', label: 'Importar' },
+  { value: 'budgets', label: 'Orçamentos' },
+  { value: 'goals', label: 'Metas' },
+  { value: 'accounts', label: 'Contas' },
+  { value: 'cards', label: 'Cartões' },
+  { value: 'accounting', label: 'Contador' },
+];
+
+/** Tela central (carregando, login): cartão no meio da página. */
+function Centered({ children }: { children: ReactNode }) {
+  return (
+    <Box component="main" sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
+      <Paper elevation={8} sx={{ width: '100%', maxWidth: 420, p: 4, borderRadius: 4 }}>
+        {children}
+      </Paper>
+    </Box>
+  );
+}
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
@@ -109,86 +144,81 @@ export function App() {
 
   if (status === 'loading') {
     return (
-      <main className="shell">
-        <div className="card">
-          <p>Carregando…</p>
-        </div>
-      </main>
+      <Centered>
+        <Typography>Carregando…</Typography>
+      </Centered>
     );
   }
 
   if (status !== 'authenticated') {
     return (
-      <main className="shell">
-        <div className="card">
-          <h1>Expense Tracking</h1>
-          <p className="subtitle">Controle de gastos pessoal e empresarial</p>
-          {message && <p className="error">{message}</p>}
-          <button data-cy="login" className="primary" onClick={() => void beginLogin()}>
-            Entrar com OAuth2 (PKCE)
-          </button>
-        </div>
-      </main>
+      <Centered>
+        <Typography variant="h1" component="h1">
+          Expense Tracking
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 3 }}>
+          Controle de gastos pessoal e empresarial
+        </Typography>
+        {message && (
+          <Notice severity="error" dataCy="login-error">
+            {message}
+          </Notice>
+        )}
+        <Button data-cy="login" variant="contained" size="large" fullWidth onClick={() => void beginLogin()}>
+          Entrar com OAuth2 (PKCE)
+        </Button>
+      </Centered>
     );
   }
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <strong>Expense Tracking</strong>
-        <nav className="tabs">
-          <button data-cy="tab-summary" className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}>
-            Resumo
-          </button>
-          <button data-cy="tab-forecast" className={tab === 'forecast' ? 'active' : ''} onClick={() => setTab('forecast')}>
-            Previsão
-          </button>
-          <button data-cy="tab-transactions" className={tab === 'transactions' ? 'active' : ''} onClick={() => setTab('transactions')}>
-            Lançamentos
-          </button>
-          <button data-cy="tab-recurrences" className={tab === 'recurrences' ? 'active' : ''} onClick={() => setTab('recurrences')}>
-            Recorrências
-          </button>
-          <button data-cy="tab-import" className={tab === 'import' ? 'active' : ''} onClick={() => setTab('import')}>
-            Importar
-          </button>
-          <button data-cy="tab-budgets" className={tab === 'budgets' ? 'active' : ''} onClick={() => setTab('budgets')}>
-            Orçamentos
-          </button>
-          <button data-cy="tab-goals" className={tab === 'goals' ? 'active' : ''} onClick={() => setTab('goals')}>
-            Metas
-          </button>
-          <button data-cy="tab-accounts" className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
-            Contas
-          </button>
-          <button data-cy="tab-cards" className={tab === 'cards' ? 'active' : ''} onClick={() => setTab('cards')}>
-            Cartões
-          </button>
-          <button data-cy="tab-accounting" className={tab === 'accounting' ? 'active' : ''} onClick={() => setTab('accounting')}>
-            Contador
-          </button>
-        </nav>
-        <div className="user">
-          <RemindersBell refreshKey={tab} onOpen={openReminder} />
-          <span data-cy="session-active" title={user?.sub ?? ''}>{user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa</span>
-          <button data-cy="logout" className="ghost" onClick={() => logout()}>
-            Sair
-          </button>
-        </div>
-      </header>
-
-      <main className="content">
-        {emailConfirmation && (
-          <p
-            className={`notice${emailConfirmation.ok ? '' : ' warning'}`}
-            data-cy="email-confirmation"
-            data-ok={emailConfirmation.ok}
+    <Box sx={{ minHeight: '100vh' }}>
+      <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+        <Toolbar variant="dense" sx={{ gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' }, py: { xs: 0.5, md: 0 } }}>
+          <Typography component="strong" sx={{ fontWeight: 700, whiteSpace: 'nowrap', order: 0 }}>
+            Expense Tracking
+          </Typography>
+          <Tabs
+            component="nav"
+            value={tab}
+            onChange={(_, value: Tab) => setTab(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            aria-label="Telas"
+            sx={{ flex: { xs: '1 1 100%', md: '1 1 0%' }, minWidth: 0, order: { xs: 2, md: 1 } }}
           >
-            {emailConfirmation.text}{' '}
-            <button type="button" className="link" onClick={() => setEmailConfirmation(null)}>
-              fechar
-            </button>
-          </p>
+            {TABS.map((t) => (
+              <Tab key={t.value} value={t.value} label={t.label} data-cy={`tab-${t.value}`} />
+            ))}
+          </Tabs>
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{ alignItems: 'center', ml: 'auto', order: { xs: 1, md: 2 }, fontSize: '0.8rem', color: 'text.secondary', whiteSpace: 'nowrap' }}
+          >
+            <RemindersBell refreshKey={tab} onOpen={openReminder} />
+            <Box component="span" data-cy="session-active" title={user?.sub ?? ''} sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              {user?.scope?.includes('expenses.write') ? '✎ ' : ''}sessão ativa
+            </Box>
+            <Button data-cy="logout" variant="outlined" color="inherit" onClick={() => logout()}>
+              Sair
+            </Button>
+          </Stack>
+        </Toolbar>
+      </AppBar>
+
+      <Box component="main" sx={{ maxWidth: 980, mx: 'auto', px: { xs: 2, sm: 2.5 }, py: 3 }}>
+        {emailConfirmation && (
+          <Notice
+            severity={emailConfirmation.ok ? 'success' : 'warning'}
+            dataCy="email-confirmation"
+            data-ok={emailConfirmation.ok}
+            onClose={() => setEmailConfirmation(null)}
+            slotProps={{ closeButton: { title: 'fechar' } }}
+          >
+            {emailConfirmation.text}
+          </Notice>
         )}
         {tab === 'summary' && <SummaryView onOpenGoals={() => setTab('goals')} />}
         {tab === 'forecast' && <ForecastView />}
@@ -225,7 +255,7 @@ export function App() {
           />
         )}
         {tab === 'accounting' && <AccountingExportView />}
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

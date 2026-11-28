@@ -1,4 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
+import ChevronRight from '@mui/icons-material/ChevronRight';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import {
   goalsApi,
@@ -13,6 +29,19 @@ import {
   type SavingsObjective,
   type SavingsObjectiveSituation,
 } from '../api/goals';
+import {
+  DateField,
+  Field,
+  MoneyField,
+  MonthField,
+  Notice,
+  ScopeSelect,
+  SelectField,
+  StatusChip,
+  TableBox,
+  TextAction,
+  type StatusTone,
+} from '../ui';
 
 const SCOPES: { scope: GoalScope; label: string; short: string }[] = [
   { scope: 'personal', label: 'Pessoal (PF)', short: 'PF' },
@@ -26,18 +55,18 @@ const KINDS: { kind: MonthlyGoalKind; label: string }[] = [
 ];
 
 /** ADR-0013, regra 5: o mesmo visual de situação dos orçamentos. */
-const MONTH_SITUATION: Record<MonthlyGoalSituation, { label: string; icon: string; css: string }> = {
-  Inside: { label: 'Dentro da meta', icon: '✓', css: 'ontrack' },
-  Attention: { label: 'Atenção', icon: '!', css: 'warning' },
-  Outside: { label: 'Fora da meta', icon: '✕', css: 'exceeded' },
+const MONTH_SITUATION: Record<MonthlyGoalSituation, { label: string; icon: string; tone: StatusTone }> = {
+  Inside: { label: 'Dentro da meta', icon: '✓', tone: 'ok' },
+  Attention: { label: 'Atenção', icon: '!', tone: 'attention' },
+  Outside: { label: 'Fora da meta', icon: '✕', tone: 'outside' },
 };
 
 /** ADR-0013, regra 7. */
-const OBJECTIVE_SITUATION: Record<SavingsObjectiveSituation, { label: string; icon: string; css: string }> = {
-  OnTrack: { label: 'No ritmo', icon: '✓', css: 'ontrack' },
-  Behind: { label: 'Atrasado', icon: '!', css: 'warning' },
-  Reached: { label: 'Atingido', icon: '★', css: 'ontrack' },
-  DeadlinePassed: { label: 'Prazo vencido', icon: '✕', css: 'exceeded' },
+const OBJECTIVE_SITUATION: Record<SavingsObjectiveSituation, { label: string; icon: string; tone: StatusTone }> = {
+  OnTrack: { label: 'No ritmo', icon: '✓', tone: 'ok' },
+  Behind: { label: 'Atrasado', icon: '!', tone: 'attention' },
+  Reached: { label: 'Atingido', icon: '★', tone: 'ok' },
+  DeadlinePassed: { label: 'Prazo vencido', icon: '✕', tone: 'outside' },
 };
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -88,17 +117,90 @@ function parseAmount(text: string): number {
   return Number(clean.includes(',') ? clean.replace(/\./g, '').replace(',', '.') : clean);
 }
 
+/** Título de uma parte da tela. */
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <Typography variant="h3" component="h3" sx={{ mt: 3, mb: 1.5 }}>
+      {children}
+    </Typography>
+  );
+}
+
+/** Um número do cartão: rótulo pequeno e valor. */
+function Figure({ label, children, dataCy }: { label: ReactNode; children: ReactNode; dataCy: string }) {
+  return (
+    <Box>
+      <Box component="dt" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+        {label}
+      </Box>
+      <Box component="dd" data-cy={dataCy} sx={{ m: 0, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function FigureList({ children }: { children: ReactNode }) {
+  return (
+    <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 1, m: 0, mb: 1.5 }}>
+      {children}
+    </Box>
+  );
+}
+
+/** Selo de situação com o ícone de hoje (✓ ! ✕ ★). */
+function SituationChip({ situation, label, dataCy }: { situation: { icon: string; tone: StatusTone }; label: string; dataCy?: string }) {
+  return (
+    <StatusChip
+      tone={situation.tone}
+      dataCy={dataCy}
+      label={
+        <>
+          <span aria-hidden="true">{situation.icon}</span> {label}
+        </>
+      }
+    />
+  );
+}
+
+/** Formulário em linha dentro de um cartão (o `RowForm` do projeto não leva `aria-label`). */
+function InlineForm({
+  onSubmit,
+  dataCy,
+  label,
+  children,
+}: {
+  onSubmit: (e: React.FormEvent) => void;
+  dataCy: string;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      component="form"
+      onSubmit={onSubmit}
+      data-cy={dataCy}
+      aria-label={label}
+      sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-start', mb: 1.5, '& > .MuiTextField-root': { flex: '1 1 140px' } }}
+    >
+      {children}
+    </Box>
+  );
+}
+
 /** MET-7 (ADR-0013): meta do mês de PF e PJ e os objetivos com aportes. */
 export function GoalsView() {
   // Muda quando a meta muda, para o histórico buscar de novo.
   const [revision, setRevision] = useState(0);
   return (
     <section>
-      <h2>Metas</h2>
-      <p className="hint">
+      <Typography variant="h2" component="h2" sx={{ mb: 1 }}>
+        Metas
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         A meta do mês compara o resultado da previsão (entradas − saídas − faturas que vencem no mês) com o que você quer
         guardar ou com um teto de gastos. Os objetivos somam o que você registra como guardado para cada um.
-      </p>
+      </Typography>
       <MonthlyGoals revision={revision} onChanged={() => setRevision((r) => r + 1)} />
       <GoalHistory revision={revision} />
       <Objectives onGoalChanged={() => setRevision((r) => r + 1)} />
@@ -143,69 +245,72 @@ function MonthlyGoals({ revision: outside, onChanged }: { revision: number; onCh
   }
 
   return (
-    <div className="goal-month" data-cy="goal-month" aria-busy={loading}>
-      <div className="month-nav">
-        <button
-          type="button"
-          className="ghost small"
+    <Box data-cy="goal-month" aria-busy={loading}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
+        <IconButton
           data-cy="goal-month-prev"
           aria-label="Mês anterior"
           disabled={month <= current}
           onClick={() => setMonth((m) => shiftMonth(m, -1))}
         >
-          ‹
-        </button>
-        <h3 data-cy="goal-month-label" aria-live="polite">
+          <ChevronLeft />
+        </IconButton>
+        <Typography variant="h3" component="h3" data-cy="goal-month-label" aria-live="polite">
           Meta de {monthLabel(month)}
-        </h3>
-        <button
-          type="button"
-          className="ghost small"
+        </Typography>
+        <IconButton
           data-cy="goal-month-next"
           aria-label="Próximo mês"
           disabled={month >= shiftMonth(current, 11)}
           onClick={() => setMonth((m) => shiftMonth(m, 1))}
         >
-          ›
-        </button>
-        <button
-          type="button"
-          className="ghost small"
+          <ChevronRight />
+        </IconButton>
+        <Button
+          variant="outlined"
+          color="inherit"
           data-cy="goal-month-refresh"
           onClick={() => setRevision((r) => r + 1)}
           disabled={loading}
         >
           atualizar
-        </button>
-      </div>
-      {shown && <p className="muted">{shown.notice}</p>}
+        </Button>
+      </Stack>
+      {shown && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          {shown.notice}
+        </Typography>
+      )}
       {notice && (
-        <p className="notice" data-cy="goal-notice">
+        <Notice severity="success" dataCy="goal-notice">
           {notice}
-        </p>
+        </Notice>
       )}
       {error && (
-        <p className="error" role="alert">
+        <Notice severity="error" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       {!shown && loading ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : (
-        shown &&
-        SCOPES.map(({ scope, label, short }) => (
-          <MonthlyScope
-            key={scope}
-            label={label}
-            short={short}
-            month={month}
-            status={shown[scope]}
-            goal={goals.find((g) => g.scope === scope && g.closedFromMonth === null) ?? null}
-            onChanged={changed}
-          />
-        ))
+        shown && (
+          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+            {SCOPES.map(({ scope, label, short }) => (
+              <MonthlyScope
+                key={scope}
+                label={label}
+                short={short}
+                month={month}
+                status={shown[scope]}
+                goal={goals.find((g) => g.scope === scope && g.closedFromMonth === null) ?? null}
+                onChanged={changed}
+              />
+            ))}
+          </Box>
+        )
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -263,110 +368,99 @@ function MonthlyScope(props: {
   const ceiling = status.kind === 'SpendCeiling';
 
   return (
-    <div
-      className="budget-group goal-scope"
-      data-cy={`goal-scope-${status.scope}`}
-      data-situation={status.situation ?? 'none'}
-    >
-      <div className="budget-status-head">
-        <h4>{label}</h4>
-        {situation && (
-          <span className={`health-badge ${situation.css}`} data-cy="goal-situation">
-            <span aria-hidden="true">{situation.icon}</span> {situation.label}
-          </span>
-        )}
-      </div>
+    <Paper variant="outlined" data-cy={`goal-scope-${status.scope}`} data-situation={status.situation ?? 'none'} sx={{ p: 2 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="subtitle1" component="h4" sx={{ fontWeight: 700 }}>
+          {label}
+        </Typography>
+        {situation && <SituationChip situation={situation} label={situation.label} dataCy="goal-situation" />}
+      </Stack>
       {status.kind ? (
-        <p data-cy="goal-kind-label">
+        <Typography variant="body2" data-cy="goal-kind-label" sx={{ mb: 1.5 }}>
           <strong>{goalLabel(status.kind, status.amount, status.percent)}</strong>
           {status.kind === 'SavePercent' && status.target != null && <> (alvo de {money(status.target)} neste mês)</>}
-        </p>
+        </Typography>
       ) : (
-        <p className="muted" data-cy="goal-kind-label">
+        <Typography variant="body2" color="text.secondary" data-cy="goal-kind-label" sx={{ mb: 1.5 }}>
           Sem meta {short} neste mês.
-        </p>
+        </Typography>
       )}
-      <dl className="budget-status-figures">
-        <div>
-          <dt>Entradas</dt>
-          <dd data-cy="goal-income">{money(status.income)}</dd>
-        </div>
-        <div>
-          <dt>Saídas + faturas</dt>
-          <dd data-cy="goal-outflows">{money(status.outflows)}</dd>
-        </div>
-        <div>
-          <dt>Resultado previsto</dt>
-          <dd data-cy="goal-result">{money(status.result)}</dd>
-        </div>
+      <FigureList>
+        <Figure label="Entradas" dataCy="goal-income">
+          {money(status.income)}
+        </Figure>
+        <Figure label="Saídas + faturas" dataCy="goal-outflows">
+          {money(status.outflows)}
+        </Figure>
+        <Figure label="Resultado previsto" dataCy="goal-result">
+          {money(status.result)}
+        </Figure>
         {status.target != null && (
-          <div>
-            <dt>{ceiling ? 'Teto' : 'Guardar'}</dt>
-            <dd data-cy="goal-target">{money(status.target)}</dd>
-          </div>
+          <Figure label={ceiling ? 'Teto' : 'Guardar'} dataCy="goal-target">
+            {money(status.target)}
+          </Figure>
         )}
         {status.canStillSpend != null && (
-          <div>
-            <dt>Ainda pode gastar</dt>
-            <dd data-cy="goal-can-spend">
-              <strong>{money(status.canStillSpend)}</strong>
-            </dd>
-          </div>
+          <Figure label="Ainda pode gastar" dataCy="goal-can-spend">
+            <strong>{money(status.canStillSpend)}</strong>
+          </Figure>
         )}
-      </dl>
+      </FigureList>
 
       {editing === 'none' ? (
-        <div className="actions">
-          <button type="button" className="ghost small" data-cy="goal-edit-open" onClick={() => open('set')}>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" color="inherit" data-cy="goal-edit-open" onClick={() => open('set')}>
             {goal ? 'mudar meta' : 'definir meta'}
-          </button>
+          </Button>
           {goal && (
-            <button type="button" className="ghost small" data-cy="goal-close-open" onClick={() => open('close')}>
+            <Button variant="outlined" color="inherit" data-cy="goal-close-open" onClick={() => open('close')}>
               encerrar
-            </button>
+            </Button>
           )}
-        </div>
+        </Stack>
       ) : (
-        <form className="row-form wrap" onSubmit={submit} data-cy="goal-form" aria-label={`Meta ${short}`}>
+        <InlineForm onSubmit={submit} dataCy="goal-form" label={`Meta ${short}`}>
           {editing === 'set' && (
             <>
-              <select data-cy="goal-kind" aria-label="Forma da meta" value={kind} onChange={(e) => setKind(e.target.value as MonthlyGoalKind)}>
-                {KINDS.map((k) => (
-                  <option key={k.kind} value={k.kind}>
-                    {k.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                data-cy="goal-value"
-                aria-label={kind === 'SavePercent' ? 'Percentual das entradas' : 'Valor'}
+              <SelectField
+                dataCy="goal-kind"
+                label="Forma da meta"
+                value={kind}
+                onChange={(v) => setKind(v as MonthlyGoalKind)}
+                options={KINDS.map((k) => ({ value: k.kind, label: k.label }))}
+              />
+              <MoneyField
+                dataCy="goal-value"
+                label={kind === 'SavePercent' ? 'Percentual das entradas' : 'Valor'}
                 placeholder={kind === 'SavePercent' ? '% das entradas' : 'Valor (R$)'}
-                inputMode="decimal"
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={setValue}
                 required
                 autoFocus
               />
             </>
           )}
-          <label className="inline-label">
-            {editing === 'set' ? 'a partir de' : 'deixa de valer a partir de'}
-            <input data-cy="goal-from" type="month" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} required />
-          </label>
-          <button data-cy="goal-save" className="primary" type="submit" disabled={saving}>
+          <MonthField
+            dataCy="goal-from"
+            label={editing === 'set' ? 'a partir de' : 'deixa de valer a partir de'}
+            value={fromMonth}
+            onChange={setFromMonth}
+            required
+          />
+          <Button data-cy="goal-save" variant="contained" type="submit" disabled={saving} sx={{ height: 40 }}>
             {saving ? 'Salvando…' : editing === 'close' ? 'Encerrar' : 'Salvar'}
-          </button>
-          <button type="button" className="ghost" onClick={() => setEditing('none')} disabled={saving}>
+          </Button>
+          <Button variant="outlined" color="inherit" type="button" onClick={() => setEditing('none')} disabled={saving} sx={{ height: 40 }}>
             Cancelar
-          </button>
-        </form>
+          </Button>
+        </InlineForm>
       )}
       {error && (
-        <p className="error" role="alert" data-cy="goal-error">
+        <Notice severity="error" role="alert" dataCy="goal-error" sx={{ mt: 1, mb: 0 }}>
           {error}
-        </p>
+        </Notice>
       )}
-    </div>
+    </Paper>
   );
 }
 
@@ -388,9 +482,9 @@ function GoalHistory({ revision }: { revision: number }) {
 
   if (error) {
     return (
-      <p className="error" role="alert">
+      <Notice severity="error" role="alert">
         {error}
-      </p>
+      </Notice>
     );
   }
 
@@ -400,42 +494,47 @@ function GoalHistory({ revision }: { revision: number }) {
 
   const cell = (h: MonthlyGoalHistoryScope) =>
     h.achieved === null ? (
-      <td className="muted" data-cy={`history-${h.scope}`} data-achieved="none">
+      <TableCell data-cy={`history-${h.scope}`} data-achieved="none" sx={{ color: 'text.secondary' }}>
         sem meta
-      </td>
+      </TableCell>
     ) : (
-      <td data-cy={`history-${h.scope}`} data-achieved={h.achieved}>
-        <span className={`health-badge ${h.achieved ? 'ontrack' : 'exceeded'}`}>
-          <span aria-hidden="true">{h.achieved ? '✓' : '✕'}</span> {h.achieved ? 'Atingida' : 'Não atingida'}
-        </span>{' '}
+      <TableCell data-cy={`history-${h.scope}`} data-achieved={h.achieved}>
+        <SituationChip
+          situation={{ icon: h.achieved ? '✓' : '✕', tone: h.achieved ? 'ok' : 'outside' }}
+          label={h.achieved ? 'Atingida' : 'Não atingida'}
+        />{' '}
         {h.kind === 'SpendCeiling'
           ? `gastou ${money(h.outflows)} de ${money(h.target ?? 0)}`
           : `guardou ${money(h.result)} de ${money(h.target ?? 0)}`}
-      </td>
+      </TableCell>
     );
 
   return (
-    <div className="goal-history" data-cy="goal-history">
-      <h4>Últimos meses</h4>
-      <table className="data">
-        <thead>
-          <tr>
-            <th>Mês</th>
-            <th>Pessoal (PF)</th>
-            <th>Empresa (PJ)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...months].reverse().map((m) => (
-            <tr key={m.month} data-cy="goal-history-row" data-month={m.month}>
-              <td>{monthLabel(m.month)}</td>
-              {cell(m.personal)}
-              {cell(m.business)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Box data-cy="goal-history" sx={{ mt: 2 }}>
+      <Typography variant="subtitle1" component="h4" sx={{ fontWeight: 700, mb: 1 }}>
+        Últimos meses
+      </Typography>
+      <TableBox>
+        <Table sx={{ minWidth: 600 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Mês</TableCell>
+              <TableCell>Pessoal (PF)</TableCell>
+              <TableCell>Empresa (PJ)</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {[...months].reverse().map((m) => (
+              <TableRow key={m.month} data-cy="goal-history-row" data-month={m.month}>
+                <TableCell>{monthLabel(m.month)}</TableCell>
+                {cell(m.personal)}
+                {cell(m.business)}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableBox>
+    </Box>
   );
 }
 
@@ -518,96 +617,97 @@ function Objectives({ onGoalChanged }: { onGoalChanged: () => void }) {
   }
 
   return (
-    <div className="objectives" data-cy="objectives" data-loading={loading}>
-      <h3 className="section-title">Objetivos</h3>
-      <p className="hint">
+    <Box data-cy="objectives" data-loading={loading}>
+      <SectionTitle>Objetivos</SectionTitle>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Registre o que você guardou para cada objetivo (uma retirada é um valor negativo). O que você registra aqui não é
         lançamento: não aparece no Resumo, nos orçamentos nem na previsão.
-      </p>
-      <form className="row-form wrap" onSubmit={create} data-cy="objective-form" aria-label="Novo objetivo">
-        <select data-cy="objective-scope" aria-label="Escopo" value={scope} onChange={(e) => setScope(e.target.value as GoalScope)}>
-          {SCOPES.map((s) => (
-            <option key={s.scope} value={s.scope}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <input
-          data-cy="objective-name"
-          aria-label="Nome do objetivo"
+      </Typography>
+      <InlineForm onSubmit={create} dataCy="objective-form" label="Novo objetivo">
+        <ScopeSelect dataCy="objective-scope" personal="personal" business="business" value={scope} onChange={(v) => setScope(v as GoalScope)} />
+        <Field
+          dataCy="objective-name"
+          label="Nome do objetivo"
           placeholder="Ex.: Reserva de emergência"
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
+          onChange={setName}
           required
+          slotProps={{ htmlInput: { maxLength: 60 } }}
         />
-        <input
-          data-cy="objective-target"
-          aria-label="Alvo"
-          placeholder="Alvo (R$)"
-          inputMode="decimal"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          required
-        />
-        <label className="inline-label">
-          prazo (opcional)
-          <input data-cy="objective-deadline" type="month" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-        </label>
-        <button data-cy="objective-submit" className="primary" type="submit" disabled={creating}>
+        <MoneyField dataCy="objective-target" label="Alvo" placeholder="Alvo (R$)" value={target} onChange={setTarget} required />
+        <MonthField dataCy="objective-deadline" label="prazo (opcional)" value={deadline} onChange={setDeadline} />
+        <Button data-cy="objective-submit" variant="contained" type="submit" disabled={creating} sx={{ height: 40 }}>
           {creating ? 'Criando…' : 'Criar objetivo'}
-        </button>
-      </form>
+        </Button>
+      </InlineForm>
       {formError && (
-        <p className="error" role="alert" data-cy="objective-form-error">
+        <Notice severity="error" role="alert" dataCy="objective-form-error">
           {formError}
-        </p>
+        </Notice>
       )}
       {needed.length > 0 && (
-        <div className="objectives-needed" data-cy="objectives-needed">
+        <Paper variant="outlined" data-cy="objectives-needed" sx={{ p: 1.5, mb: 2 }}>
           {needed.map((n) => (
-            <p key={n.scope} data-cy={`objectives-needed-${n.scope}`} data-total={n.total}>
-              Para chegar no prazo, os objetivos {n.short} precisam de <strong>{money(n.total)}</strong> por mês.{' '}
-              <button type="button" className="ghost small" data-cy={`objectives-use-as-goal-${n.scope}`} onClick={() => void applyAsGoal(n.scope, n.short, n.total)}>
+            <Stack
+              key={n.scope}
+              direction="row"
+              spacing={1}
+              useFlexGap
+              data-cy={`objectives-needed-${n.scope}`}
+              data-total={n.total}
+              sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
+            >
+              <Typography variant="body2">
+                Para chegar no prazo, os objetivos {n.short} precisam de <strong>{money(n.total)}</strong> por mês.
+              </Typography>
+              <Button
+                variant="outlined"
+                color="inherit"
+                data-cy={`objectives-use-as-goal-${n.scope}`}
+                onClick={() => void applyAsGoal(n.scope, n.short, n.total)}
+              >
                 usar como meta {n.short}
-              </button>
-            </p>
+              </Button>
+            </Stack>
           ))}
-        </div>
+        </Paper>
       )}
       {goalNotice && (
-        <p className="notice" data-cy="objectives-goal-notice">
+        <Notice severity="success" dataCy="objectives-goal-notice">
           {goalNotice}
-        </p>
+        </Notice>
       )}
-      <label className="inline-label">
-        <input
-          data-cy="objectives-show-archived"
-          type="checkbox"
-          checked={showArchived}
-          onChange={(e) => setShowArchived(e.target.checked)}
-        />
-        mostrar arquivados
-      </label>
+      <FormControlLabel
+        sx={{ mb: 1 }}
+        control={
+          <Checkbox
+            size="small"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+            slotProps={{ input: { 'data-cy': 'objectives-show-archived' } as object }}
+          />
+        }
+        label="mostrar arquivados"
+      />
       {error && (
-        <p className="error" role="alert">
+        <Notice severity="error" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       {loading && objectives.length === 0 ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : objectives.length === 0 ? (
-        <p className="muted" data-cy="objectives-empty">
+        <Typography color="text.secondary" data-cy="objectives-empty">
           Nenhum objetivo ainda.
-        </p>
+        </Typography>
       ) : (
-        <ul className="budget-status-list">
+        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
           {objectives.map((o) => (
             <ObjectiveItem key={o.id} objective={o} onChanged={replace} />
           ))}
-        </ul>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -670,154 +770,183 @@ function ObjectiveItem({ objective: o, onChanged }: { objective: SavingsObjectiv
   const scopeShort = o.scope === 'business' ? 'PJ' : 'PF';
 
   return (
-    <li
-      className={`budget-status ${situation.css}`}
+    <Paper
+      component="li"
+      variant="outlined"
       data-cy="objective-row"
       data-name={o.name}
       data-situation={o.situation}
       data-archived={o.archived}
+      sx={{ p: 2, opacity: o.archived ? 0.7 : 1 }}
     >
-      <div className="budget-status-head">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <strong>
-          {o.name} <span className="muted">({scopeShort})</span>
+          {o.name}{' '}
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+            ({scopeShort})
+          </Box>
         </strong>
-        <span className={`health-badge ${situation.css}`} data-cy="objective-situation">
-          <span aria-hidden="true">{situation.icon}</span> {o.archived ? 'Arquivado' : situation.label}
-        </span>
-      </div>
-      <div
-        className="progress"
-        role="progressbar"
+        <SituationChip situation={situation} label={o.archived ? 'Arquivado' : situation.label} dataCy="objective-situation" />
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        color={situation.tone === 'outside' ? 'error' : situation.tone === 'attention' ? 'warning' : 'success'}
+        value={percent}
         aria-label={`Guardado de ${o.name}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-      >
-        <div className="progress-fill" style={{ width: `${percent}%` }} />
-      </div>
-      <dl className="budget-status-figures">
-        <div>
-          <dt>Guardado</dt>
-          <dd data-cy="objective-saved">
-            {money(o.saved)} de {money(o.target)}
-          </dd>
-        </div>
-        <div>
-          <dt>Falta</dt>
-          <dd data-cy="objective-missing">{money(o.missing)}</dd>
-        </div>
-        <div>
-          <dt>Prazo</dt>
-          <dd data-cy="objective-deadline-label">{o.deadline ? monthLabel(o.deadline) : 'sem prazo'}</dd>
-        </div>
+        sx={{ height: 8, borderRadius: 4, mb: 1.5 }}
+      />
+      <FigureList>
+        <Figure label="Guardado" dataCy="objective-saved">
+          {money(o.saved)} de {money(o.target)}
+        </Figure>
+        <Figure label="Falta" dataCy="objective-missing">
+          {money(o.missing)}
+        </Figure>
+        <Figure label="Prazo" dataCy="objective-deadline-label">
+          {o.deadline ? monthLabel(o.deadline) : 'sem prazo'}
+        </Figure>
         {o.neededPerMonth != null && (
-          <div>
-            <dt>Precisa por mês</dt>
-            <dd data-cy="objective-needed">{money(o.neededPerMonth)}</dd>
-          </div>
+          <Figure label="Precisa por mês" dataCy="objective-needed">
+            {money(o.neededPerMonth)}
+          </Figure>
         )}
-        <div>
-          <dt>Ritmo (últimos 3 meses)</dt>
-          <dd data-cy="objective-pace">{money(o.pace)}/mês</dd>
-        </div>
-        <div>
-          <dt>Chegada prevista</dt>
-          <dd data-cy="objective-arrival">{o.expectedArrival ? monthLabel(o.expectedArrival) : o.situation === 'Reached' ? 'já chegou' : '—'}</dd>
-        </div>
-      </dl>
+        <Figure label="Ritmo (últimos 3 meses)" dataCy="objective-pace">
+          {money(o.pace)}/mês
+        </Figure>
+        <Figure label="Chegada prevista" dataCy="objective-arrival">
+          {o.expectedArrival ? monthLabel(o.expectedArrival) : o.situation === 'Reached' ? 'já chegou' : '—'}
+        </Figure>
+      </FigureList>
 
-      <div className="actions">
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 1 }}>
         {o.archived ? (
-          <button type="button" className="ghost small" data-cy="objective-unarchive" disabled={busy} onClick={() => void run(() => goalsApi.unarchiveObjective(o.id))}>
+          <Button
+            variant="outlined"
+            color="inherit"
+            data-cy="objective-unarchive"
+            disabled={busy}
+            onClick={() => void run(() => goalsApi.unarchiveObjective(o.id))}
+          >
             reabrir
-          </button>
+          </Button>
         ) : (
           <>
-            <button type="button" className="ghost small" data-cy="contribution-open" onClick={() => setPanel(panel === 'contribute' ? 'none' : 'contribute')}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              data-cy="contribution-open"
+              onClick={() => setPanel(panel === 'contribute' ? 'none' : 'contribute')}
+            >
               registrar aporte
-            </button>
-            <button type="button" className="ghost small" data-cy="objective-edit-open" onClick={openEdit}>
+            </Button>
+            <Button variant="outlined" color="inherit" data-cy="objective-edit-open" onClick={openEdit}>
               editar
-            </button>
-            <button type="button" className="ghost small" data-cy="objective-archive" disabled={busy} onClick={() => void run(() => goalsApi.archiveObjective(o.id))}>
+            </Button>
+            <Button
+              variant="outlined"
+              color="inherit"
+              data-cy="objective-archive"
+              disabled={busy}
+              onClick={() => void run(() => goalsApi.archiveObjective(o.id))}
+            >
               arquivar
-            </button>
+            </Button>
           </>
         )}
-      </div>
+      </Stack>
 
       {panel === 'contribute' && (
-        <form className="row-form wrap" onSubmit={contribute} data-cy="contribution-form" aria-label={`Aporte em ${o.name}`}>
-          <select data-cy="contribution-direction" aria-label="Guardar ou retirar" value={direction} onChange={(e) => setDirection(e.target.value as 'save' | 'withdraw')}>
-            <option value="save">Guardei</option>
-            <option value="withdraw">Retirei</option>
-          </select>
-          <input
-            data-cy="contribution-amount"
-            aria-label="Valor do aporte"
+        <InlineForm onSubmit={contribute} dataCy="contribution-form" label={`Aporte em ${o.name}`}>
+          <SelectField
+            dataCy="contribution-direction"
+            label="Guardar ou retirar"
+            value={direction}
+            onChange={(v) => setDirection(v as 'save' | 'withdraw')}
+            options={[
+              { value: 'save', label: 'Guardei' },
+              { value: 'withdraw', label: 'Retirei' },
+            ]}
+          />
+          <MoneyField
+            dataCy="contribution-amount"
+            label="Valor do aporte"
             placeholder="Valor (R$)"
-            inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={setAmount}
             required
             autoFocus
           />
-          <input data-cy="contribution-date" aria-label="Data" type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} required />
-          <input data-cy="contribution-note" aria-label="Observação" placeholder="Observação (opcional)" maxLength={120} value={note} onChange={(e) => setNote(e.target.value)} />
-          <button data-cy="contribution-submit" className="primary" type="submit" disabled={busy}>
+          <DateField dataCy="contribution-date" label="Data" value={date} onChange={setDate} required slotProps={{ htmlInput: { max: today() } }} />
+          <Field
+            dataCy="contribution-note"
+            label="Observação"
+            placeholder="Observação (opcional)"
+            value={note}
+            onChange={setNote}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+          />
+          <Button data-cy="contribution-submit" variant="contained" type="submit" disabled={busy} sx={{ height: 40 }}>
             {busy ? 'Salvando…' : 'Registrar'}
-          </button>
-        </form>
+          </Button>
+        </InlineForm>
       )}
 
       {panel === 'edit' && (
-        <form className="row-form wrap" onSubmit={edit} data-cy="objective-edit-form" aria-label={`Editar ${o.name}`}>
-          <input data-cy="objective-edit-name" aria-label="Nome" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
-          <input data-cy="objective-edit-target" aria-label="Alvo" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} required />
-          <label className="inline-label">
-            prazo
-            <input data-cy="objective-edit-deadline" type="month" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-          </label>
-          <button data-cy="objective-edit-save" className="primary" type="submit" disabled={busy}>
+        <InlineForm onSubmit={edit} dataCy="objective-edit-form" label={`Editar ${o.name}`}>
+          <Field dataCy="objective-edit-name" label="Nome" value={name} onChange={setName} required slotProps={{ htmlInput: { maxLength: 60 } }} />
+          <MoneyField dataCy="objective-edit-target" label="Alvo" value={target} onChange={setTarget} required />
+          <MonthField dataCy="objective-edit-deadline" label="prazo" value={deadline} onChange={setDeadline} />
+          <Button data-cy="objective-edit-save" variant="contained" type="submit" disabled={busy} sx={{ height: 40 }}>
             Salvar
-          </button>
-          <button type="button" className="ghost" onClick={() => setPanel('none')} disabled={busy}>
+          </Button>
+          <Button variant="outlined" color="inherit" type="button" onClick={() => setPanel('none')} disabled={busy} sx={{ height: 40 }}>
             Cancelar
-          </button>
-        </form>
+          </Button>
+        </InlineForm>
       )}
 
       {error && (
-        <p className="error" role="alert" data-cy="objective-error">
+        <Notice severity="error" role="alert" dataCy="objective-error" sx={{ mb: 1 }}>
           {error}
-        </p>
+        </Notice>
       )}
 
       {o.contributions.length > 0 && (
-        <details className="objective-contributions">
+        <Box component="details" sx={{ fontSize: '0.875rem', '& summary': { cursor: 'pointer', color: 'text.secondary' } }}>
           <summary data-cy="contributions-toggle">Aportes ({o.contributions.length})</summary>
-          <ul>
+          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
             {o.contributions.map((c) => (
-              <li key={c.id} data-cy="contribution-row" data-amount={c.amount}>
+              <Box
+                component="li"
+                key={c.id}
+                data-cy="contribution-row"
+                data-amount={c.amount}
+                sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, py: 0.25 }}
+              >
                 <span>{dateLabel(c.date)}</span>
-                <span className={c.amount < 0 ? 'negative' : ''}>{money(c.amount)}</span>
-                {c.note && <span className="muted">{c.note}</span>}
+                <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums', color: c.amount < 0 ? 'error.main' : undefined }}>
+                  {money(c.amount)}
+                </Box>
+                {c.note && (
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    {c.note}
+                  </Box>
+                )}
                 {!o.archived && (
-                  <button
+                  <TextAction
                     type="button"
-                    className="link"
                     data-cy="contribution-delete"
                     disabled={busy}
                     onClick={() => void run(() => goalsApi.removeContribution(o.id, c.id))}
                   >
                     excluir
-                  </button>
+                  </TextAction>
                 )}
-              </li>
+              </Box>
             ))}
-          </ul>
-        </details>
+          </Box>
+        </Box>
       )}
-    </li>
+    </Paper>
   );
 }

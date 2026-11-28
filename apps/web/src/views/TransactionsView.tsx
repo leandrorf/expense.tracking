@@ -1,9 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { transactionsApi } from '../api/transactions';
 import type { Account, CreditCard, PaymentMethod, Transaction } from '../api/types';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
+import { DateField, Field, Notice, RowForm, SelectField, TableBox, TextAction } from '../ui';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -148,8 +159,7 @@ export function TransactionsView({
     resetForm();
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setSubmitting(true);
     setError(null);
     setConflict(false);
@@ -217,8 +227,7 @@ export function TransactionsView({
   }
 
   /** LNC-7: manda a versao que a lista leu; o que mudou em outra aba volta como conflito. */
-  async function handleRecategorize(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleRecategorize() {
     const items = transactions.filter((t) => selected.has(t.id)).map((t) => ({ id: t.id, version: t.version }));
     if (items.length === 0) return;
     setBulkSubmitting(true);
@@ -251,250 +260,272 @@ export function TransactionsView({
   // O cartao do lancamento em edicao aparece mesmo se foi desativado depois.
   const accountCards = cards.filter((c) => c.accountId === accountId && (c.isActive || c.id === editing?.creditCardId));
 
+  const title = (
+    <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+      Lançamentos
+    </Typography>
+  );
+
   if (loading) {
     return (
       <section>
-        <h2>Lançamentos</h2>
-        <p>Carregando…</p>
+        {title}
+        <Typography>Carregando…</Typography>
       </section>
     );
   }
 
   return (
     <section>
-      <h2>Lançamentos</h2>
+      {title}
 
       {accounts.length === 0 ? (
-        <p className="muted">Crie uma conta antes de registrar lançamentos.</p>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Crie uma conta antes de registrar lançamentos.
+        </Typography>
       ) : (
         <>
-        {editing && (
-          <div className="editing-banner" data-cy="tx-editing">
-            <strong>Editando: {editing.description}</strong>
-            {editing.imported && (
-              <p className="muted" data-cy="tx-imported-notice">
-                Este lançamento veio de uma importação; desfazer a importação ainda o apaga.
-              </p>
-            )}
-            {conflict && (
-              <p className="notice warning" data-cy="tx-conflict">
-                Este lançamento mudou enquanto você editava. O formulário mostra agora o que está gravado; refaça a
-                alteração e salve de novo.
-              </p>
-            )}
-          </div>
-        )}
-        <form className="row-form wrap" onSubmit={handleSubmit} data-cy="tx-form">
-          <select
-            data-cy="tx-account"
-            value={accountId}
-            disabled={editing !== null}
-            title={editing ? 'A conta de um lançamento não muda: exclua e lance de novo na outra conta.' : undefined}
-            onChange={(e) => setAccountId(e.target.value)}
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <select
-            data-cy="tx-type"
-            aria-label="Tipo"
-            value={type}
-            onChange={(e) => setType(e.target.value as 'Expense' | 'Income')}
-          >
-            <option value="Expense">Gasto</option>
-            <option value="Income">Receita</option>
-          </select>
-          <select data-cy="tx-payment-method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-            {paymentMethods.map((m) => (
-              <option key={m.code} value={m.code}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          {requiresCard && (
-            <select data-cy="tx-card" value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)} required>
-              <option value="">Selecione o cartão…</option>
-              {accountCards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label} •••• {c.lastFourDigits}
-                </option>
-              ))}
-            </select>
-          )}
-          <input data-cy="tx-description" placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} required />
-          <input
-            data-cy="tx-category"
-            placeholder="Categoria"
-            list="tx-category-suggestions"
-            autoComplete="off"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            required
-          />
-          <CategoryDatalist id="tx-category-suggestions" categories={categories} />
-          <input data-cy="tx-amount" placeholder="Valor" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          {canSplit && (
-            <select
-              data-cy="tx-installments"
-              aria-label="Parcelas"
-              title="O valor é o total da compra; cada parcela cai numa fatura"
-              value={installments}
-              onChange={(e) => setInstallments(Number(e.target.value))}
-            >
-              {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? 'À vista' : `${n}x`}
-                </option>
-              ))}
-            </select>
-          )}
-          <input data-cy="tx-date" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} required />
-          <input
-            data-cy="tx-notes"
-            placeholder="Observações (opcional)"
-            maxLength={500}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-          <button data-cy="tx-submit" className="primary" type="submit" disabled={submitting}>
-            {submitting ? 'Salvando…' : editing ? 'Salvar alteração' : 'Registrar'}
-          </button>
           {editing && (
-            <button data-cy="tx-cancel" className="ghost" type="button" onClick={cancelEdit}>
-              Cancelar
-            </button>
+            <Notice severity="info" dataCy="tx-editing" icon={false}>
+              <strong>Editando: {editing.description}</strong>
+              {editing.imported && (
+                <Typography variant="body2" color="text.secondary" data-cy="tx-imported-notice" sx={{ mt: 0.5 }}>
+                  Este lançamento veio de uma importação; desfazer a importação ainda o apaga.
+                </Typography>
+              )}
+              {conflict && (
+                <Typography variant="body2" color="warning.main" data-cy="tx-conflict" sx={{ mt: 0.5 }}>
+                  Este lançamento mudou enquanto você editava. O formulário mostra agora o que está gravado; refaça a
+                  alteração e salve de novo.
+                </Typography>
+              )}
+            </Notice>
           )}
-        </form>
+          <RowForm onSubmit={() => void handleSubmit()} dataCy="tx-form">
+            <SelectField
+              dataCy="tx-account"
+              label="Conta"
+              value={accountId}
+              disabled={editing !== null}
+              title={editing ? 'A conta de um lançamento não muda: exclua e lance de novo na outra conta.' : undefined}
+              onChange={setAccountId}
+              options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+            />
+            <SelectField
+              dataCy="tx-type"
+              label="Tipo"
+              value={type}
+              onChange={(v) => setType(v as 'Expense' | 'Income')}
+              options={[
+                { value: 'Expense', label: 'Gasto' },
+                { value: 'Income', label: 'Receita' },
+              ]}
+            />
+            <SelectField
+              dataCy="tx-payment-method"
+              label="Meio"
+              value={paymentMethod}
+              onChange={setPaymentMethod}
+              options={paymentMethods.map((m) => ({ value: m.code, label: m.name }))}
+            />
+            {requiresCard && (
+              <SelectField dataCy="tx-card" label="Cartão" value={creditCardId} onChange={setCreditCardId} required>
+                <option value="">Selecione o cartão…</option>
+                {accountCards.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label} •••• {c.lastFourDigits}
+                  </option>
+                ))}
+              </SelectField>
+            )}
+            <Field dataCy="tx-description" label="Descrição" value={description} onChange={setDescription} required />
+            <Field
+              dataCy="tx-category"
+              label="Categoria"
+              value={category}
+              onChange={setCategory}
+              required
+              slotProps={{ htmlInput: { list: 'tx-category-suggestions', autoComplete: 'off' } }}
+            />
+            <CategoryDatalist id="tx-category-suggestions" categories={categories} />
+            <Field
+              dataCy="tx-amount"
+              label="Valor"
+              type="number"
+              value={amount}
+              onChange={setAmount}
+              required
+              slotProps={{ htmlInput: { step: '0.01' } }}
+            />
+            {canSplit && (
+              <SelectField
+                dataCy="tx-installments"
+                label="Parcelas"
+                title="O valor é o total da compra; cada parcela cai numa fatura"
+                value={String(installments)}
+                onChange={(v) => setInstallments(Number(v))}
+                options={Array.from({ length: 24 }, (_, i) => i + 1).map((n) => ({
+                  value: String(n),
+                  label: n === 1 ? 'À vista' : `${n}x`,
+                }))}
+              />
+            )}
+            <DateField dataCy="tx-date" label="Data" value={occurredOn} onChange={setOccurredOn} required />
+            <Field
+              dataCy="tx-notes"
+              label="Observações (opcional)"
+              value={notes}
+              onChange={setNotes}
+              slotProps={{ htmlInput: { maxLength: 500 } }}
+            />
+            <Button data-cy="tx-submit" variant="contained" type="submit" disabled={submitting} sx={{ height: 40 }}>
+              {submitting ? 'Salvando…' : editing ? 'Salvar alteração' : 'Registrar'}
+            </Button>
+            {editing && (
+              <Button data-cy="tx-cancel" variant="outlined" color="inherit" type="button" onClick={cancelEdit} sx={{ height: 40 }}>
+                Cancelar
+              </Button>
+            )}
+          </RowForm>
         </>
       )}
 
-      <div className="filters">
-        <label>Filtrar por conta:</label>
-        <select value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)}>
-          <option value="">Todas</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SelectField
+        label="Filtrar por conta"
+        value={filterAccount}
+        onChange={setFilterAccount}
+        sx={{ minWidth: 220, mb: 2 }}
+        options={[{ value: '', label: 'Todas' }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]}
+      />
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {bulkOutcome && <BulkOutcomeNotice outcome={bulkOutcome} onClose={() => setBulkOutcome(null)} />}
       {selected.size > 0 && (
-        <form className="row-form wrap bulk-bar" onSubmit={handleRecategorize} data-cy="tx-bulk">
-          <strong data-cy="tx-bulk-count">
-            {selected.size} {selected.size === 1 ? 'selecionado' : 'selecionados'}
-          </strong>
-          <input
-            data-cy="tx-bulk-category"
-            placeholder="Nova categoria"
-            aria-label="Nova categoria para os selecionados"
-            list="tx-category-suggestions"
-            autoComplete="off"
-            maxLength={60}
-            value={bulkCategory}
-            onChange={(e) => setBulkCategory(e.target.value)}
-            required
-          />
-          <button data-cy="tx-bulk-apply" className="primary" type="submit" disabled={bulkSubmitting}>
-            {bulkSubmitting ? 'Recategorizando…' : 'Recategorizar'}
-          </button>
-          <button data-cy="tx-bulk-clear" className="ghost" type="button" onClick={() => setSelected(new Set())}>
-            Limpar seleção
-          </button>
-        </form>
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderColor: 'primary.main' }}>
+          <RowForm onSubmit={() => void handleRecategorize()} dataCy="tx-bulk">
+            <Typography component="strong" data-cy="tx-bulk-count" sx={{ fontWeight: 700, alignSelf: 'center' }}>
+              {selected.size} {selected.size === 1 ? 'selecionado' : 'selecionados'}
+            </Typography>
+            <Field
+              dataCy="tx-bulk-category"
+              label="Nova categoria"
+              value={bulkCategory}
+              onChange={setBulkCategory}
+              required
+              slotProps={{
+                htmlInput: {
+                  list: 'tx-category-suggestions',
+                  autoComplete: 'off',
+                  maxLength: 60,
+                  'aria-label': 'Nova categoria para os selecionados',
+                },
+              }}
+            />
+            <Button data-cy="tx-bulk-apply" variant="contained" type="submit" disabled={bulkSubmitting} sx={{ height: 40 }}>
+              {bulkSubmitting ? 'Recategorizando…' : 'Recategorizar'}
+            </Button>
+            <Button
+              data-cy="tx-bulk-clear"
+              variant="outlined"
+              color="inherit"
+              type="button"
+              onClick={() => setSelected(new Set())}
+              sx={{ height: 40 }}
+            >
+              Limpar seleção
+            </Button>
+          </RowForm>
+        </Paper>
       )}
       {transactions.length === 0 ? (
-        <p className="muted">Nenhum lançamento.</p>
+        <Typography color="text.secondary">Nenhum lançamento.</Typography>
       ) : (
-        <table className="data" data-cy="tx-table">
-          <thead>
-            <tr>
-              <th className="select-cell">
-                <input
-                  type="checkbox"
-                  data-cy="tx-select-all"
-                  aria-label="Selecionar todos"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                />
-              </th>
-              <th>Data</th>
-              <th>Descrição</th>
-              <th>Categoria</th>
-              <th>Meio</th>
-              <th>Conta</th>
-              <th className="right">Valor</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id} data-cy="tx-row" data-type={t.type} className={selected.has(t.id) ? 'selected' : undefined}>
-                <td className="select-cell">
-                  <input
-                    type="checkbox"
-                    data-cy="tx-select"
-                    aria-label={`Selecionar ${t.description}`}
-                    checked={selected.has(t.id)}
-                    onChange={() => toggleSelected(t.id)}
+        <TableBox>
+          <Table data-cy="tx-table" sx={{ minWidth: 860 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    size="small"
+                    checked={allSelected}
+                    indeterminate={selected.size > 0 && !allSelected}
+                    onChange={toggleAll}
+                    slotProps={{ input: { 'aria-label': 'Selecionar todos', 'data-cy': 'tx-select-all' } as object }}
                   />
-                </td>
-                <td>{t.occurredOn}</td>
-                <td>
-                  {t.description}
-                  {t.notes && (
-                    <span className="sub" data-cy="tx-notes-label">
-                      {t.notes}
-                    </span>
-                  )}
-                  {t.recurrenceId && (
-                    <span className="sub" data-cy="tx-recurring-label" title="Lançado a partir de uma recorrência">
-                      recorrência
-                    </span>
-                  )}
-                </td>
-                <td>{t.category}</td>
-                <td>{paymentMethods.find((m) => m.code === t.paymentMethod)?.name ?? t.paymentMethod}</td>
-                <td>{accountName(t.accountId)}</td>
-                <td className={`right ${t.type === 'Income' ? 'positive' : 'negative'}`} data-cy="tx-value">
-                  {t.type === 'Income' ? '+' : '−'}
-                  {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: t.currency })}
-                  {t.installments > 1 && (
-                    <span className="sub" data-cy="tx-installments-label">
-                      em {t.installments}x
-                    </span>
-                  )}
-                </td>
-                <td className="row-actions">
-                  <button className="link" data-cy="tx-edit" onClick={() => startEdit(t)}>
-                    editar
-                  </button>
-                  {onRepeat && !t.recurrenceId && t.installments === 1 && (
-                    <button
-                      className="link"
-                      data-cy="tx-repeat"
-                      title="Criar uma recorrência a partir deste lançamento"
-                      onClick={() => onRepeat(t)}
-                    >
-                      repetir
-                    </button>
-                  )}
-                  <button className="link-danger" onClick={() => void handleRemove(t.id)}>
-                    excluir
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </TableCell>
+                <TableCell>Data</TableCell>
+                <TableCell>Descrição</TableCell>
+                <TableCell>Categoria</TableCell>
+                <TableCell>Meio</TableCell>
+                <TableCell>Conta</TableCell>
+                <TableCell align="right">Valor</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {transactions.map((t) => (
+                <TableRow key={t.id} data-cy="tx-row" data-type={t.type} selected={selected.has(t.id)} sx={{ verticalAlign: 'top' }}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      size="small"
+                      checked={selected.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                      slotProps={{ input: { 'aria-label': `Selecionar ${t.description}`, 'data-cy': 'tx-select' } as object }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t.occurredOn}</TableCell>
+                  <TableCell>
+                    {t.description}
+                    {t.notes && <Sub dataCy="tx-notes-label">{t.notes}</Sub>}
+                    {t.recurrenceId && (
+                      <Sub dataCy="tx-recurring-label" title="Lançado a partir de uma recorrência">
+                        recorrência
+                      </Sub>
+                    )}
+                  </TableCell>
+                  <TableCell>{t.category}</TableCell>
+                  <TableCell>{paymentMethods.find((m) => m.code === t.paymentMethod)?.name ?? t.paymentMethod}</TableCell>
+                  <TableCell>{accountName(t.accountId)}</TableCell>
+                  <TableCell
+                    align="right"
+                    data-cy="tx-value"
+                    // `positive`/`negative` sao lidas pelos testes (transaction-income).
+                    className={t.type === 'Income' ? 'positive' : 'negative'}
+                    sx={{ whiteSpace: 'nowrap', color: t.type === 'Income' ? 'success.main' : 'error.main' }}
+                  >
+                    {t.type === 'Income' ? '+' : '−'}
+                    {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: t.currency })}
+                    {t.installments > 1 && <Sub dataCy="tx-installments-label">em {t.installments}x</Sub>}
+                  </TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                    <TextAction data-cy="tx-edit" onClick={() => startEdit(t)}>
+                      editar
+                    </TextAction>
+                    {onRepeat && !t.recurrenceId && t.installments === 1 && (
+                      <TextAction data-cy="tx-repeat" title="Criar uma recorrência a partir deste lançamento" onClick={() => onRepeat(t)}>
+                        repetir
+                      </TextAction>
+                    )}
+                    <TextAction danger onClick={() => void handleRemove(t.id)}>
+                      excluir
+                    </TextAction>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
     </section>
+  );
+}
+
+/** Linha menor dentro da célula (observação, recorrência, parcelas). */
+function Sub({ children, dataCy, title }: { children: ReactNode; dataCy?: string; title?: string }) {
+  return (
+    <Box component="span" data-cy={dataCy} title={title} sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>
+      {children}
+    </Box>
   );
 }
 
@@ -514,41 +545,43 @@ function plural(n: number, one: string, many: string): string {
 function BulkOutcomeNotice({ outcome, onClose }: { outcome: BulkOutcome; onClose: () => void }) {
   const done = outcome.updated + outcome.unchanged;
   return (
-    <div className="notice" data-cy="tx-bulk-result">
-      <p>
+    <Notice
+      severity={outcome.conflicts.length > 0 ? 'warning' : 'success'}
+      dataCy="tx-bulk-result"
+      onClose={onClose}
+      slotProps={{ closeButton: { title: 'fechar' } }}
+    >
+      <div>
         {plural(done, 'lançamento ficou', 'lançamentos ficaram')} em <strong>{outcome.category}</strong>.
-      </p>
+      </div>
       {outcome.conflicts.length > 0 && (
-        <div className="warning" data-cy="tx-bulk-conflicts">
-          <p>
+        <Box data-cy="tx-bulk-conflicts" sx={{ mt: 1 }}>
+          <div>
             {plural(outcome.conflicts.length, 'lançamento mudou', 'lançamentos mudaram')} em outra aba e não{' '}
             {outcome.conflicts.length === 1 ? 'foi alterado' : 'foram alterados'}. A lista mostra o que está gravado
             agora e {outcome.conflicts.length === 1 ? 'ele continua marcado' : 'eles continuam marcados'}:
-          </p>
-          <ul>
+          </div>
+          <Box component="ul" sx={{ my: 0.5, pl: 2.5 }}>
             {outcome.conflicts.map((t) => (
               <li key={t.id} data-cy="tx-bulk-conflict">
                 {t.description} — {t.category}
               </li>
             ))}
-          </ul>
-        </div>
+          </Box>
+        </Box>
       )}
       {outcome.notFound > 0 && (
-        <p className="muted" data-cy="tx-bulk-not-found">
+        <Typography variant="body2" color="text.secondary" data-cy="tx-bulk-not-found">
           {plural(outcome.notFound, 'lançamento já tinha sido excluído', 'lançamentos já tinham sido excluídos')}.
-        </p>
+        </Typography>
       )}
       {outcome.rejected > 0 && (
-        <p className="muted" data-cy="tx-bulk-rejected">
+        <Typography variant="body2" color="text.secondary" data-cy="tx-bulk-rejected">
           {plural(outcome.rejected, 'lançamento não pôde', 'lançamentos não puderam')} ser recategorizado(s); abra a
           edição para corrigi-lo(s).
-        </p>
+        </Typography>
       )}
-      <button className="link" type="button" onClick={onClose}>
-        fechar
-      </button>
-    </div>
+    </Notice>
   );
 }
 

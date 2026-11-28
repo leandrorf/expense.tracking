@@ -1,4 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import UploadFile from '@mui/icons-material/UploadFile';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import { importsApi, type ImportBatch } from '../api/imports';
 import {
@@ -9,6 +19,7 @@ import {
 } from '../api/reports';
 import { transactionsApi } from '../api/transactions';
 import type { CreditCard } from '../api/types';
+import { Field, Notice, RowForm, Stat, StatRow, TableBox, TextAction } from '../ui';
 
 /** A projeção do reporting recebe os lançamentos novos alguns segundos depois. */
 const PROJECTION_WAIT_MS = 20_000;
@@ -140,8 +151,7 @@ export function InvoiceReconciliationPanel({ card, dueMonth, currency, onChanged
     });
   }
 
-  function handleReconcile(e: React.FormEvent) {
-    e.preventDefault();
+  function handleReconcile() {
     void run(async () => {
       const result = await invoicesApi.reconcile(card.id, dueMonth, Number(bankTotal));
       setView((current) => ({ ...result, detail: current?.detail ?? null }));
@@ -163,171 +173,185 @@ export function InvoiceReconciliationPanel({ card, dueMonth, currency, onChanged
   const typedDifference = bankTotal !== '' && view ? Number(bankTotal) - view.appTotal : null;
 
   return (
-    <div className="reconciliation" data-cy="reconciliation">
-      <h3 className="section-title">Conferir com a fatura do banco</h3>
-      {error && <p className="error" role="alert">{error}</p>}
+    <Paper variant="outlined" data-cy="reconciliation" sx={{ p: 2, mb: 2 }}>
+      <Typography variant="h3" component="h3" sx={{ mb: 1.5 }}>
+        Conferir com a fatura do banco
+      </Typography>
+      {error && (
+        <Notice severity="error" role="alert">
+          {error}
+        </Notice>
+      )}
       {notice && (
-        <p className="notice" data-cy="reconciliation-notice">
+        <Notice severity="success" dataCy="reconciliation-notice">
           {notice}
-        </p>
+        </Notice>
       )}
 
       {view?.reconciliation && (
-        <p className="notice" data-cy="reconciliation-done">
+        <Notice
+          severity={view.reconciliation.changedSince ? 'warning' : 'success'}
+          dataCy="reconciliation-done"
+          action={
+            <TextAction type="button" data-cy="reconciliation-undo" disabled={busy} onClick={handleUndo}>
+              desfazer
+            </TextAction>
+          }
+        >
           Conferida em {new Date(view.reconciliation.reconciledAtUtc).toLocaleDateString('pt-BR')} com o total do banco de{' '}
           {money(view.reconciliation.bankTotal)}
           {view.reconciliation.difference !== 0 && ` (diferença aceita de ${money(view.reconciliation.difference)})`}.{' '}
           {view.reconciliation.changedSince && (
             <strong data-cy="reconciliation-changed">
-              A fatura mudou depois: o total do app era {money(view.reconciliation.appTotal)} e agora é {money(view.appTotal)}.{' '}
+              A fatura mudou depois: o total do app era {money(view.reconciliation.appTotal)} e agora é {money(view.appTotal)}.
             </strong>
           )}
-          <button className="link" type="button" data-cy="reconciliation-undo" disabled={busy} onClick={handleUndo}>
-            desfazer
-          </button>
-        </p>
+        </Notice>
       )}
 
-      <form className="row-form wrap" onSubmit={handleReconcile} data-cy="reconciliation-form">
-        <label className="field">
-          <span>Total da fatura do banco</span>
-          <input
-            data-cy="reconciliation-bank-total"
-            type="number"
-            step="0.01"
-            value={bankTotal}
-            onChange={(e) => setBankTotal(e.target.value)}
-            required
-          />
-        </label>
-        <span className="muted" data-cy="reconciliation-difference">
-          App: {view ? money(view.appTotal) : '…'}
-          {typedDifference !== null && ` · diferença ${money(typedDifference)}`}
-        </span>
-        <button className="primary" type="submit" data-cy="reconciliation-mark" disabled={busy || !view}>
+      <RowForm onSubmit={handleReconcile} dataCy="reconciliation-form">
+        <Field
+          dataCy="reconciliation-bank-total"
+          label="Total da fatura do banco"
+          type="number"
+          value={bankTotal}
+          onChange={setBankTotal}
+          required
+          slotProps={{ htmlInput: { step: '0.01' } }}
+          sx={{ maxWidth: 220 }}
+        />
+        <Button variant="contained" type="submit" data-cy="reconciliation-mark" disabled={busy || !view} sx={{ height: 40 }}>
           Marcar como conferida
-        </button>
-        <label className="field">
-          <span>Arquivo da fatura (OFX)</span>
-          <input
+        </Button>
+        <Button variant="outlined" color="inherit" component="label" disabled={busy} startIcon={<UploadFile />} sx={{ height: 40, position: 'relative' }}>
+          Arquivo da fatura (OFX)
+          {/* Continua um input de arquivo de verdade, transparente sobre o botão: os testes usam `selectFile`. */}
+          <Box
+            component="input"
+            sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             data-cy="reconciliation-file"
             type="file"
             accept=".ofx"
             disabled={busy}
-            onChange={(e) => handleFile(e.target.files?.[0])}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFile(e.target.files?.[0])}
           />
-        </label>
-      </form>
+        </Button>
+        <Typography variant="body2" color="text.secondary" data-cy="reconciliation-difference" sx={{ alignSelf: 'center', flexBasis: '100%' }}>
+          App: {view ? money(view.appTotal) : '…'}
+          {typedDifference !== null && ` · diferença ${money(typedDifference)}`}
+        </Typography>
+      </RowForm>
 
       {detail && (
         <>
-          <div className="cards-row" data-cy="reconciliation-totals">
-            <div className="stat">
-              <span className="stat-label">Banco (arquivo)</span>
-              <span className="stat-value" data-cy="reconciliation-file-total">{money(detail.fileTotal)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">App</span>
-              <span className="stat-value">{money(view.appTotal)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Diferença</span>
-              <span className={`stat-value ${detail.difference === 0 ? 'income' : 'expense'}`} data-cy="reconciliation-file-difference">
-                {money(detail.difference)}
-              </span>
-            </div>
-          </div>
+          <StatRow dataCy="reconciliation-totals">
+            <Stat size={{ xs: 12, sm: 4 }} label="Banco (arquivo)" value={money(detail.fileTotal)} valueDataCy="reconciliation-file-total" />
+            <Stat size={{ xs: 12, sm: 4 }} label="App" value={money(view.appTotal)} />
+            <Stat
+              size={{ xs: 12, sm: 4 }}
+              label="Diferença"
+              value={money(detail.difference)}
+              tone={detail.difference === 0 ? 'income' : 'expense'}
+              valueDataCy="reconciliation-file-difference"
+            />
+          </StatRow>
           {detail.suggestedDueMonth && detail.suggestedDueMonth !== dueMonth && (
-            <p className="notice warning" data-cy="reconciliation-suggested">
-              O arquivo parece ser da fatura de {detail.suggestedDueMonth.split('-').reverse().join('/')}.{' '}
-              <button className="link" type="button" onClick={() => onShowInvoice(detail.suggestedDueMonth!)}>
-                ver essa fatura
-              </button>
-            </p>
+            <Notice
+              severity="warning"
+              dataCy="reconciliation-suggested"
+              action={
+                <TextAction type="button" onClick={() => onShowInvoice(detail.suggestedDueMonth!)}>
+                  ver essa fatura
+                </TextAction>
+              }
+            >
+              O arquivo parece ser da fatura de {detail.suggestedDueMonth.split('-').reverse().join('/')}.
+            </Notice>
           )}
           {detail.explanation.unexplained !== 0 && (
-            <p className="muted" data-cy="reconciliation-unexplained">
+            <Typography variant="body2" color="text.secondary" data-cy="reconciliation-unexplained" sx={{ mb: 2 }}>
               O total declarado pelo banco difere da soma das linhas do arquivo em {money(detail.explanation.unexplained)}.
-            </p>
+            </Typography>
           )}
 
           {ORDER.map((group) => {
             const entries = detail.entries.filter((e) => e.group === group);
             if (entries.length === 0) return null;
             return (
-              <div key={group} data-cy="reconciliation-group" data-group={group}>
-                <h4>
+              <Box key={group} data-cy="reconciliation-group" data-group={group} sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" component="h4" sx={{ fontWeight: 700 }}>
                   {GROUPS[group].title} ({entries.length})
-                </h4>
-                <p className="muted">{GROUPS[group].hint}</p>
-                <table className="data">
-                  <tbody>
-                    {entries.map((e) => (
-                      <tr key={`${e.lineId ?? ''}:${e.transactionId ?? ''}`} data-cy="reconciliation-entry" data-group={group}>
-                        <td>{day(e.bankDate ?? e.appDate)}</td>
-                        <td>
-                          {e.bankDescription ?? e.appDescription ?? '—'}
-                          {e.charge && (
-                            <span className="sub" data-cy="reconciliation-charge">
-                              encargo do banco
-                            </span>
-                          )}
-                          {e.bankDescription && e.appDescription && <span className="sub">no app: {e.appDescription}</span>}
-                          {e.installments && e.installments > 1 && (
-                            <span className="sub">
-                              parcela {e.installment}/{e.installments}
-                            </span>
-                          )}
-                        </td>
-                        <td className="right">
-                          {money(e.bankAmount ?? e.appAmount ?? 0)}
-                          {group === 'DifferentAmount' && <span className="sub">no app: {money(e.appAmount ?? 0)}</span>}
-                        </td>
-                        <td className="row-actions">
-                          {(group === 'OnlyInApp' || group === 'DifferentAmount') && e.transactionId && (
-                            <>
-                              {onEditTransaction && (
-                                <button
-                                  className="link"
-                                  type="button"
-                                  data-cy="reconciliation-edit"
-                                  onClick={() => onEditTransaction(e.transactionId!)}
-                                >
-                                  editar
-                                </button>
-                              )}
-                              <button
-                                className="link-danger"
-                                type="button"
-                                data-cy="reconciliation-delete"
-                                disabled={busy}
-                                onClick={() => handleDelete(e)}
-                              >
-                                excluir
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {GROUPS[group].hint}
+                </Typography>
+                <TableBox>
+                  <Table sx={{ minWidth: 520 }}>
+                    <TableBody>
+                      {entries.map((e) => (
+                        <TableRow key={`${e.lineId ?? ''}:${e.transactionId ?? ''}`} data-cy="reconciliation-entry" data-group={group} sx={{ verticalAlign: 'top' }}>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{day(e.bankDate ?? e.appDate)}</TableCell>
+                          <TableCell>
+                            {e.bankDescription ?? e.appDescription ?? '—'}
+                            {e.charge && <Sub dataCy="reconciliation-charge">encargo do banco</Sub>}
+                            {e.bankDescription && e.appDescription && <Sub>no app: {e.appDescription}</Sub>}
+                            {e.installments && e.installments > 1 && (
+                              <Sub>
+                                parcela {e.installment}/{e.installments}
+                              </Sub>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            {money(e.bankAmount ?? e.appAmount ?? 0)}
+                            {group === 'DifferentAmount' && <Sub>no app: {money(e.appAmount ?? 0)}</Sub>}
+                          </TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                            {(group === 'OnlyInApp' || group === 'DifferentAmount') && e.transactionId && (
+                              <>
+                                {onEditTransaction && (
+                                  <TextAction type="button" data-cy="reconciliation-edit" onClick={() => onEditTransaction(e.transactionId!)}>
+                                    editar
+                                  </TextAction>
+                                )}
+                                <TextAction danger type="button" data-cy="reconciliation-delete" disabled={busy} onClick={() => handleDelete(e)}>
+                                  excluir
+                                </TextAction>
+                              </>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableBox>
                 {group === 'OnlyInBank' && batch?.status === 'Pending' && (
-                  <div className="row-form">
-                    <label className="field">
-                      <span>Categoria (sem sugestão)</span>
-                      <input data-cy="reconciliation-category" value={category} onChange={(ev) => setCategory(ev.target.value)} required />
-                    </label>
-                    <button className="primary" type="button" data-cy="reconciliation-import" disabled={busy} onClick={handleImportMissing}>
+                  <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <Field
+                      dataCy="reconciliation-category"
+                      label="Categoria (sem sugestão)"
+                      value={category}
+                      onChange={setCategory}
+                      required
+                    />
+                    <Button variant="contained" type="button" data-cy="reconciliation-import" disabled={busy} onClick={handleImportMissing} sx={{ height: 40 }}>
                       Importar o que falta
-                    </button>
-                  </div>
+                    </Button>
+                  </Stack>
                 )}
-              </div>
+              </Box>
             );
           })}
         </>
       )}
-    </div>
+    </Paper>
+  );
+}
+
+/** Linha menor dentro da célula (encargo, descrição no app, parcela). */
+function Sub({ children, dataCy }: { children: ReactNode; dataCy?: string }) {
+  return (
+    <Box component="span" data-cy={dataCy} sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>
+      {children}
+    </Box>
   );
 }

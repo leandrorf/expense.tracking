@@ -86,7 +86,7 @@ describe('Resumo dos avisos por e-mail', () => {
     // Preferencias: endereco, ligado, na hora atual. O link de confirmacao vai para o Mailpit.
     cy.get('[data-cy=reminders-settings-toggle]').click();
     cy.get('[data-cy=reminders-email]').clear().type(address);
-    cy.get('[data-cy=reminders-email-enabled]').check();
+    cy.get('[data-cy=reminders-email-enabled]').check({ force: true });
     cy.get('[data-cy=reminders-email-hour]').select(String(hourInSaoPaulo));
     cy.get('[data-cy=reminders-settings-save]').click();
     cy.get('[data-cy=reminders-email-notice]').should('contain', `link de confirmação para ${address}`);

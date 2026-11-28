@@ -75,10 +75,17 @@ describe('Exportacao contabil (jornada PJ e PF)', () => {
 
   const openAccounting = (account: string) => {
     cy.intercept('GET', '**/api/transactions/accounting-export/preview*').as('preview');
+    cy.intercept('GET', '**/api/accounts').as('accounts');
     cy.get('[data-cy=tab-accounting]').click();
+    cy.wait('@accounts');
     cy.get('[data-cy=accounting-month]').clear().type(month);
-    cy.get('[data-cy=accounting-account]').find('option').contains(account).then(($opt) => {
-      cy.get('[data-cy=accounting-account]').select($opt.val() as string);
+    // Com uma conta PJ so (dados zerados), a tela nao mostra o seletor e usa essa conta.
+    cy.get('[data-cy=accounting-preview], [data-cy=accounting-account]').should('exist');
+    cy.get('body').then(($body) => {
+      if ($body.find('[data-cy=accounting-account]').length === 0) return;
+      cy.get('[data-cy=accounting-account]').find('option').contains(account).then(($opt) => {
+        cy.get('[data-cy=accounting-account]').select($opt.val() as string);
+      });
     });
     cy.wait('@preview');
   };
