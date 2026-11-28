@@ -2935,7 +2935,20 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
   - *Dado* objetivos PF em andamento que precisam de R$ 1.200 por mês somados, *quando* clico em "usar como
     meta", *então* a meta mensal PF passa a ser guardar R$ 1.200 a partir do mês atual.
   - Estimativa: 2 · **Could** · Dependências: MET-6, MET-7
-- 🔵 **MET-11** E2E Cypress: jornada da meta e do objetivo. → `goals-journey.cy.ts`.
+- ✅ **MET-11** E2E Cypress: jornada da meta e do objetivo. → `goals-journey.cy.ts`.
+  - Feito assim:
+    - **Números relativos:** o usuário demo tem outros lançamentos PF no mês, então os valores saem do
+      resultado lido na tela.
+    - **Meta do mês:**
+      - a meta PF passa a ser guardar 1.000;
+      - uma receita deixa o resultado em pelo menos 6.000 e a situação fica `Inside`, com "ainda pode gastar"
+        = resultado − 1.000;
+      - um gasto que deixa só 100 para gastar muda a situação para `Attention`.
+    - **Espera da projeção:** a tela recarrega ("atualizar") até cada número bater.
+    - **Objetivo:** 3.000 com prazo daqui a 5 meses e um aporte de 600 dão falta 2.400, precisa 400 por mês
+      (6 meses), ritmo 600 e `OnTrack`.
+    - **Resumo:** os totais lidos antes e depois do aporte são iguais.
+    - **Fecha o Must do épico.**
   - *Dado* uma conta PF nova, *quando* defino a meta de guardar um valor, lanço uma receita e um gasto, crio
     um objetivo e registro um aporte pela SPA, *então* a situação e o "ainda pode gastar" mudam a cada
     lançamento, o objetivo mostra o progresso e o ritmo, e o Resumo não muda com o aporte.
