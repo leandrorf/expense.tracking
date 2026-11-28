@@ -1,4 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import UploadFile from '@mui/icons-material/UploadFile';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import {
@@ -17,6 +29,7 @@ import {
 import type { Account, CreditCard, PaymentMethod } from '../api/types';
 import { CsvMappingStep } from './CsvMappingStep';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
+import { Field, Figures, MonthField, Notice, RowForm, SelectField, StatusChip, TableBox, TextAction, type StatusTone } from '../ui';
 
 const STATUS_LABELS: Record<ImportLineStatus, string> = {
   New: 'Nova',
@@ -24,6 +37,15 @@ const STATUS_LABELS: Record<ImportLineStatus, string> = {
   Invalid: 'Inválida',
   ExcludedByDefault: 'Fora por padrão',
   Imported: 'Importada',
+};
+
+/** MUI-9: cor do selo de situação de cada linha da prévia. */
+const STATUS_TONES: Record<ImportLineStatus, StatusTone> = {
+  New: 'info',
+  Duplicate: 'neutral',
+  Invalid: 'outside',
+  ExcludedByDefault: 'attention',
+  Imported: 'ok',
 };
 
 /** O que o usuário decidiu na prévia; só vai ao servidor na confirmação (IMP-5). */
@@ -164,8 +186,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     setFile(chosen);
   }
 
-  async function handleUpload(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleUpload() {
     if (!file) return;
     if (!isCsv(file)) {
       await sendPreview(file);
@@ -320,11 +341,22 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   const money = (value: number, currency: string) => value.toLocaleString('pt-BR', { style: 'currency', currency });
   const methodName = (code: string | null) => paymentMethods.find((m) => m.code === code)?.name ?? code ?? '—';
 
+  const heading = (text: string) => (
+    <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+      {text}
+    </Typography>
+  );
+  const errorNotice = error && (
+    <Notice severity="error" dataCy="import-error" role="alert">
+      {error}
+    </Notice>
+  );
+
   if (loading) {
     return (
       <section>
-        <h2>Importar</h2>
-        <p>Carregando…</p>
+        {heading('Importar')}
+        <Typography>Carregando…</Typography>
       </section>
     );
   }
@@ -335,67 +367,66 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     const paymentsImported = result.lines.filter((l) => l.cardPaymentId).length;
     return (
       <section>
-        <h2>Importar</h2>
-        <div className="import-result" data-cy="import-result" data-status={result.status} role="status">
-          <h3>{undone ? 'Importação desfeita' : 'Importação concluída'}</h3>
-          <dl className="import-result-figures">
-            <div>
-              <dt>Importados</dt>
-              <dd data-cy="import-result-imported">{result.summary.imported}</dd>
-            </div>
-            <div>
-              <dt>Já lançados</dt>
-              <dd data-cy="import-result-duplicate">{result.summary.duplicate}</dd>
-            </div>
-            <div>
-              <dt>Ignorados</dt>
-              <dd data-cy="import-result-ignored">{ignored}</dd>
-            </div>
-          </dl>
-          <p className="muted">
+        {heading('Importar')}
+        <Paper variant="outlined" data-cy="import-result" data-status={result.status} role="status" sx={{ p: 2.5 }}>
+          <Typography variant="h3" component="h3" sx={{ mb: 1.5 }}>
+            {undone ? 'Importação desfeita' : 'Importação concluída'}
+          </Typography>
+          <Box sx={{ mb: 1.5 }}>
+            <Figures
+              items={[
+                { label: 'Importados', value: result.summary.imported, dataCy: 'import-result-imported' },
+                { label: 'Já lançados', value: result.summary.duplicate, dataCy: 'import-result-duplicate' },
+                { label: 'Ignorados', value: ignored, dataCy: 'import-result-ignored' },
+              ]}
+            />
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             {undone
               ? 'Os lançamentos criados por esta importação foram excluídos. O Resumo e os orçamentos deixam de contá-los em alguns segundos.'
               : 'O Resumo e os orçamentos passam a contar os importados em alguns segundos.'}
             {!undone && paymentsImported > 0 &&
               ` ${paymentsImported} pagamento(s) de fatura foram registrados na fatura do cartão, sem virar gasto.`}
-          </p>
-          {error && (
-            <p className="error" data-cy="import-error" role="alert">
-              {error}
-            </p>
-          )}
+          </Typography>
+          {errorNotice}
           {confirmingUndo ? (
-            <div className="import-undo-confirm" data-cy="import-undo-confirm" role="alertdialog" aria-label="Desfazer importação">
-              <p>
+            <Notice
+              severity="warning"
+              dataCy="import-undo-confirm"
+              role="alertdialog"
+              aria-label="Desfazer importação"
+              sx={{ mb: 0 }}
+            >
+              <Box sx={{ mb: 1.5 }}>
                 Excluir os {result.summary.imported - paymentsImported} lançamento(s)
                 {paymentsImported > 0 && ` e ${paymentsImported} pagamento(s) de fatura`} criados por esta importação? Os que
                 você já excluiu ficam como estão.
-              </p>
-              <div className="actions">
-                <button data-cy="import-undo-yes" className="danger" onClick={() => void handleUndo()} disabled={busy}>
+              </Box>
+              <Stack direction="row" spacing={1}>
+                <Button variant="contained" color="error" data-cy="import-undo-yes" onClick={() => void handleUndo()} disabled={busy}>
                   Desfazer importação
-                </button>
-                <button data-cy="import-undo-no" className="ghost" onClick={() => setConfirmingUndo(false)} disabled={busy}>
+                </Button>
+                <Button variant="outlined" color="inherit" data-cy="import-undo-no" onClick={() => setConfirmingUndo(false)} disabled={busy}>
                   Manter
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Stack>
+            </Notice>
           ) : (
-            <div className="actions">
-              <button data-cy="import-go-transactions" className="primary" onClick={onShowTransactions}>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button variant="contained" data-cy="import-go-transactions" onClick={onShowTransactions}>
                 Ver lançamentos
-              </button>
-              <button data-cy="import-new" className="ghost" onClick={startOver}>
+              </Button>
+              <Button variant="outlined" color="inherit" data-cy="import-new" onClick={startOver}>
                 Nova importação
-              </button>
+              </Button>
               {!undone && result.summary.imported > 0 && (
-                <button data-cy="import-undo" className="link-danger" onClick={() => setConfirmingUndo(true)}>
+                <TextAction danger data-cy="import-undo" onClick={() => setConfirmingUndo(true)}>
                   Desfazer importação
-                </button>
+                </TextAction>
               )}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Paper>
       </section>
     );
   }
@@ -403,7 +434,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
   if (csvProposal && file) {
     return (
       <section>
-        <h2>Importar — colunas do CSV</h2>
+        {heading('Importar — colunas do CSV')}
         <CsvMappingStep
           proposal={csvProposal}
           isCard={!!creditCardId}
@@ -413,11 +444,7 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
           onRemoveSaved={(id) => void removeSavedMapping(id)}
           onCancel={startOver}
         />
-        {error && (
-          <p className="error" data-cy="import-error" role="alert">
-            {error}
-          </p>
-        )}
+        <Box sx={{ mt: 2 }}>{errorNotice}</Box>
       </section>
     );
   }
@@ -426,261 +453,298 @@ export function ImportView({ onShowTransactions }: { onShowTransactions: () => v
     const isCard = batch.kind === 'CreditCard';
     return (
       <section>
-        <h2>Importar — prévia</h2>
-        <p className="muted" data-cy="import-preview-info">
+        {heading('Importar — prévia')}
+        <Typography variant="body2" color="text.secondary" data-cy="import-preview-info" sx={{ mb: 2 }}>
           {isCard ? 'Fatura de cartão' : 'Extrato de conta'} · {batch.summary.total} linhas ·{' '}
           {accounts.find((a) => a.id === batch.accountId)?.name ?? ''}
-        </p>
+        </Typography>
 
-        <div className="row-form wrap import-bulk">
-          <label className="inline-label">
-            Categoria para as incluídas
-            <input
-              data-cy="import-bulk-category"
-              list="import-category-suggestions"
-              autoComplete="off"
-              value={bulkCategory}
-              onChange={(e) => setBulkCategory(e.target.value)}
-            />
-          </label>
-          <button data-cy="import-bulk-apply-empty" type="button" onClick={() => applyBulkCategory(true)} disabled={!bulkCategory.trim()}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+          <Field
+            label="Categoria para as incluídas"
+            dataCy="import-bulk-category"
+            value={bulkCategory}
+            onChange={setBulkCategory}
+            slotProps={{ htmlInput: { list: 'import-category-suggestions', autoComplete: 'off' } }}
+            sx={{ minWidth: 240 }}
+          />
+          <Button
+            variant="outlined"
+            color="inherit"
+            data-cy="import-bulk-apply-empty"
+            type="button"
+            onClick={() => applyBulkCategory(true)}
+            disabled={!bulkCategory.trim()}
+          >
             Aplicar às sem categoria
-          </button>
-          <button data-cy="import-bulk-apply-all" type="button" onClick={() => applyBulkCategory(false)} disabled={!bulkCategory.trim()}>
+          </Button>
+          <Button
+            variant="outlined"
+            color="inherit"
+            data-cy="import-bulk-apply-all"
+            type="button"
+            onClick={() => applyBulkCategory(false)}
+            disabled={!bulkCategory.trim()}
+          >
             Aplicar a todas as incluídas
-          </button>
-        </div>
+          </Button>
+        </Stack>
         <CategoryDatalist id="import-category-suggestions" categories={categories} />
 
-        <table className="data import-preview" data-cy="import-preview">
-          <thead>
-            <tr>
-              <th>Incluir</th>
-              <th>#</th>
-              <th>Data</th>
-              <th>Descrição</th>
-              <th className="right">Valor</th>
-              <th>Meio</th>
-              <th>Categoria</th>
-              <th>Situação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {batch.lines.map((line) => {
-              const draft = drafts[line.id];
-              const includable = canInclude(line);
-              const asInvoice = draft.invoicePayment;
-              const needsCategory = draft.included && !asInvoice && !draft.category.trim();
-              const needsInvoice = draft.included && asInvoice && (!draft.invoiceCardId || !draft.invoiceDueMonth);
-              const flagged = flaggedLines.has(line.number) && (needsCategory || needsInvoice);
-              return (
-                <tr
-                  key={line.id}
-                  data-cy="import-row"
-                  data-status={line.status}
-                  data-invoice-payment={asInvoice ? 'true' : undefined}
-                  className={`import-row ${line.status.toLowerCase()}${draft.included ? '' : ' excluded'}${flagged ? ' flagged' : ''}`}
-                >
-                  <td>
-                    <input
-                      type="checkbox"
-                      data-cy="import-row-include"
-                      aria-label={`Incluir linha ${line.number}`}
-                      checked={draft.included}
-                      disabled={!includable}
-                      onChange={(e) => updateDraft(line.id, { included: e.target.checked })}
-                    />
-                  </td>
-                  <td>{line.number}</td>
-                  <td>{line.occurredOn ?? '—'}</td>
-                  <td>
-                    {line.description || '—'}
-                    {includable && !asInvoice && line.recurrenceId && (
-                      <label className="sub recurring-choice" data-cy="import-row-recurrence-label">
-                        <input
-                          type="checkbox"
-                          data-cy="import-row-recurrence"
-                          checked={draft.recurrence}
-                          onChange={(e) => updateDraft(line.id, { recurrence: e.target.checked })}
-                        />{' '}
-                        lançamento da recorrência <strong>{line.recurrenceDescription}</strong> ({line.recurrencePeriod})
-                      </label>
-                    )}
-                  </td>
-                  <td className={`right ${line.type === 'Income' ? 'income' : 'expense'}`}>
-                    {line.amount === null ? '—' : `${line.type === 'Expense' ? '−' : '+'}${money(line.amount, batch.currency)}`}
-                  </td>
-                  <td>
-                    {isCard || !includable ? (
-                      methodName(line.paymentMethod)
-                    ) : (
-                      <select
-                        data-cy="import-row-method"
-                        aria-label={`Meio de pagamento da linha ${line.number}`}
-                        value={asInvoice ? INVOICE_PAYMENT : draft.paymentMethod ?? ''}
-                        onChange={(e) => chooseMethod(line, e.target.value)}
-                      >
-                        {statementMethods.map((m) => (
-                          <option key={m.code} value={m.code}>
-                            {m.name}
-                          </option>
-                        ))}
-                        {canBeInvoicePayment(batch, line) && activeCards.length > 0 && (
-                          <option value={INVOICE_PAYMENT}>Pagamento de fatura</option>
-                        )}
-                      </select>
-                    )}
-                  </td>
-                  <td>
-                    {includable && asInvoice && (
-                      <div className="invoice-choice">
-                        <select
-                          data-cy="import-row-invoice-card"
-                          aria-label={`Cartão da fatura paga na linha ${line.number}`}
-                          aria-invalid={needsInvoice && !draft.invoiceCardId}
-                          value={draft.invoiceCardId}
-                          onChange={(e) => chooseInvoiceCard(line, e.target.value)}
+        <TableBox>
+          <Table data-cy="import-preview" sx={{ minWidth: 960 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell padding="checkbox">Incluir</TableCell>
+                <TableCell>#</TableCell>
+                <TableCell>Data</TableCell>
+                <TableCell>Descrição</TableCell>
+                <TableCell align="right">Valor</TableCell>
+                <TableCell>Meio</TableCell>
+                <TableCell>Categoria</TableCell>
+                <TableCell>Situação</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {batch.lines.map((line) => {
+                const draft = drafts[line.id];
+                const includable = canInclude(line);
+                const asInvoice = draft.invoicePayment;
+                const needsCategory = draft.included && !asInvoice && !draft.category.trim();
+                const needsInvoice = draft.included && asInvoice && (!draft.invoiceCardId || !draft.invoiceDueMonth);
+                const flagged = flaggedLines.has(line.number) && (needsCategory || needsInvoice);
+                return (
+                  <TableRow
+                    key={line.id}
+                    data-cy="import-row"
+                    data-status={line.status}
+                    data-invoice-payment={asInvoice ? 'true' : undefined}
+                    sx={{
+                      verticalAlign: 'top',
+                      opacity: draft.included ? 1 : 0.6,
+                      bgcolor: flagged ? 'rgba(248, 113, 113, 0.12)' : undefined,
+                    }}
+                  >
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        size="small"
+                        checked={draft.included}
+                        disabled={!includable}
+                        onChange={(e) => updateDraft(line.id, { included: e.target.checked })}
+                        slotProps={{ input: { 'data-cy': 'import-row-include', 'aria-label': `Incluir linha ${line.number}` } as object }}
+                      />
+                    </TableCell>
+                    <TableCell>{line.number}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{line.occurredOn ?? '—'}</TableCell>
+                    <TableCell>
+                      {line.description || '—'}
+                      {includable && !asInvoice && line.recurrenceId && (
+                        <Box
+                          component="label"
+                          data-cy="import-row-recurrence-label"
+                          sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#a78bfa', mt: 0.5, cursor: 'pointer' }}
                         >
-                          <option value="">Qual cartão?</option>
-                          {activeCards.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.label} •••• {c.lastFourDigits}
+                          <Checkbox
+                            size="small"
+                            checked={draft.recurrence}
+                            onChange={(e) => updateDraft(line.id, { recurrence: e.target.checked })}
+                            slotProps={{ input: { 'data-cy': 'import-row-recurrence' } as object }}
+                            sx={{ p: 0.25 }}
+                          />
+                          <span>
+                            lançamento da recorrência <strong>{line.recurrenceDescription}</strong> ({line.recurrencePeriod})
+                          </span>
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{ whiteSpace: 'nowrap', color: line.type === 'Income' ? 'success.main' : 'error.main' }}
+                    >
+                      {line.amount === null ? '—' : `${line.type === 'Expense' ? '−' : '+'}${money(line.amount, batch.currency)}`}
+                    </TableCell>
+                    <TableCell>
+                      {isCard || !includable ? (
+                        methodName(line.paymentMethod)
+                      ) : (
+                        <SelectField
+                          dataCy="import-row-method"
+                          value={asInvoice ? INVOICE_PAYMENT : draft.paymentMethod ?? ''}
+                          onChange={(v) => chooseMethod(line, v)}
+                          slotProps={{ htmlInput: { 'aria-label': `Meio de pagamento da linha ${line.number}` } }}
+                          sx={{ minWidth: 170 }}
+                        >
+                          {statementMethods.map((m) => (
+                            <option key={m.code} value={m.code}>
+                              {m.name}
                             </option>
                           ))}
-                        </select>
-                        <input
-                          data-cy="import-row-invoice-month"
-                          type="month"
-                          aria-label={`Mês de vencimento da fatura paga na linha ${line.number}`}
-                          aria-invalid={needsInvoice && !draft.invoiceDueMonth}
-                          value={draft.invoiceDueMonth}
-                          onChange={(e) => updateDraft(line.id, { invoiceDueMonth: e.target.value })}
+                          {canBeInvoicePayment(batch, line) && activeCards.length > 0 && (
+                            <option value={INVOICE_PAYMENT}>Pagamento de fatura</option>
+                          )}
+                        </SelectField>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {includable && asInvoice && (
+                        <Stack spacing={1} sx={{ minWidth: 190 }}>
+                          <SelectField
+                            dataCy="import-row-invoice-card"
+                            value={draft.invoiceCardId}
+                            onChange={(v) => chooseInvoiceCard(line, v)}
+                            error={needsInvoice && !draft.invoiceCardId}
+                            slotProps={{
+                              htmlInput: {
+                                'aria-label': `Cartão da fatura paga na linha ${line.number}`,
+                                'aria-invalid': needsInvoice && !draft.invoiceCardId,
+                              },
+                            }}
+                          >
+                            <option value="">Qual cartão?</option>
+                            {activeCards.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.label} •••• {c.lastFourDigits}
+                              </option>
+                            ))}
+                          </SelectField>
+                          <MonthField
+                            dataCy="import-row-invoice-month"
+                            value={draft.invoiceDueMonth}
+                            onChange={(v) => updateDraft(line.id, { invoiceDueMonth: v })}
+                            error={needsInvoice && !draft.invoiceDueMonth}
+                            slotProps={{
+                              htmlInput: {
+                                'aria-label': `Mês de vencimento da fatura paga na linha ${line.number}`,
+                                'aria-invalid': needsInvoice && !draft.invoiceDueMonth,
+                              },
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            Não vira gasto: abate a fatura.
+                          </Typography>
+                        </Stack>
+                      )}
+                      {includable && !asInvoice && (
+                        <Field
+                          dataCy="import-row-category"
+                          placeholder={draft.included ? 'Obrigatória' : ''}
+                          value={draft.category}
+                          onChange={(v) => updateDraft(line.id, { category: v })}
+                          error={needsCategory}
+                          slotProps={{
+                            htmlInput: {
+                              list: 'import-category-suggestions',
+                              autoComplete: 'off',
+                              'aria-label': `Categoria da linha ${line.number}`,
+                              'aria-invalid': needsCategory,
+                            },
+                          }}
+                          sx={{ minWidth: 170 }}
                         />
-                        <span className="hint">Não vira gasto: abate a fatura.</span>
-                      </div>
-                    )}
-                    {includable && !asInvoice && (
-                      <input
-                        data-cy="import-row-category"
-                        aria-label={`Categoria da linha ${line.number}`}
-                        aria-invalid={needsCategory}
-                        list="import-category-suggestions"
-                        autoComplete="off"
-                        placeholder={draft.included ? 'Obrigatória' : ''}
-                        value={draft.category}
-                        onChange={(e) => updateDraft(line.id, { category: e.target.value })}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <span className={`import-status ${line.status.toLowerCase()}`} title={line.problem ?? undefined}>
-                      {STATUS_LABELS[line.status]}
-                    </span>
-                    {line.problem && <div className="hint">{line.problem}</div>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip tone={STATUS_TONES[line.status]} label={STATUS_LABELS[line.status]} title={line.problem ?? undefined} />
+                      {line.problem && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                          {line.problem}
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableBox>
 
-        {error && (
-          <p className="error" data-cy="import-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="actions import-actions">
-          <span data-cy="import-pending-count" aria-live="polite">
+        {errorNotice}
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography variant="body2" data-cy="import-pending-count" aria-live="polite" sx={{ mr: 1 }}>
             {includedLines.length} incluída(s)
             {invoicePayments > 0 && ` · ${invoicePayments} pagamento(s) de fatura`}
             {missingCategory.length > 0 && ` · ${missingCategory.length} sem categoria`}
             {missingInvoice.length > 0 && ` · ${missingInvoice.length} sem fatura escolhida`}
-          </span>
-          <button data-cy="import-confirm" className="primary" onClick={() => void handleConfirm()} disabled={!canConfirm}>
+          </Typography>
+          <Button variant="contained" data-cy="import-confirm" onClick={() => void handleConfirm()} disabled={!canConfirm}>
             {busy ? 'Importando…' : `Importar ${includedLines.length} lançamento(s)`}
-          </button>
-          <button data-cy="import-cancel" className="ghost" onClick={startOver} disabled={busy}>
+          </Button>
+          <Button variant="outlined" color="inherit" data-cy="import-cancel" onClick={startOver} disabled={busy}>
             Cancelar
-          </button>
-        </div>
+          </Button>
+        </Stack>
       </section>
     );
   }
 
   return (
     <section>
-      <h2>Importar</h2>
-      <p className="muted">
+      {heading('Importar')}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Envie o extrato da conta ou a fatura do cartão que o banco entrega (OFX ou CSV, até 5 MB). Você confere a
         prévia antes de lançar; o que já foi importado aparece como já lançado.
-      </p>
+      </Typography>
 
       {accounts.length === 0 ? (
-        <p className="muted">Crie uma conta antes de importar.</p>
+        <Typography color="text.secondary">Crie uma conta antes de importar.</Typography>
       ) : (
-        <form className="row-form wrap" onSubmit={handleUpload} data-cy="import-form">
-          <label className="inline-label">
-            Conta
-            <select
-              data-cy="import-account"
-              value={accountId}
-              onChange={(e) => {
-                setAccountId(e.target.value);
-                setCreditCardId('');
-              }}
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.scope === 'Business' ? 'PJ' : 'PF'})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline-label">
-            Tipo
-            <select data-cy="import-card" value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)}>
-              <option value="">Extrato da conta</option>
-              {accountCards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  Fatura: {c.label} •••• {c.lastFourDigits}
-                </option>
-              ))}
-            </select>
-          </label>
+        <RowForm onSubmit={() => void handleUpload()} dataCy="import-form">
+          <SelectField
+            label="Conta"
+            dataCy="import-account"
+            value={accountId}
+            onChange={(v) => {
+              setAccountId(v);
+              setCreditCardId('');
+            }}
+            options={accounts.map((a) => ({ value: a.id, label: `${a.name} (${a.scope === 'Business' ? 'PJ' : 'PF'})` }))}
+          />
+          <SelectField label="Tipo" dataCy="import-card" value={creditCardId} onChange={setCreditCardId}>
+            <option value="">Extrato da conta</option>
+            {accountCards.map((c) => (
+              <option key={c.id} value={c.id}>
+                Fatura: {c.label} •••• {c.lastFourDigits}
+              </option>
+            ))}
+          </SelectField>
           {!creditCardId && (
-            <label className="inline-label">
-              Meio padrão
-              <select data-cy="import-payment-method" value={defaultMethod} onChange={(e) => setDefaultMethod(e.target.value)}>
-                {statementMethods.map((m) => (
-                  <option key={m.code} value={m.code}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Meio padrão"
+              dataCy="import-payment-method"
+              value={defaultMethod}
+              onChange={setDefaultMethod}
+              options={statementMethods.map((m) => ({ value: m.code, label: m.name }))}
+            />
           )}
-          <label className="inline-label">
-            Arquivo
-            <input
+          <Button
+            variant="outlined"
+            color="inherit"
+            component="label"
+            startIcon={<UploadFile />}
+            sx={{ height: 40, position: 'relative', maxWidth: 280, justifyContent: 'flex-start' }}
+          >
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {file ? file.name : 'Arquivo (OFX ou CSV)'}
+            </Box>
+            {/* Continua um input de arquivo de verdade, transparente sobre o botão: os testes usam `selectFile`. */}
+            <Box
+              component="input"
               key={fileInputKey}
               data-cy="import-file"
               type="file"
               accept={ACCEPTED_IMPORT_EXTENSIONS.join(',')}
-              onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
               required
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => chooseFile(e.target.files?.[0] ?? null)}
+              sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
-          </label>
-          <button data-cy="import-submit" className="primary" type="submit" disabled={!file || !accountId || busy}>
+          </Button>
+          <Button variant="contained" data-cy="import-submit" type="submit" disabled={!file || !accountId || busy} sx={{ height: 40 }}>
             {busy ? 'Lendo…' : 'Ver prévia'}
-          </button>
-        </form>
+          </Button>
+        </RowForm>
       )}
 
-      {error && (
-        <p className="error" data-cy="import-error" role="alert">
-          {error}
-        </p>
-      )}
+      {errorNotice}
     </section>
   );
 }

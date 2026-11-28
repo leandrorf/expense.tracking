@@ -142,7 +142,7 @@ describe('Importar extrato e fatura', () => {
 
     cy.get('[data-cy=csv-map-date]').select('1. Quando');
     cy.get('[data-cy=csv-map-description]').select('2. O que');
-    cy.get('[data-cy=csv-map-mode-split]').check();
+    cy.get('[data-cy=csv-map-mode-split]').check({ force: true });
     cy.get('[data-cy=csv-map-debit]').select('3. Saiu');
     cy.get('[data-cy=csv-map-credit]').select(`4. Entrou ${stamp}`);
     cy.get('[data-cy=csv-map-decimal]').select(',');

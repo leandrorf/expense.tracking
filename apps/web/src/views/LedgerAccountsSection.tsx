@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ledgerAccountsApi, type LedgerAccount } from '../api/accountingExport';
 import { ApiError } from '../api/client';
+import { Field, Notice, TableBox } from '../ui';
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro inesperado.';
@@ -33,53 +42,59 @@ function LedgerRow({ ledger, onChanged }: RowProps) {
   }
 
   return (
-    <tr data-cy="ledger-row" data-category={ledger.category}>
-      <td>{ledger.category}</td>
-      <td className="right">{ledger.lines}</td>
-      <td>
-        <input
-          data-cy="ledger-code"
-          aria-label={`Código da conta contábil de ${ledger.category}`}
+    <TableRow data-cy="ledger-row" data-category={ledger.category} sx={{ verticalAlign: 'top' }}>
+      <TableCell>{ledger.category}</TableCell>
+      <TableCell align="right">{ledger.lines}</TableCell>
+      <TableCell>
+        <Field
+          dataCy="ledger-code"
           placeholder="ex.: 3.1.02"
-          maxLength={20}
           value={code}
-          onChange={(e) => setCode(e.target.value)}
+          onChange={setCode}
+          slotProps={{ htmlInput: { maxLength: 20, 'aria-label': `Código da conta contábil de ${ledger.category}` } }}
+          sx={{ width: 140 }}
         />
-      </td>
-      <td>
-        <input
-          data-cy="ledger-name"
-          aria-label={`Nome da conta contábil de ${ledger.category}`}
+      </TableCell>
+      <TableCell>
+        <Field
+          dataCy="ledger-name"
           placeholder="opcional"
-          maxLength={100}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={setName}
+          slotProps={{ htmlInput: { maxLength: 100, 'aria-label': `Nome da conta contábil de ${ledger.category}` } }}
+          sx={{ minWidth: 180 }}
         />
-        {error && <span className="error sub">{error}</span>}
-      </td>
-      <td>
-        <button
+        {error && (
+          <Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: 'error.main', mt: 0.5 }}>
+            {error}
+          </Box>
+        )}
+      </TableCell>
+      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+        <Button
           type="button"
-          className="primary small"
+          variant="contained"
           data-cy="ledger-save"
           disabled={busy || !dirty || !code.trim()}
           onClick={() => void run(() => ledgerAccountsApi.set(ledger.category, code.trim(), name.trim()))}
         >
           Salvar
-        </button>
+        </Button>
         {ledger.code && (
-          <button
+          <Button
             type="button"
-            className="ghost small"
+            variant="outlined"
+            color="inherit"
             data-cy="ledger-remove"
             disabled={busy}
             onClick={() => void run(() => ledgerAccountsApi.remove(ledger.category))}
+            sx={{ ml: 1 }}
           >
             Remover
-          </button>
+          </Button>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -111,35 +126,39 @@ export function LedgerAccountsSection({ onChanged }: { onChanged: () => void }) 
 
   return (
     <section data-cy="ledger-accounts">
-      <h3>Plano de contas</h3>
-      <p className="muted">
+      <Typography variant="h3" component="h3" sx={{ mb: 0.5 }}>
+        Plano de contas
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         Código da conta no plano do seu contador para cada categoria PJ. Ele sai na coluna “Conta contábil” das
         planilhas; a categoria vale como foi digitada.
-      </p>
-      {error && <p className="error">{error}</p>}
+      </Typography>
+      {error && <Notice severity="error">{error}</Notice>}
       {ledgers === null ? (
-        !error && <p>Carregando…</p>
+        !error && <Typography>Carregando…</Typography>
       ) : ledgers.length === 0 ? (
-        <p className="muted" data-cy="ledger-empty">Nenhuma categoria lançada em conta PJ ainda.</p>
+        <Typography color="text.secondary" data-cy="ledger-empty">
+          Nenhuma categoria lançada em conta PJ ainda.
+        </Typography>
       ) : (
-        <div className="table-scroll">
-          <table className="data" data-cy="ledger-table">
-            <thead>
-              <tr>
-                <th>Categoria</th>
-                <th className="right">Lançamentos</th>
-                <th>Código</th>
-                <th>Nome</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+        <TableBox>
+          <Table data-cy="ledger-table" sx={{ minWidth: 640 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Categoria</TableCell>
+                <TableCell align="right">Lançamentos</TableCell>
+                <TableCell>Código</TableCell>
+                <TableCell>Nome</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {ledgers.map((l) => (
                 <LedgerRow key={`${l.category}|${l.code ?? ''}|${l.name ?? ''}`} ledger={l} onChanged={changed} />
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
     </section>
   );

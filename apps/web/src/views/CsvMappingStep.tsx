@@ -1,5 +1,21 @@
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormLabel from '@mui/material/FormLabel';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import type { CsvColumnMapping, CsvMappingProposal, CsvMappingToSave, SavedCsvMapping } from '../api/imports';
+import { Field, Notice, SelectField, TableBox, TextAction } from '../ui';
 
 type AmountMode = 'single' | 'split';
 
@@ -127,150 +143,182 @@ export function CsvMappingStep({
   }
 
   const columnSelect = (label: string, cy: string, value: number | null, onChange: (column: number) => void) => (
-    <label className="inline-label">
-      {label}
-      <select data-cy={cy} value={value ?? ''} onChange={(e) => onChange(Number(e.target.value))}>
-        <option value="" disabled>
-          Escolha…
+    <SelectField label={label} dataCy={cy} value={value === null ? '' : String(value)} onChange={(v) => onChange(Number(v))} sx={{ minWidth: 170 }}>
+      <option value="" disabled>
+        Escolha…
+      </option>
+      {columns.map((c) => (
+        <option key={c} value={c}>
+          {columnName(c)}
         </option>
-        {columns.map((c) => (
-          <option key={c} value={c}>
-            {columnName(c)}
-          </option>
-        ))}
-      </select>
-    </label>
+      ))}
+    </SelectField>
   );
 
+  // Coluna usada no mapeamento: destaque na amostra.
+  const mappedSx = (c: number) => (roleOf(c) ? { bgcolor: 'action.selected' } : undefined);
+
   return (
-    <div data-cy="csv-mapping">
-      <p className="muted">
+    <Box data-cy="csv-mapping">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {selected && selected.id === initialSaved?.id
           ? `Usamos o mapeamento salvo "${selected.name}", do arquivo com as mesmas colunas. Confira antes de ver a prévia.`
           : proposal.mapping
             ? 'Confira as colunas que reconhecemos no arquivo antes de ver a prévia.'
             : 'Não reconhecemos as colunas deste arquivo: indique qual é cada uma.'}
-      </p>
+      </Typography>
 
       {saved.length > 0 && (
-        <div className="row-form wrap csv-saved">
-          <label className="inline-label">
-            Mapeamento salvo
-            <select data-cy="csv-saved" value={selectedId} onChange={(e) => chooseSaved(e.target.value)}>
-              <option value="">Nenhum</option>
-              {saved.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+          <SelectField label="Mapeamento salvo" dataCy="csv-saved" value={selectedId} onChange={chooseSaved} sx={{ minWidth: 220 }}>
+            <option value="">Nenhum</option>
+            {saved.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </SelectField>
           {selected && (
-            <button
+            <TextAction
+              danger
               data-cy="csv-saved-remove"
               type="button"
-              className="link-danger"
               onClick={() => {
                 setSelectedId('');
                 onRemoveSaved(selected.id);
               }}
             >
               excluir "{selected.name}"
-            </button>
+            </TextAction>
           )}
-        </div>
+        </Stack>
       )}
 
-      <div className="row-form wrap csv-mapping-fields">
+      <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
         {columnSelect('Data', 'csv-map-date', mapping.dateColumn, (c) => set({ dateColumn: c }))}
         {columnSelect('Descrição', 'csv-map-description', mapping.descriptionColumn, (c) => set({ descriptionColumn: c }))}
 
-        <fieldset className="csv-amount-mode">
-          <legend>Valor</legend>
-          <label>
-            <input type="radio" name="amount-mode" data-cy="csv-map-mode-single" checked={mode === 'single'} onChange={() => changeMode('single')} />
-            uma coluna (negativo = gasto)
-          </label>
-          <label>
-            <input type="radio" name="amount-mode" data-cy="csv-map-mode-split" checked={mode === 'split'} onChange={() => changeMode('split')} />
-            débito e crédito separados
-          </label>
-        </fieldset>
+        <FormControl component="fieldset" sx={{ px: 1 }}>
+          <FormLabel component="legend" sx={{ fontSize: '0.75rem' }}>
+            Valor
+          </FormLabel>
+          <RadioGroup row name="amount-mode" value={mode} onChange={(e) => changeMode(e.target.value as AmountMode)}>
+            <FormControlLabel
+              value="single"
+              control={<Radio size="small" slotProps={{ input: { 'data-cy': 'csv-map-mode-single' } as object }} />}
+              label="uma coluna (negativo = gasto)"
+            />
+            <FormControlLabel
+              value="split"
+              control={<Radio size="small" slotProps={{ input: { 'data-cy': 'csv-map-mode-split' } as object }} />}
+              label="débito e crédito separados"
+            />
+          </RadioGroup>
+        </FormControl>
 
-        {mode === 'single'
-          ? columnSelect('Coluna do valor', 'csv-map-amount', mapping.amountColumn, (c) => set({ amountColumn: c }))
-          : (
-            <>
-              {columnSelect('Débito', 'csv-map-debit', mapping.debitColumn, (c) => set({ debitColumn: c }))}
-              {columnSelect('Crédito', 'csv-map-credit', mapping.creditColumn, (c) => set({ creditColumn: c }))}
-            </>
-          )}
-
-        <label className="inline-label">
-          Decimal
-          <select data-cy="csv-map-decimal" value={mapping.decimalSeparator} onChange={(e) => set({ decimalSeparator: e.target.value })}>
-            <option value=",">vírgula (1.234,56)</option>
-            <option value=".">ponto (1,234.56)</option>
-          </select>
-        </label>
-        <label className="checkbox-label">
-          <input type="checkbox" data-cy="csv-map-header" checked={mapping.hasHeader} onChange={(e) => set({ hasHeader: e.target.checked })} />
-          primeira linha é cabeçalho
-        </label>
-        {mode === 'single' && (
-          <label className="checkbox-label">
-            <input type="checkbox" data-cy="csv-map-invert" checked={mapping.invertSign} onChange={(e) => set({ invertSign: e.target.checked })} />
-            inverter sinal (o arquivo traz gasto positivo)
-          </label>
+        {mode === 'single' ? (
+          columnSelect('Coluna do valor', 'csv-map-amount', mapping.amountColumn, (c) => set({ amountColumn: c }))
+        ) : (
+          <>
+            {columnSelect('Débito', 'csv-map-debit', mapping.debitColumn, (c) => set({ debitColumn: c }))}
+            {columnSelect('Crédito', 'csv-map-credit', mapping.creditColumn, (c) => set({ creditColumn: c }))}
+          </>
         )}
-      </div>
 
-      <table className="data csv-sample" data-cy="csv-sample">
-        <caption className="muted">Primeiras linhas do arquivo</caption>
-        <thead>
-          <tr>
-            <th>Linha</th>
-            {columns.map((c) => (
-              <th key={c} className={roleOf(c) ? 'mapped' : ''}>
-                {columnName(c)}
-                {roleOf(c) && <span className="csv-role" data-cy="csv-role">{roleOf(c)}</span>}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sampleRows.map((row) => (
-            <tr key={row.lineNumber}>
-              <td>{row.lineNumber}</td>
+        <SelectField
+          label="Decimal"
+          dataCy="csv-map-decimal"
+          value={mapping.decimalSeparator}
+          onChange={(v) => set({ decimalSeparator: v })}
+          options={[
+            { value: ',', label: 'vírgula (1.234,56)' },
+            { value: '.', label: 'ponto (1,234.56)' },
+          ]}
+          sx={{ minWidth: 170 }}
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={mapping.hasHeader}
+              onChange={(e) => set({ hasHeader: e.target.checked })}
+              slotProps={{ input: { 'data-cy': 'csv-map-header' } as object }}
+            />
+          }
+          label="primeira linha é cabeçalho"
+        />
+        {mode === 'single' && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={mapping.invertSign}
+                onChange={(e) => set({ invertSign: e.target.checked })}
+                slotProps={{ input: { 'data-cy': 'csv-map-invert' } as object }}
+              />
+            }
+            label="inverter sinal (o arquivo traz gasto positivo)"
+          />
+        )}
+      </Stack>
+
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        Primeiras linhas do arquivo
+      </Typography>
+      <TableBox>
+        <Table data-cy="csv-sample">
+          <TableHead>
+            <TableRow>
+              <TableCell>Linha</TableCell>
               {columns.map((c) => (
-                <td key={c} className={roleOf(c) ? 'mapped' : ''}>
-                  {row.cells[c] ?? ''}
-                </td>
+                <TableCell key={c} sx={mappedSx(c)}>
+                  {columnName(c)}
+                  {roleOf(c) && (
+                    <Box
+                      component="span"
+                      data-cy="csv-role"
+                      sx={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: 'primary.main', textTransform: 'uppercase' }}
+                    >
+                      {roleOf(c)}
+                    </Box>
+                  )}
+                </TableCell>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sampleRows.map((row) => (
+              <TableRow key={row.lineNumber}>
+                <TableCell>{row.lineNumber}</TableCell>
+                {columns.map((c) => (
+                  <TableCell key={c} sx={mappedSx(c)}>
+                    {row.cells[c] ?? ''}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableBox>
 
       {problems.length > 0 && (
-        <p className="error" data-cy="csv-map-problem" role="alert">
+        <Notice severity="error" dataCy="csv-map-problem" role="alert">
           {problems.join(' ')}
-        </p>
+        </Notice>
       )}
-      <label className="inline-label csv-save-name">
-        Salvar como (opcional)
-        <input
-          data-cy="csv-save-name"
-          maxLength={60}
-          placeholder="ex.: Banco X — fatura"
-          value={saveName}
-          onChange={(e) => setSaveName(e.target.value)}
-        />
-      </label>
-      <div className="actions">
-        <button
+      <Field
+        label="Salvar como (opcional)"
+        dataCy="csv-save-name"
+        placeholder="ex.: Banco X — fatura"
+        value={saveName}
+        onChange={setSaveName}
+        slotProps={{ htmlInput: { maxLength: 60 } }}
+        sx={{ minWidth: 280, mb: 2 }}
+      />
+      <Stack direction="row" spacing={1}>
+        <Button
+          variant="contained"
           data-cy="csv-map-submit"
-          className="primary"
           disabled={problems.length > 0 || busy}
           onClick={() =>
             onSubmit(
@@ -288,11 +336,11 @@ export function CsvMappingStep({
           }
         >
           {busy ? 'Lendo…' : 'Ver prévia'}
-        </button>
-        <button data-cy="csv-map-cancel" className="ghost" onClick={onCancel} disabled={busy}>
+        </Button>
+        <Button variant="outlined" color="inherit" data-cy="csv-map-cancel" onClick={onCancel} disabled={busy}>
           Cancelar
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Stack>
+    </Box>
   );
 }
