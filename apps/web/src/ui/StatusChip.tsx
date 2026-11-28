@@ -10,13 +10,26 @@ export function StatusChip({
   tone,
   label,
   dataCy,
+  title,
   data,
 }: {
   tone: StatusTone;
   label: ReactNode;
   dataCy?: string;
+  title?: string;
   /** Atributos `data-*` extras que os testes leem (ex.: `{ 'data-status': 'Open' }`). */
   data?: Record<`data-${string}`, string>;
 }) {
-  return <Chip size="small" variant="outlined" color={COLOR[tone]} label={label} data-cy={dataCy} {...data} sx={{ fontWeight: 600 }} />;
+  return (
+    <Chip
+      size="small"
+      variant="outlined"
+      color={COLOR[tone]}
+      label={label}
+      title={title}
+      data-cy={dataCy}
+      {...data}
+      sx={{ fontWeight: 600 }}
+    />
+  );
 }

@@ -224,43 +224,6 @@ table.data tr.selected td {
 }
 
 /* ---- Resumo ---- */
-.cards-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
-.stat {
-  background: #1e293b;
-  border: 1px solid #27364b;
-  border-radius: 12px;
-  padding: 0.9rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.stat-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.stat-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.stat-value.expense {
-  color: #f87171;
-}
-
-.stat-value.income {
-  color: #4ade80;
-}
-
 /* ---- Orçamentos (BDG-5) ---- */
 .budget-group {
   margin-bottom: 1.75rem;
@@ -673,41 +636,8 @@ table.csv-sample td.mapped {
 }
 
 /* ---- Faturas do cartão (INV-7) ---- */
-.invoices-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.invoices-head h2 {
-  margin: 0;
-}
-
-.health-badge.open {
-  background: #1e3a8a;
-  color: #bfdbfe;
-}
-
-.health-badge.paid {
-  background: #14532d;
-  color: #bbf7d0;
-}
-
-.stat-value.small-value {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
 table.data td.income {
   color: #4ade80;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
 }
 
 [data-cy='invoice-pay'] {
@@ -772,15 +702,6 @@ table.data td .sub {
 table.data td.negative,
 .limit-line .negative {
   color: #f87171;
-}
-
-.limit-line {
-  font-size: 0.88rem;
-  color: #cbd5e1;
-}
-
-.limit-line .positive {
-  color: #4ade80;
 }
 
 /* NTF-3: sino de avisos e painel. */
@@ -911,19 +832,6 @@ table.data td.negative,
 }
 
 /* RCN-6: painel de conferência da fatura com a do banco. */
-.reconciliation {
-  margin: 1rem 0;
-  padding: 0.8rem 1rem;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  background: #0b1424;
-}
-
-.reconciliation h4 {
-  margin: 1rem 0 0.2rem;
-  font-size: 0.95rem;
-}
-
 /* MET-7: aba Metas. */
 .goal-scope .actions {
   margin-top: 0.4rem;

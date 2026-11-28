@@ -3123,7 +3123,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   - *Dado* as abas Contas e Cartões, *quando* cadastro, informo o saldo, edito o cartão e troco o ciclo (com a
     prévia), *então* tudo funciona como hoje com os componentes do projeto.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-7** Faturas e conciliação. → `InvoicesView`, `InvoiceReconciliationPanel`.
+- ✅ **MUI-7** Faturas e conciliação. → `InvoicesView`, `InvoiceReconciliationPanel`. Bundle medido: 166,4 KB gzip (+0,5 KB). Entrou em `src/ui/` o `Stat` (cartão de número, também no Resumo). O arquivo OFX continua num `<input type="file">` transparente sobre o botão (os testes usam `selectFile`). Corrigido o E2E da exportação contábil, que falhava com os dados zerados (uma conta PJ só: a tela não mostra o seletor de conta).
   - *Dado* a fatura de um cartão, *quando* navego entre os meses, pago e confiro com o arquivo do banco ou com
     o total, *então* os grupos da conciliação, os selos e as ações usam o MUI, com o mesmo comportamento.
   - Estimativa: 5 · **Must** · Dependências: MUI-6

@@ -1,16 +1,29 @@
 import { useEffect, useState } from 'react';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
+import ChevronRight from '@mui/icons-material/ChevronRight';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import { invoicesApi, type CardInvoices, type Invoice, type InvoiceStatus } from '../api/reports';
 import { cardPaymentsApi } from '../api/transactions';
 import type { Account, CreditCard } from '../api/types';
 import { InvoiceReconciliationPanel } from './InvoiceReconciliationPanel';
+import { DateField, Field, Notice, RowForm, SelectField, Stat, StatRow, StatusChip, TableBox, TextAction, type StatusTone } from '../ui';
 
-const STATUS: Record<InvoiceStatus, { label: string; tone: string }> = {
-  Open: { label: 'Aberta', tone: 'open' },
-  Closed: { label: 'Fechada', tone: 'warning' },
-  PartiallyPaid: { label: 'Parcialmente paga', tone: 'warning' },
-  Overdue: { label: 'Vencida', tone: 'exceeded' },
-  Paid: { label: 'Paga', tone: 'paid' },
+const STATUS: Record<InvoiceStatus, { label: string; tone: StatusTone }> = {
+  Open: { label: 'Aberta', tone: 'info' },
+  Closed: { label: 'Fechada', tone: 'attention' },
+  PartiallyPaid: { label: 'Parcialmente paga', tone: 'attention' },
+  Overdue: { label: 'Vencida', tone: 'outside' },
+  Paid: { label: 'Paga', tone: 'ok' },
 };
 
 /** A projeção do reporting recebe o pagamento alguns segundos depois (feed do transactions). */
@@ -114,8 +127,7 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
     setPaying(true);
   }
 
-  async function handlePay(e: React.FormEvent) {
-    e.preventDefault();
+  async function handlePay() {
     if (!invoice) return;
     setBusy(true);
     setError(null);
@@ -155,38 +167,43 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
 
   return (
     <section data-cy="invoices">
-      <div className="invoices-head">
-        <button type="button" className="ghost small" data-cy="invoices-back" onClick={onBack}>
-          ‹ Cartões
-        </button>
-        <h2>
-          Faturas de {card.label} <span className="muted">•••• {card.lastFourDigits}</span>
-        </h2>
-      </div>
-      <p className="muted">
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+        <Button variant="outlined" color="inherit" data-cy="invoices-back" onClick={onBack} startIcon={<ChevronLeft />}>
+          Cartões
+        </Button>
+        <Typography variant="h2" component="h2">
+          Faturas de {card.label}{' '}
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+            •••• {card.lastFourDigits}
+          </Box>
+        </Typography>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Fecha dia {card.closingDay} e vence dia {card.dueDay}. Compras até o fechamento entram na fatura que vence no
         mesmo ciclo; parcelas caem uma em cada fatura.
-      </p>
+      </Typography>
       {data && (
-        <p className="limit-line" data-cy="invoice-limit">
+        <Typography variant="body2" data-cy="invoice-limit" sx={{ mb: 2 }}>
           Limite {money(data.creditLimit, currency)} · em aberto {money(data.outstanding, currency)} (com parcelas futuras) ·{' '}
-          <strong className={data.availableLimit < 0 ? 'negative' : 'positive'} data-cy="invoice-available">
+          <Box
+            component="strong"
+            data-cy="invoice-available"
+            sx={{ color: data.availableLimit < 0 ? 'error.main' : 'success.main' }}
+          >
             disponível {money(data.availableLimit, currency)}
-          </strong>
-        </p>
+          </Box>
+        </Typography>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {loading ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : !invoice ? (
-        <p className="muted">Nenhuma fatura.</p>
+        <Typography color="text.secondary">Nenhuma fatura.</Typography>
       ) : (
         <>
-          <div className="month-nav">
-            <button
-              type="button"
-              className="ghost small"
+          <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1.5 }}>
+            <IconButton
               data-cy="invoice-prev"
               aria-label="Fatura anterior"
               disabled={index <= 0}
@@ -195,15 +212,18 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
                 setDueMonth(invoices[index - 1].dueMonth);
               }}
             >
-              ‹
-            </button>
-            <h3 data-cy="invoice-month" aria-live="polite">
+              <ChevronLeft />
+            </IconButton>
+            <Typography variant="h3" component="h3" data-cy="invoice-month" aria-live="polite">
               Fatura de {monthLabel(invoice.dueMonth)}
-              {invoice.dueMonth === data?.currentDueMonth && <span className="muted"> (atual)</span>}
-            </h3>
-            <button
-              type="button"
-              className="ghost small"
+              {invoice.dueMonth === data?.currentDueMonth && (
+                <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+                  {' '}
+                  (atual)
+                </Box>
+              )}
+            </Typography>
+            <IconButton
               data-cy="invoice-next"
               aria-label="Próxima fatura"
               disabled={index >= invoices.length - 1}
@@ -212,63 +232,67 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
                 setDueMonth(invoices[index + 1].dueMonth);
               }}
             >
-              ›
-            </button>
-            <span className={`health-badge ${STATUS[invoice.status].tone}`} data-cy="invoice-status" data-status={invoice.status}>
-              {STATUS[invoice.status].label}
-            </span>
+              <ChevronRight />
+            </IconButton>
+            <StatusChip
+              tone={STATUS[invoice.status].tone}
+              label={STATUS[invoice.status].label}
+              dataCy="invoice-status"
+              data={{ 'data-status': invoice.status }}
+            />
             {invoice.reconciliation &&
               (invoice.reconciliation.changedSince ? (
-                <span
-                  className="health-badge warning"
-                  data-cy="invoice-reconciled"
-                  data-changed="true"
+                <StatusChip
+                  tone="attention"
+                  dataCy="invoice-reconciled"
+                  data={{ 'data-changed': 'true' }}
                   title={`Conferida com ${money(invoice.reconciliation.appTotal, currency)}; o total agora é ${money(invoice.total, currency)}`}
-                >
-                  Alterada depois da conferência
-                </span>
+                  label="Alterada depois da conferência"
+                />
               ) : (
-                <span
-                  className="health-badge paid"
-                  data-cy="invoice-reconciled"
+                <StatusChip
+                  tone="ok"
+                  dataCy="invoice-reconciled"
                   title={`Total do banco ${money(invoice.reconciliation.bankTotal, currency)}`}
-                >
-                  Conferida
-                  {invoice.reconciliation.difference !== 0 && ` (dif. ${money(invoice.reconciliation.difference, currency)})`}
-                </span>
+                  label={`Conferida${invoice.reconciliation.difference !== 0 ? ` (dif. ${money(invoice.reconciliation.difference, currency)})` : ''}`}
+                />
               ))}
-          </div>
+          </Stack>
 
-          <div className="cards-row" data-cy="invoice-figures">
-            <div className="stat">
-              <span className="stat-label">Total</span>
-              <span className="stat-value expense" data-cy="invoice-total">{money(invoice.total, currency)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Pago</span>
-              <span className="stat-value income" data-cy="invoice-paid">{money(invoice.paid, currency)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Falta pagar</span>
-              <span className="stat-value" data-cy="invoice-remaining">{money(invoice.remaining, currency)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Fechamento / vencimento</span>
-              <span className="stat-value small-value" data-cy="invoice-dates">
-                {day(invoice.closingDate)} / {day(invoice.dueDate)}
-              </span>
-            </div>
-          </div>
+          <StatRow dataCy="invoice-figures">
+            <Stat label="Total" value={money(invoice.total, currency)} tone="expense" valueDataCy="invoice-total" />
+            <Stat label="Pago" value={money(invoice.paid, currency)} tone="income" valueDataCy="invoice-paid" />
+            <Stat label="Falta pagar" value={money(invoice.remaining, currency)} valueDataCy="invoice-remaining" />
+            <Stat
+              label="Fechamento / vencimento"
+              value={`${day(invoice.closingDate)} / ${day(invoice.dueDate)}`}
+              small
+              valueDataCy="invoice-dates"
+            />
+          </StatRow>
 
-          <button
-            type="button"
-            className="ghost"
-            data-cy="invoice-reconcile"
-            aria-expanded={reconciling}
-            onClick={() => setReconciling((open) => !open)}
-          >
-            {reconciling ? 'Fechar conferência' : 'Conferir com o banco'}
-          </button>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
+            {invoice.remaining > 0 && !paying && (
+              <Button
+                variant="contained"
+                data-cy="invoice-pay"
+                disabled={busy || activeAccounts.length === 0}
+                onClick={() => openPayment(invoice)}
+              >
+                Registrar pagamento
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              color="inherit"
+              data-cy="invoice-reconcile"
+              aria-expanded={reconciling}
+              onClick={() => setReconciling((open) => !open)}
+            >
+              {reconciling ? 'Fechar conferência' : 'Conferir com o banco'}
+            </Button>
+          </Stack>
+
           {reconciling && (
             <InvoiceReconciliationPanel
               card={card}
@@ -282,118 +306,108 @@ export function InvoicesView({ card, accounts, onBack, initialDueMonth, onEditTr
             />
           )}
 
-          {invoice.remaining > 0 && !paying && (
-            <button
-              type="button"
-              className="primary"
-              data-cy="invoice-pay"
-              disabled={busy || activeAccounts.length === 0}
-              onClick={() => openPayment(invoice)}
-            >
-              Registrar pagamento
-            </button>
-          )}
-
           {paying && (
-            <form className="row-form wrap" onSubmit={handlePay} data-cy="payment-form">
-              <label className="field">
-                <span>Conta de origem</span>
-                <select data-cy="payment-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
-                  {activeAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Valor</span>
-                <input
-                  data-cy="payment-amount"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="field">
-                <span>Data</span>
-                <input data-cy="payment-date" type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} required />
-              </label>
-              <button data-cy="payment-submit" className="primary" type="submit" disabled={busy}>
+            <RowForm onSubmit={() => void handlePay()} dataCy="payment-form">
+              <SelectField
+                dataCy="payment-account"
+                label="Conta de origem"
+                value={accountId}
+                onChange={setAccountId}
+                required
+                options={activeAccounts.map((a) => ({ value: a.id, label: a.name }))}
+              />
+              <Field
+                dataCy="payment-amount"
+                label="Valor"
+                type="number"
+                value={amount}
+                onChange={setAmount}
+                required
+                slotProps={{ htmlInput: { step: '0.01', min: '0.01' } }}
+              />
+              <DateField dataCy="payment-date" label="Data" value={paidOn} onChange={setPaidOn} required />
+              <Button data-cy="payment-submit" variant="contained" type="submit" disabled={busy} sx={{ height: 40 }}>
                 {busy ? 'Registrando…' : 'Registrar'}
-              </button>
-              <button type="button" className="ghost" onClick={() => setPaying(false)} disabled={busy}>
+              </Button>
+              <Button variant="outlined" color="inherit" type="button" onClick={() => setPaying(false)} disabled={busy} sx={{ height: 40 }}>
                 Cancelar
-              </button>
-            </form>
+              </Button>
+            </RowForm>
           )}
 
           {invoice.payments.length > 0 && (
             <>
-              <h3 className="section-title">Pagamentos</h3>
-              <table className="data" data-cy="invoice-payments">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Conta</th>
-                    <th>Valor</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoice.payments.map((p) => (
-                    <tr key={p.paymentId} data-cy="invoice-payment-row">
-                      <td>{day(p.paidOn)}</td>
-                      <td>{accountName(p.accountId)}</td>
-                      <td>{money(p.amount, currency)}</td>
-                      <td>
-                        <button
-                          className="link-danger"
-                          data-cy="invoice-payment-delete"
-                          disabled={busy}
-                          onClick={() => void handleDeletePayment(p.paymentId)}
-                        >
-                          excluir
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Typography variant="h3" component="h3" sx={{ mb: 1 }}>
+                Pagamentos
+              </Typography>
+              <TableBox>
+                <Table data-cy="invoice-payments">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Data</TableCell>
+                      <TableCell>Conta</TableCell>
+                      <TableCell align="right">Valor</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {invoice.payments.map((p) => (
+                      <TableRow key={p.paymentId} data-cy="invoice-payment-row">
+                        <TableCell>{day(p.paidOn)}</TableCell>
+                        <TableCell>{accountName(p.accountId)}</TableCell>
+                        <TableCell align="right">{money(p.amount, currency)}</TableCell>
+                        <TableCell align="right">
+                          <TextAction
+                            danger
+                            data-cy="invoice-payment-delete"
+                            disabled={busy}
+                            onClick={() => void handleDeletePayment(p.paymentId)}
+                          >
+                            excluir
+                          </TextAction>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableBox>
             </>
           )}
 
-          <h3 className="section-title">Compras</h3>
+          <Typography variant="h3" component="h3" sx={{ mb: 1 }}>
+            Compras
+          </Typography>
           {invoice.items.length === 0 ? (
-            <p className="muted">Nenhuma compra nesta fatura.</p>
+            <Typography color="text.secondary">Nenhuma compra nesta fatura.</Typography>
           ) : (
-            <table className="data" data-cy="invoice-items">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Descrição</th>
-                  <th>Categoria</th>
-                  <th>Parcela</th>
-                  <th>Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((item) => (
-                  <tr key={`${item.transactionId}-${item.installment}`} data-cy="invoice-item">
-                    <td>{day(item.purchaseDate)}</td>
-                    <td>{item.description ?? '—'}</td>
-                    <td>{item.category}</td>
-                    <td data-cy="invoice-item-installment">
-                      {item.installments > 1 ? `${item.installment}/${item.installments}` : 'à vista'}
-                    </td>
-                    <td className={item.amount < 0 ? 'income' : ''}>{money(item.amount, currency)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TableBox>
+              <Table data-cy="invoice-items" sx={{ minWidth: 560 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Data</TableCell>
+                    <TableCell>Descrição</TableCell>
+                    <TableCell>Categoria</TableCell>
+                    <TableCell>Parcela</TableCell>
+                    <TableCell align="right">Valor</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {invoice.items.map((item) => (
+                    <TableRow key={`${item.transactionId}-${item.installment}`} data-cy="invoice-item">
+                      <TableCell>{day(item.purchaseDate)}</TableCell>
+                      <TableCell>{item.description ?? '—'}</TableCell>
+                      <TableCell>{item.category}</TableCell>
+                      <TableCell data-cy="invoice-item-installment">
+                        {item.installments > 1 ? `${item.installment}/${item.installments}` : 'à vista'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: item.amount < 0 ? 'success.main' : undefined }}>
+                        {money(item.amount, currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableBox>
           )}
         </>
       )}

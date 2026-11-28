@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import { ApiError } from '../api/client';
 import { goalsApi, type MonthlyGoalScopeStatus, type MonthlyGoalSituation, type MonthlyGoalStatus } from '../api/goals';
 import { reportsApi, type ReportSummary, type TotalByKey } from '../api/reports';
-import { DateField, Notice, StatusChip, type StatusTone } from '../ui';
+import { DateField, Notice, Stat, StatRow, StatusChip, type StatusTone } from '../ui';
 
 const SCOPE_LABEL: Record<string, string> = {
   Personal: 'Pessoal (PF)',
@@ -78,12 +78,12 @@ export function SummaryView({ onOpenGoals }: { onOpenGoals?: () => void }) {
         <Typography>Carregando…</Typography>
       ) : summary ? (
         <>
-          <Grid container spacing={1.5} data-cy="summary-stats" sx={{ mb: 3 }}>
-            <Stat label="Gastos" value={money(summary.totalExpense, summary.currency)} tone="expense" cy="stat-expense" />
-            <Stat label="Receitas" value={money(summary.totalIncome, summary.currency)} tone="income" cy="stat-income" />
-            <Stat label="Saldo" value={money(summary.net, summary.currency)} tone={summary.net >= 0 ? 'income' : 'expense'} cy="stat-net" />
-            <Stat label="Lançamentos" value={String(summary.count)} cy="stat-count" />
-          </Grid>
+          <StatRow dataCy="summary-stats">
+            <Stat label="Gastos" value={money(summary.totalExpense, summary.currency)} tone="expense" dataCy="stat-expense" />
+            <Stat label="Receitas" value={money(summary.totalIncome, summary.currency)} tone="income" dataCy="stat-income" />
+            <Stat label="Saldo" value={money(summary.net, summary.currency)} tone={summary.net >= 0 ? 'income' : 'expense'} dataCy="stat-net" />
+            <Stat label="Lançamentos" value={String(summary.count)} dataCy="stat-count" />
+          </StatRow>
 
           {goal && (goal.personal.situation || goal.business.situation) && (
             <Box data-cy="summary-goal" sx={{ mb: 3 }}>
@@ -119,30 +119,6 @@ export function SummaryView({ onOpenGoals }: { onOpenGoals?: () => void }) {
         </>
       ) : null}
     </section>
-  );
-}
-
-function Stat({ label, value, tone, cy }: { label: string; value: string; tone?: 'expense' | 'income'; cy?: string }) {
-  return (
-    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-      <Paper variant="outlined" data-cy={cy} sx={{ p: 2, height: '100%' }}>
-        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', lineHeight: 1.6 }}>
-          {label}
-        </Typography>
-        {/* `.stat-value` é lido pelos testes (stat-income). */}
-        <Typography
-          className="stat-value"
-          sx={{
-            fontSize: '1.35rem',
-            fontWeight: 700,
-            fontVariantNumeric: 'tabular-nums',
-            color: tone === 'expense' ? 'error.main' : tone === 'income' ? 'success.main' : 'text.primary',
-          }}
-        >
-          {value}
-        </Typography>
-      </Paper>
-    </Grid>
   );
 }
 
