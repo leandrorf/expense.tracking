@@ -2871,7 +2871,28 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     `goal.balance_negative`; *e* editar o nome, o alvo ou o prazo, excluir um aporte e arquivar o objetivo
     funcionam só para o dono (404 para os outros).
   - Estimativa: 3 · **Must** · Dependências: MET-1
-- 🔵 **MET-6** Ritmo e previsão de chegada do objetivo. → no `GET /goals/objectives`.
+- ✅ **MET-6** Ritmo e previsão de chegada do objetivo. → no `GET /goals/objectives`.
+  - Feito assim:
+    - **Cálculo:** `SavingsPaceCalculator` (domínio) calcula, para hoje no fuso do app:
+      - **falta** = alvo − guardado (nunca negativo);
+      - **meses restantes**: do atual ao do prazo, contando os dois;
+      - **precisa por mês** = falta ÷ meses restantes;
+      - **ritmo**: aportes líquidos do dia 1 de dois meses atrás até hoje ÷ 3, ou ÷ meses desde a criação
+        (no mínimo 1);
+      - **previsão de chegada** = mês atual + ⌈falta ÷ ritmo⌉.
+    - **Situação:** `OnTrack`, `Behind`, `Reached` ou `DeadlinePassed`.
+    - **Onde aparece:** os campos `missing`, `monthsLeft`, `neededPerMonth`, `pace`, `expectedArrival`
+      (`yyyy-MM`) e `situation` vêm em cada objetivo, na lista e nas respostas das alterações.
+    - **Campos nulos:**
+      - sem prazo ou com o prazo vencido, não há meses restantes nem precisa por mês;
+      - objetivo atingido, ou ritmo zero ou negativo, não tem chegada;
+      - objetivo atingido também não tem precisa por mês.
+    - **Exemplo da ADR em teste:** R$ 30.000 até dez/2027 com R$ 6.000 guardados → falta R$ 24.000, precisa
+      R$ 1.714,29 em 14 meses; ritmo de R$ 1.000 → `Behind`, chegada nov/2028.
+    - **Fica para a MET-10:** a soma do "precisa por mês" por escopo (decisão 8), quando o botão "usar como
+      meta" precisar dela. A lista continua um array.
+    - **Smoke passo 24l:** o objetivo de 1.000 com aporte de 300 tem falta 700, ritmo 300, chegada em 3 meses
+      e `OnTrack` (59 passos).
   - *Dado* um objetivo de R$ 30.000 até dez/2027 com R$ 6.000 guardados em nov/2026, *quando* consulto,
     *então* vejo falta R$ 24.000 e precisa R$ 1.714,29 por mês (14 meses, de nov/2026 a dez/2027); *e* com aportes de R$ 1.000 por mês
     nos últimos 3 meses, situação **atrasado** e previsão de chegada em nov/2028.

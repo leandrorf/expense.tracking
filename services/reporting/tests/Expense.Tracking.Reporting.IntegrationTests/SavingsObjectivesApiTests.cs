@@ -65,6 +65,23 @@ public sealed class SavingsObjectivesApiTests(InvoicesApiFactory factory) : ICla
     }
 
     [Fact]
+    public async Task Objective_ComesWithThePace_AndTheSituation()
+    {
+        // MET-6: criado hoje (2026-11-21), o ritmo divide por 1 mes; R$ 30.000 ate dez/2027 (14 meses).
+        var client = ClientFor(Guid.NewGuid());
+        var id = (await Created(client, Objective())).GetProperty("id").GetGuid();
+
+        var body = await (await client.PostAsJsonAsync($"/goals/objectives/{id}/contributions", new { date = "2026-11-01", amount = 6000m }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal((24000m, 14, 1714.29m, 6000m, "2027-03", "OnTrack"),
+            (body.GetProperty("missing").GetDecimal(), body.GetProperty("monthsLeft").GetInt32(), body.GetProperty("neededPerMonth").GetDecimal(),
+                body.GetProperty("pace").GetDecimal(), body.GetProperty("expectedArrival").GetString(), body.GetProperty("situation").GetString()));
+        var listed = Assert.Single((await client.GetFromJsonAsync<JsonElement[]>("/goals/objectives"))!);
+        Assert.Equal("OnTrack", listed.GetProperty("situation").GetString());
+    }
+
+    [Fact]
     public async Task Withdrawal_BeyondTheSaved_AndDeletingTheDeposit_AreRejected()
     {
         var client = ClientFor(Guid.NewGuid());

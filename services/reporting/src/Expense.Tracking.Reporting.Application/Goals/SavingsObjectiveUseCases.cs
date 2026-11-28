@@ -13,11 +13,18 @@ public sealed record SavingsContributionDto(Guid Id, string Date, decimal Amount
 /// <param name="Deadline">Mes do prazo, <c>yyyy-MM</c>; nulo = sem prazo.</param>
 /// <param name="Saved">Soma dos aportes.</param>
 /// <param name="Contributions">Aportes do mais novo ao mais antigo.</param>
+/// <param name="Missing">MET-6: alvo − guardado, nunca negativo.</param>
+/// <param name="MonthsLeft">MET-6: meses do atual ate o do prazo, contando os dois; nulo sem prazo ou vencido.</param>
+/// <param name="NeededPerMonth">MET-6: quanto precisa guardar por mes para chegar no prazo.</param>
+/// <param name="Pace">MET-6: media mensal dos aportes dos ultimos 3 meses.</param>
+/// <param name="ExpectedArrival">MET-6: mes (<c>yyyy-MM</c>) em que o ritmo atual chega ao alvo.</param>
+/// <param name="Situation">MET-6: <c>OnTrack</c>, <c>Behind</c>, <c>Reached</c> ou <c>DeadlinePassed</c>.</param>
 public sealed record SavingsObjectiveDto(
     Guid Id, string Scope, string Name, decimal Target, string? Deadline, bool Archived, decimal Saved,
-    IReadOnlyList<SavingsContributionDto> Contributions)
+    IReadOnlyList<SavingsContributionDto> Contributions,
+    decimal Missing, int? MonthsLeft, decimal? NeededPerMonth, decimal Pace, string? ExpectedArrival, string Situation)
 {
-    public static SavingsObjectiveDto From(SavingsObjective objective) => new(
+    public static SavingsObjectiveDto From(SavingsObjective objective, SavingsPace pace) => new(
         objective.Id,
         GoalScopes.ToRoute(objective.Scope),
         objective.Name,
@@ -28,7 +35,13 @@ public sealed record SavingsObjectiveDto(
         objective.Contributions
             .Reverse()
             .Select(c => new SavingsContributionDto(c.Id, c.OccurredOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), c.Amount, c.Note))
-            .ToList());
+            .ToList(),
+        pace.Missing,
+        pace.MonthsLeft,
+        pace.NeededPerMonth,
+        pace.Pace,
+        pace.ExpectedArrival?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+        pace.Situation.ToString());
 }
 
 /// <summary>MET-5: objetivos de economia do usuario no banco do reporting (ADR-0013).</summary>
@@ -62,7 +75,7 @@ public sealed class SavingsObjectiveHandler(ISavingsObjectiveRepository objectiv
             .OrderBy(o => o.IsArchived)
             .ThenBy(o => o.Scope)
             .ThenBy(o => o.CreatedAt)
-            .Select(SavingsObjectiveDto.From)
+            .Select(ToDto)
             .ToList();
 
     public async Task<Result<SavingsObjectiveDto>> CreateAsync(CreateSavingsObjectiveCommand command, CancellationToken cancellationToken)
@@ -75,7 +88,7 @@ public sealed class SavingsObjectiveHandler(ISavingsObjectiveRepository objectiv
         }
 
         await objectives.AddAsync(created.Value, cancellationToken);
-        return SavingsObjectiveDto.From(created.Value);
+        return ToDto(created.Value);
     }
 
     public Task<Result<SavingsObjectiveDto>> EditAsync(EditSavingsObjectiveCommand command, CancellationToken cancellationToken) =>
@@ -108,6 +121,13 @@ public sealed class SavingsObjectiveHandler(ISavingsObjectiveRepository objectiv
 
     private DateOnly Today() => CardInvoiceSource.Today(timeProvider, options);
 
+    /// <summary>MET-6: o objetivo com o ritmo calculado para hoje (e o dia da criacao) no fuso do app.</summary>
+    private SavingsObjectiveDto ToDto(SavingsObjective objective)
+    {
+        var createdOn = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(objective.CreatedAt, options.TimeZone).DateTime);
+        return SavingsObjectiveDto.From(objective, SavingsPaceCalculator.Evaluate(objective, Today(), createdOn));
+    }
+
     private async Task<Result<SavingsObjectiveDto>> ApplyAsync(
         Guid id, Guid ownerUserId, Func<SavingsObjective, Result> change, CancellationToken cancellationToken)
     {
@@ -124,6 +144,6 @@ public sealed class SavingsObjectiveHandler(ISavingsObjectiveRepository objectiv
         }
 
         await objectives.SaveChangesAsync(cancellationToken);
-        return SavingsObjectiveDto.From(objective);
+        return ToDto(objective);
     }
 }

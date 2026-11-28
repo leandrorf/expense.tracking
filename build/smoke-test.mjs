@@ -677,12 +677,16 @@ async function main() {
     method: 'POST', headers: auth, body: JSON.stringify({ date: new Date().toISOString().slice(0, 10), amount }),
   });
   const depositRes = await contribute(300);
-  const saved = depositRes.status === 200 ? (await depositRes.json()).saved : undefined;
+  const afterDeposit = depositRes.status === 200 ? await depositRes.json() : {};
+  const saved = afterDeposit.saved;
   const overdrawRes = await contribute(-500);
   const overdraw = overdrawRes.status === 400 ? (await overdrawRes.json()).title : overdrawRes.status;
   const archiveRes = await fetch(`${GATEWAY}/api/goals/objectives/${objective.id}/archive`, { method: 'POST', headers: auth });
   ok(objectiveRes.status === 201 && saved === 300 && overdraw === 'goal.balance_negative' && archiveRes.status === 200,
     `objetivo e aportes: POST ${objectiveRes.status}, guardado ${saved}, retirada maior -> ${overdraw}, arquivar ${archiveRes.status}`);
+  // 24l) Ritmo do objetivo (MET-6): criado hoje, o ritmo e o aporte do mes; falta 700 e chega em 3 meses.
+  ok(afterDeposit.missing === 700 && afterDeposit.pace === 300 && afterDeposit.expectedArrival === monthAfter(3) && afterDeposit.situation === 'OnTrack',
+    `ritmo do objetivo: falta ${afterDeposit.missing}, ritmo ${afterDeposit.pace}, chegada ${afterDeposit.expectedArrival}, ${afterDeposit.situation}`);
 
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
