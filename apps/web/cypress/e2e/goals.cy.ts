@@ -76,6 +76,34 @@ describe('Metas', () => {
     row().find('[data-cy=objective-archive]').click();
   });
 
+  it('usa a soma do que os objetivos precisam por mes como meta do mes', () => {
+    // MET-10: um objetivo PF de 1.200 com prazo daqui a 2 meses (3 meses contando o atual) precisa de 400 por mes.
+    // Outros objetivos PF com prazo podem existir no demo: a soma e conferida pela diferenca.
+    const name = `Soma ${Date.now()}`;
+    const now = new Date();
+    const deadline = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+    const totalOf = ($body: JQuery<HTMLElement>) => Number($body.find('[data-cy=objectives-needed-personal]').attr('data-total') ?? 0);
+
+    cy.get('[data-cy=objectives][data-loading=false]').should('exist');
+    cy.get('body').then(($before) => {
+      const before = totalOf($before);
+      cy.get('[data-cy=objective-name]').type(name);
+      cy.get('[data-cy=objective-target]').type('1200');
+      cy.get('[data-cy=objective-deadline]').type(`${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}`);
+      cy.get('[data-cy=objective-submit]').click();
+      cy.get(`[data-cy=objective-row][data-name="${name}"] [data-cy=objective-needed]`).should('contain', '400,00');
+      const expected = Math.round((before + 400) * 100) / 100;
+      cy.get('[data-cy=objectives-needed-personal]').should('have.attr', 'data-total', String(expected));
+
+      cy.get('[data-cy=objectives-use-as-goal-personal]').click();
+      cy.get('[data-cy=objectives-goal-notice]').should('contain', 'Meta PF');
+      cy.get('[data-cy=goal-scope-personal] [data-cy=goal-target]').should(($target) => {
+        expect(Number($target.text().replace(/[^\d,-]/g, '').replace(',', '.'))).to.be.closeTo(expected, 0.005);
+      });
+    });
+    cy.get(`[data-cy=objective-row][data-name="${name}"] [data-cy=objective-archive]`).click();
+  });
+
   it('avisa do objetivo atrasado perto do prazo e leva a aba Metas', () => {
     // MET-9: 1.000 ate o mes que vem, sem aporte: precisa de 500 por mes com ritmo zero (atrasado, 2 meses do prazo).
     const name = `Atrasado ${Date.now()}`;

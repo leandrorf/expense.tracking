@@ -99,15 +99,15 @@ export function GoalsView() {
         A meta do mês compara o resultado da previsão (entradas − saídas − faturas que vencem no mês) com o que você quer
         guardar ou com um teto de gastos. Os objetivos somam o que você registra como guardado para cada um.
       </p>
-      <MonthlyGoals onChanged={() => setRevision((r) => r + 1)} />
+      <MonthlyGoals revision={revision} onChanged={() => setRevision((r) => r + 1)} />
       <GoalHistory revision={revision} />
-      <Objectives />
+      <Objectives onGoalChanged={() => setRevision((r) => r + 1)} />
     </section>
   );
 }
 
 /** MET-3/MET-7: situação do mês, "ainda pode gastar" e a meta de cada escopo. */
-function MonthlyGoals({ onChanged }: { onChanged: () => void }) {
+function MonthlyGoals({ revision: outside, onChanged }: { revision: number; onChanged: () => void }) {
   const [month, setMonth] = useState(currentMonth());
   const [status, setStatus] = useState<MonthlyGoalStatus | null>(null);
   const [goals, setGoals] = useState<MonthlyGoal[]>([]);
@@ -131,7 +131,7 @@ function MonthlyGoals({ onChanged }: { onChanged: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [month, revision]);
+  }, [month, revision, outside]);
 
   const current = currentMonth();
   const shown = status?.month === month ? status : null;
@@ -440,7 +440,7 @@ function GoalHistory({ revision }: { revision: number }) {
 }
 
 /** MET-5/MET-6/MET-7: objetivos com aportes, ritmo e situação. */
-function Objectives() {
+function Objectives({ onGoalChanged }: { onGoalChanged: () => void }) {
   const [objectives, setObjectives] = useState<SavingsObjective[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -452,6 +452,7 @@ function Objectives() {
   const [deadline, setDeadline] = useState('');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [goalNotice, setGoalNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -484,6 +485,32 @@ function Objectives() {
     }
   }
 
+  /**
+   * MET-10 (ADR-0013, decisão 8): soma do "precisa por mês" dos objetivos em andamento com prazo, por escopo. A
+   * meta mensal e os objetivos continuam independentes: o botão só copia a soma para a meta, a partir deste mês.
+   */
+  const needed = SCOPES.map(({ scope, short }) => ({
+    scope,
+    short,
+    total:
+      Math.round(
+        objectives
+          .filter((o) => o.scope === scope && !o.archived && o.neededPerMonth !== null)
+          .reduce((sum, o) => sum + (o.neededPerMonth ?? 0), 0) * 100,
+      ) / 100,
+  })).filter((n) => n.total > 0);
+
+  async function applyAsGoal(scope: GoalScope, short: string, total: number) {
+    setError(null);
+    try {
+      await goalsApi.setMonthly(scope, { kind: 'SaveAmount', amount: total, fromMonth: currentMonth() });
+      setGoalNotice(`Meta ${short}: guardar ${money(total)} a partir de ${monthLabel(currentMonth())}.`);
+      onGoalChanged();
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  }
+
   function replace(updated: SavingsObjective) {
     setObjectives((list) =>
       updated.archived && !showArchived ? list.filter((o) => o.id !== updated.id) : list.map((o) => (o.id === updated.id ? updated : o)),
@@ -491,7 +518,7 @@ function Objectives() {
   }
 
   return (
-    <div className="objectives" data-cy="objectives">
+    <div className="objectives" data-cy="objectives" data-loading={loading}>
       <h3 className="section-title">Objetivos</h3>
       <p className="hint">
         Registre o que você guardou para cada objetivo (uma retirada é um valor negativo). O que você registra aqui não é
@@ -534,6 +561,23 @@ function Objectives() {
       {formError && (
         <p className="error" role="alert" data-cy="objective-form-error">
           {formError}
+        </p>
+      )}
+      {needed.length > 0 && (
+        <div className="objectives-needed" data-cy="objectives-needed">
+          {needed.map((n) => (
+            <p key={n.scope} data-cy={`objectives-needed-${n.scope}`} data-total={n.total}>
+              Para chegar no prazo, os objetivos {n.short} precisam de <strong>{money(n.total)}</strong> por mês.{' '}
+              <button type="button" className="ghost small" data-cy={`objectives-use-as-goal-${n.scope}`} onClick={() => void applyAsGoal(n.scope, n.short, n.total)}>
+                usar como meta {n.short}
+              </button>
+            </p>
+          ))}
+        </div>
+      )}
+      {goalNotice && (
+        <p className="notice" data-cy="objectives-goal-notice">
+          {goalNotice}
         </p>
       )}
       <label className="inline-label">

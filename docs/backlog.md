@@ -2682,7 +2682,7 @@ ponta. Should = CYC-2 (3 pts): editar nome, final e limite. Could = CYC-6 (2 pts
 
 **Ordem sugerida:** CYC-1 → CYC-3 → CYC-4 → CYC-2 → CYC-5 → CYC-7 (fecha o Must) → CYC-6.
 
-## 🟡 EPIC MET — Metas de gastos e de economia  · *In Progress*
+## 🟢 EPIC MET — Metas de gastos e de economia  · *Done*
 **Problema:** o app mostra o que já entrou e saiu (Resumo), quanto cada categoria pode gastar
 (orçamentos, BDG) e o que vem pela frente (previsão, INV/REC). Mas não responde às duas perguntas de quem
 quer guardar dinheiro: "quanto sobra para guardar este mês?" e "estou no caminho daquele objetivo?". O
@@ -2971,7 +2971,18 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     chega o resumo por e-mail), *então* aparece um aviso que leva à aba Metas; *e* o aviso some quando a
     situação volta a **dentro** ou **no ritmo**.
   - Estimativa: 3 · **Could** · Dependências: MET-3, MET-6
-- 🔵 **MET-10** "Usar como meta" a soma dos objetivos. → botão na aba Metas.
+- ✅ **MET-10** "Usar como meta" a soma dos objetivos. → botão na aba Metas.
+  - Feito assim:
+    - **Na aba Metas:** para cada escopo com objetivos em andamento com prazo, a tela mostra quanto eles
+      precisam somados por mês e o botão "usar como meta PF/PJ". O botão define a meta mensal "guardar esse
+      valor" a partir do mês atual (`PUT /goals/monthly/{escopo}`), e a meta do mês e o histórico se
+      atualizam.
+    - **De onde vem a soma:** a tela soma o `neededPerMonth` que cada objetivo já traz (MET-6), em vez de a
+      lista devolver a soma por escopo (decisão 8 da ADR). Assim a lista continua um array e nada muda no
+      `reporting`.
+    - **Independência:** a meta e os objetivos continuam independentes; o botão só copia o valor.
+    - **E2E `goals.cy.ts`:** um objetivo PF de 1.200 com prazo em 3 meses soma 400 ao total, que vira o alvo
+      da meta PF.
   - *Dado* objetivos PF em andamento que precisam de R$ 1.200 por mês somados, *quando* clico em "usar como
     meta", *então* a meta mensal PF passa a ser guardar R$ 1.200 a partir do mês atual.
   - Estimativa: 2 · **Could** · Dependências: MET-6, MET-7
