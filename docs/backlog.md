@@ -3018,7 +3018,7 @@ MET-8 (6 pts): histórico e meta na previsão e no Resumo. Could = MET-9 e MET-1
 **Ordem sugerida:** MET-1 → MET-2 → MET-3 → MET-5 → MET-6 → MET-7 → MET-11 (fecha o Must) → MET-4 → MET-8 →
 MET-9 → MET-10.
 
-## 🔵 EPIC MUI — Interface com Material UI  · *To Do*
+## 🟡 EPIC MUI — Interface com Material UI  · *In Progress*
 **Problema:** a SPA cresceu para 18 telas, mas o visual continua sendo um CSS próprio de 1.100 linhas, escrito
 tela a tela. Cada épico novo reinventa botões, campos, selos de situação, tabelas e avisos. O resultado é uma
 interface irregular (espaçamentos, alturas e estados de foco diferentes), sem padrão de acessibilidade, difícil
@@ -3057,7 +3057,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   vira um `Popover`.
 - **Bundle hoje:** 84 KB gzip de JS e 3,3 KB de CSS.
 
-**Decisões em aberto (a registrar na ADR-0014, MUI-1; a recomendação de cada uma vem com o motivo):**
+**Decisões (aceitas na [ADR-0014](adr/0014-material-ui-na-spa.md), MUI-1; ficou a recomendação de cada uma, com os refinamentos da MUI-1):**
 1. **Pacotes.** *Recomendação:* `@mui/material` v7, `@emotion/react`, `@emotion/styled` e `@mui/icons-material`,
    todos MIT. O MUI X fica de fora: o Data Grid e os Date Pickers Pro/Premium são pagos, e as versões grátis
    trazem peso e um adaptador de datas que os campos nativos dispensam. A tabela é a `Table` do `@mui/material`.
@@ -3091,7 +3091,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
 9. **Escopo.** *Recomendação:* só aparência e componentes. Os fluxos, os textos e as regras continuam iguais,
    sem roteador novo, sem i18n e sem tela nova; melhorias de fluxo viram histórias de outros épicos.
 
-- 🔵 **MUI-1** ADR: Material UI na SPA. → ADR-0014.
+- ✅ **MUI-1** ADR: Material UI na SPA. → [ADR-0014](adr/0014-material-ui-na-spa.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0014 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), e o PO ajusta as histórias
     seguintes ao que foi decidido.
