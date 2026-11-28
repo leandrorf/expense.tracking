@@ -658,6 +658,15 @@ async function main() {
   ok([200, 201].includes(goalNow.status) && goalNext.status === 200 && termIn(monthAfter(0)) === 6000 && termIn(monthAfter(1)) === 6500,
     `meta mensal PJ por vigencia: PUT ${goalNow.status}/${goalNext.status}, GET ${goalsRes.status}, teto ${termIn(monthAfter(0))} -> ${termIn(monthAfter(1))}`);
 
+  // 24j) Situacao da meta (MET-3): o resultado PJ do mes e o da previsao; "ainda pode gastar" = teto - saidas.
+  const goalStatusRes = await fetch(`${GATEWAY}/api/goals/monthly/status`, { headers: auth });
+  const goalStatus = goalStatusRes.status === 200 ? (await goalStatusRes.json()).business : {};
+  const forecastNow = await (await fetch(`${GATEWAY}/api/reports/cash-forecast?months=1`, { headers: auth })).json();
+  const pjResult = forecastNow.months?.[0]?.business?.result;
+  const expectedLeft = Math.max(Math.round((6000 - goalStatus.outflows) * 100) / 100, 0);
+  ok(goalStatusRes.status === 200 && goalStatus.result === pjResult && goalStatus.canStillSpend === expectedLeft && !!goalStatus.situation,
+    `situacao da meta PJ: resultado ${goalStatus.result} (previsao ${pjResult}), ainda pode gastar ${goalStatus.canStillSpend}, ${goalStatus.situation}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

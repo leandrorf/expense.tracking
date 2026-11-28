@@ -30,6 +30,29 @@ public static class GoalsEndpoints
             return Results.Ok(await handler.HandleAsync(ownerUserId, ct));
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
+        // MET-3: situacao e "ainda pode gastar" de PF e PJ no mes atual (padrao) ou num futuro.
+        group.MapGet("/monthly/status", async (string? month, ClaimsPrincipal user, GetMonthlyGoalStatusHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            DateOnly? parsed = null;
+            if (month is not null)
+            {
+                if (!TryParseMonth(month, out var value))
+                {
+                    return HttpResults.Problem(GoalErrors.MonthInvalid);
+                }
+
+                parsed = value;
+            }
+
+            var result = await handler.HandleAsync(ownerUserId, parsed, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
         // MET-2: cria a meta do escopo (201) ou muda a forma e o valor a partir do mes (200).
         group.MapPut("/monthly/{scope}", async (
             string scope, SetMonthlyGoalRequest request, ClaimsPrincipal user, SetMonthlyGoalHandler handler, CancellationToken ct) =>

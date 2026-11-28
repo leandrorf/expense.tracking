@@ -2815,7 +2815,21 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     recebo 400 com um código de erro (`goal.amount_invalid`, `goal.percent_invalid`, `goal.month_invalid`);
     *e* encerrar a partir de um mês para de cobrar a meta dali em diante.
   - Estimativa: 3 · **Must** · Dependências: MET-1
-- 🔵 **MET-3** Situação do mês e "ainda pode gastar". → `GET /goals/monthly/status`.
+- ✅ **MET-3** Situação do mês e "ainda pode gastar". → `GET /goals/monthly/status`.
+  - Feito assim:
+    - **Fonte dos números:** `GET /goals/monthly/status?month=` (padrão: o mês atual) roda a própria previsão
+      (`GetCashForecastHandler`) até o mês pedido e lê PF e PJ dela. O resultado é o mesmo da previsão por
+      construção: o lançado, as recorrências ainda não lançadas e as faturas que vencem no mês.
+    - **Cálculo:** `MonthlyGoalStatusCalculator` (domínio) calcula, para a vigência do mês, o alvo (no
+      percentual, arredondado em 2 casas com o meio para longe do zero), o "ainda pode gastar" (nunca
+      negativo) e a situação `Inside`/`Attention`/`Outside`. Folga de exatamente 20% do alvo ainda é
+      `Inside`; meta atingida exatamente é `Attention`, com zero para gastar.
+    - **Resposta:** cada escopo traz entradas, saídas, faturas, `outflows` e `result`; os campos da meta
+      vêm nulos no escopo sem meta. A resposta traz também um aviso de que o cartão entra pelo vencimento.
+    - **Erros (400):** mês passado = `goal.month_in_past` (fica para o histórico, MET-4); além dos 12 meses
+      da previsão = `goal.month_out_of_range`.
+    - **Smoke passo 24j:** o resultado PJ é igual ao da previsão, e "ainda pode gastar" = teto − saídas
+      (57 passos).
   - *Dado* a meta PF de guardar R$ 1.000, entradas previstas de R$ 5.000 e saídas mais faturas do mês de
     R$ 3.500, *quando* consulto o mês, *então* vejo resultado previsto de R$ 1.500, situação **dentro** e
     "ainda pode gastar" R$ 500; *e* um gasto de R$ 350 lançado agora deixa R$ 150 (folga de 15% da meta) e a situação **atenção**.

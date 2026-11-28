@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<SetMonthlyGoalHandler>();
         services.AddScoped<CloseMonthlyGoalHandler>();
         services.AddScoped<ListMonthlyGoalsHandler>();
+        services.AddScoped<GetMonthlyGoalStatusHandler>();
         services.AddScoped<GetCardInvoicesHandler>();
         // RCN-2 (ADR-0011): conferencia da fatura com a do banco.
         services.AddScoped<IInvoiceReconciliationStore, InvoiceReconciliationStore>();

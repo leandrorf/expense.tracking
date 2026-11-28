@@ -1,4 +1,8 @@
+using System.Globalization;
+using Expense.Tracking.Reporting.Application.Forecast;
+using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Common;
+using Expense.Tracking.Reporting.Domain.Forecast;
 using Expense.Tracking.Reporting.Domain.Goals;
 
 namespace Expense.Tracking.Reporting.Application.Goals;
@@ -146,4 +150,81 @@ public sealed class ListMonthlyGoalsHandler(IMonthlyGoalRepository goals)
             .ThenBy(g => g.StartMonth)
             .Select(MonthlyGoalDto.From)
             .ToList();
+}
+
+/// <param name="Kind">Forma da vigencia do mes; nula se o escopo nao tem meta nele.</param>
+/// <param name="Target">Alvo do mes (valor, percentual das entradas ou teto); nulo sem meta.</param>
+/// <param name="Outflows">Saidas fora do cartao + faturas que vencem no mes.</param>
+/// <param name="Result">Entradas − saidas − faturas, igual ao <c>result</c> da previsao.</param>
+/// <param name="CanStillSpend">Quanto ainda cabe gastar sem perder a meta; nulo sem meta.</param>
+/// <param name="Situation"><c>Inside</c>, <c>Attention</c> ou <c>Outside</c>; nula sem meta.</param>
+public sealed record MonthlyGoalScopeStatusDto(
+    string Scope, string? Kind, decimal? Amount, int? Percent, decimal? Target,
+    decimal Income, decimal Expense, decimal Invoices, decimal Outflows, decimal Result,
+    decimal? CanStillSpend, string? Situation);
+
+/// <param name="Month">Mes consultado, <c>yyyy-MM</c>.</param>
+/// <param name="Notice">Lembrete para a tela: o cartao pesa no mes de vencimento da fatura.</param>
+public sealed record MonthlyGoalStatusDto(
+    string Month, string Notice, MonthlyGoalScopeStatusDto Personal, MonthlyGoalScopeStatusDto Business);
+
+/// <summary>
+/// MET-3 (ADR-0013, regras 2, 4 e 5): <c>GET /goals/monthly/status?month=</c>. O mes atual ou um futuro (ate o
+/// limite da previsao), pelos numeros da propria previsao (o lancado e o previsto), para o resultado ser o mesmo.
+/// Meses passados ficam no historico (MET-4).
+/// </summary>
+public sealed class GetMonthlyGoalStatusHandler(
+    IMonthlyGoalRepository goals, GetCashForecastHandler forecast, InvoiceOptions options, TimeProvider timeProvider)
+{
+    public const string Notice =
+        "Compras no cartão entram no mês de vencimento da fatura, como na previsão. Recorrências ainda não lançadas entram como previstas.";
+
+    public static readonly Error MonthInPast = Error.Validation(
+        "goal.month_in_past", "A situacao vale para o mes atual e os seguintes; meses passados estao no historico.");
+
+    public static readonly Error MonthOutOfRange = Error.Validation(
+        "goal.month_out_of_range", $"A situacao vai ate {CashForecastCalculator.MaxMonths} meses a partir do atual, como a previsao.");
+
+    public async Task<Result<MonthlyGoalStatusDto>> HandleAsync(Guid ownerUserId, DateOnly? month, CancellationToken cancellationToken)
+    {
+        var today = CardInvoiceSource.Today(timeProvider, options);
+        var current = new DateOnly(today.Year, today.Month, 1);
+        var target = month is { } m ? new DateOnly(m.Year, m.Month, 1) : current;
+        if (target < current)
+        {
+            return Result.Failure<MonthlyGoalStatusDto>(MonthInPast);
+        }
+
+        var months = (target.Year - current.Year) * 12 + target.Month - current.Month + 1;
+        if (months > CashForecastCalculator.MaxMonths)
+        {
+            return Result.Failure<MonthlyGoalStatusDto>(MonthOutOfRange);
+        }
+
+        var cash = await forecast.HandleAsync(ownerUserId, months, cancellationToken);
+        if (cash.IsFailure)
+        {
+            return Result.Failure<MonthlyGoalStatusDto>(cash.Error);
+        }
+
+        var flows = cash.Value.Months[^1];
+        var all = await goals.ListAsync(ownerUserId, cancellationToken);
+        return new MonthlyGoalStatusDto(
+            target.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            Notice,
+            StatusOf(GoalScope.Personal, flows.Personal, all, target),
+            StatusOf(GoalScope.Business, flows.Business, all, target));
+    }
+
+    private static MonthlyGoalScopeStatusDto StatusOf(
+        GoalScope scope, MonthFlowDto flow, IReadOnlyList<MonthlyGoal> all, DateOnly month)
+    {
+        var figures = new MonthFigures(flow.Income, flow.Expense, flow.Invoices);
+        var term = all.Where(g => g.Scope == scope).Select(g => g.TermFor(month)).FirstOrDefault(t => t is not null);
+        var evaluation = term is null ? null : MonthlyGoalStatusCalculator.Evaluate(term, figures);
+        return new MonthlyGoalScopeStatusDto(
+            GoalScopes.ToRoute(scope), term?.Kind.ToString(), term?.Amount, term?.Percent, evaluation?.Target,
+            figures.Income, figures.Expense, figures.Invoices, figures.Outflows, figures.Result,
+            evaluation?.CanStillSpend, evaluation?.Situation.ToString());
+    }
 }
