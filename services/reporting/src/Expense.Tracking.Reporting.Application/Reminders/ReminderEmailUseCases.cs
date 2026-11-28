@@ -141,6 +141,10 @@ public static class ReminderEmails
     }
 
     /// <summary>RJT-9: "Reajuste de Aluguel: R$ 2.000,00 → R$ 2.084,00 (IPCA 4,2%)", ou aguardando o indice.</summary>
+    /// <summary>MET-9: meta do mes fora; no teto o valor e o que saiu, nas outras o resultado.</summary>
+    private static string GoalLine(Reminder r) =>
+        $"{r.Title}: fora da meta (alvo de {r.Limit.ToString("C", Brl)}, mês em {r.Amount.ToString("C", Brl)})";
+
     private static string AdjustmentLine(Reminder r)
     {
         var index = r.Index switch { null => null, "IGPM" => "IGP-M", var other => other };
@@ -165,6 +169,9 @@ public static class ReminderEmails
             ReminderKind.RecurrencesToLaunch => $"{r.Title} (pendentes desde {date})",
             ReminderKind.Budget => $"{r.Title}: {money} gastos de {r.Limit.ToString("C", Brl)} no mês",
             ReminderKind.RecurrenceAdjustment => AdjustmentLine(r),
+            ReminderKind.MonthlyGoal => GoalLine(r),
+            ReminderKind.SavingsObjective =>
+                $"{r.Title}: atrasado, precisa de {money} por mês até {r.DueOn.ToString("MM/yyyy", CultureInfo.InvariantCulture)}",
             _ => $"{r.Title}: {date}",
         };
     }
@@ -202,7 +209,9 @@ public sealed class SendReminderDigestsJob(
 
             try
             {
-                var ownerCards = settings.Invoices ? await cards.ListForOwnerAsync(settings.OwnerUserId, cancellationToken) : [];
+                var ownerCards = settings.Invoices || settings.Budgets
+                    ? await cards.ListForOwnerAsync(settings.OwnerUserId, cancellationToken)
+                    : [];
                 var reminders = await composer.ComposeAsync(settings.OwnerUserId, ownerCards, settings, today, cancellationToken);
                 var keys = reminders.Select(r => r.Key).ToList();
                 if (!settings.HasNewKeys(keys))

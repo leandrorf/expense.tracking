@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
+import { goalsApi, type MonthlyGoalScopeStatus, type MonthlyGoalSituation, type MonthlyGoalStatus } from '../api/goals';
 import { reportsApi, type ReportSummary, type TotalByKey } from '../api/reports';
 
 const SCOPE_LABEL: Record<string, string> = {
@@ -8,8 +9,17 @@ const SCOPE_LABEL: Record<string, string> = {
   Unknown: 'Desconhecido',
 };
 
-export function SummaryView() {
+/** MET-8: o mesmo selo da aba Metas. */
+const GOAL_SITUATION: Record<MonthlyGoalSituation, { label: string; css: string }> = {
+  Inside: { label: 'Dentro da meta', css: 'ontrack' },
+  Attention: { label: 'Atenção', css: 'warning' },
+  Outside: { label: 'Fora da meta', css: 'exceeded' },
+};
+
+export function SummaryView({ onOpenGoals }: { onOpenGoals?: () => void }) {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
+  // MET-8: a meta do mes atual de PF e PJ, num cartao com link para a aba Metas.
+  const [goal, setGoal] = useState<MonthlyGoalStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState('');
@@ -19,7 +29,14 @@ export function SummaryView() {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await reportsApi.summary({ from: from || undefined, to: to || undefined }));
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const [loaded, status] = await Promise.all([
+        reportsApi.summary({ from: from || undefined, to: to || undefined }),
+        goalsApi.status(month).catch(() => null),
+      ]);
+      setSummary(loaded);
+      setGoal(status);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Erro inesperado.');
     } finally {
@@ -58,6 +75,24 @@ export function SummaryView() {
             <Stat label="Saldo" value={money(summary.net, summary.currency)} tone={summary.net >= 0 ? 'income' : 'expense'} cy="stat-net" />
             <Stat label="Lançamentos" value={String(summary.count)} cy="stat-count" />
           </div>
+
+          {goal && (goal.personal.situation || goal.business.situation) && (
+            <div className="goal-summary" data-cy="summary-goal">
+              <h3>Meta do mês</h3>
+              <ul>
+                {[goal.personal, goal.business]
+                  .filter((s) => s.situation)
+                  .map((s) => (
+                    <GoalLine key={s.scope} status={s} money={(v) => money(v, 'BRL')} />
+                  ))}
+              </ul>
+              {onOpenGoals && (
+                <button type="button" className="link" data-cy="summary-goal-open" onClick={onOpenGoals}>
+                  ver metas
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="breakdowns">
             <Breakdown title="Por categoria" items={summary.byCategory} currency={summary.currency} money={money} cy="by-category" />
@@ -114,5 +149,16 @@ function Breakdown({
         </ul>
       )}
     </div>
+  );
+}
+
+function GoalLine({ status, money }: { status: MonthlyGoalScopeStatus; money: (v: number) => string }) {
+  const situation = GOAL_SITUATION[status.situation!];
+  return (
+    <li data-cy={`summary-goal-${status.scope}`} data-situation={status.situation}>
+      <span>{status.scope === 'business' ? 'Empresa (PJ)' : 'Pessoal (PF)'}</span>
+      <span className={`health-badge ${situation.css}`}>{situation.label}</span>
+      <span>ainda pode gastar {money(status.canStillSpend ?? 0)}</span>
+    </li>
   );
 }

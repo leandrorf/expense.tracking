@@ -129,8 +129,8 @@ public sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
 /// <summary>NTF-8: o endpoint interno do accounts nos testes: todos os cartoes do dono, sem token de usuario.</summary>
 public sealed class FakeServiceCardDirectory(CardRegistry registry) : Expense.Tracking.Reporting.Application.Reminders.IServiceCardDirectory
 {
-    public Task<IReadOnlyList<CardInfo>> ListForOwnerAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<CardInfo>>(registry.ListOf(ownerUserId).Select(c => c.Card).ToList());
+    public Task<IReadOnlyList<ScopedCard>> ListForOwnerAsync(Guid ownerUserId, CancellationToken cancellationToken) =>
+        Task.FromResult(registry.ListOf(ownerUserId));
 }
 
 /// <summary>NTF-8: guarda os e-mails em vez de enviar.</summary>

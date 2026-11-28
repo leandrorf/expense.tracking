@@ -1053,3 +1053,52 @@ table.data td.negative,
   margin: 1rem 0 0.2rem;
   font-size: 0.95rem;
 }
+
+/* MET-7: aba Metas. */
+.goal-scope .actions {
+  margin-top: 0.4rem;
+}
+
+.objectives {
+  margin-top: 1.5rem;
+}
+
+.objective-contributions {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.objective-contributions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.3rem 0 0;
+}
+
+.objective-contributions li {
+  display: flex;
+  gap: 0.8rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+}
+
+.objective-contributions .negative {
+  color: #f87171;
+}
+
+/* MET-8: meta do mes no Resumo. */
+.goal-summary {
+  margin: 1rem 0;
+}
+
+.goal-summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0;
+}
+
+.goal-summary li {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.2rem 0;
+}

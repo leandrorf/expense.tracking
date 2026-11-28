@@ -647,6 +647,59 @@ async function main() {
   ok(editRes.status === 200 && Math.round((availableAfter - availableBefore) * 100) / 100 === 3000,
     `editar o cartao: PUT ${editRes.status}, disponivel ${availableBefore} -> ${availableAfter}`);
 
+  // 24i) Meta mensal (MET-2): teto PJ de 6.000 a partir deste mes e 6.500 a partir do seguinte. O demo e
+  // persistente: a primeira execucao cria (201), as outras mudam a mesma meta aberta (200).
+  const goalPut = (body) => fetch(`${GATEWAY}/api/goals/monthly/business`, { method: 'PUT', headers: auth, body: JSON.stringify(body) });
+  const goalNow = await goalPut({ kind: 'SpendCeiling', amount: 6000, fromMonth: monthAfter(0) });
+  const goalNext = await goalPut({ kind: 'SpendCeiling', amount: 6500, fromMonth: monthAfter(1) });
+  const goalsRes = await fetch(`${GATEWAY}/api/goals/monthly`, { headers: auth });
+  const openGoal = goalsRes.status === 200 ? (await goalsRes.json()).find((g) => g.scope === 'business' && g.closedFromMonth === null) : undefined;
+  const termIn = (month) => openGoal?.terms.filter((t) => t.fromMonth <= month).at(-1)?.amount;
+  ok([200, 201].includes(goalNow.status) && goalNext.status === 200 && termIn(monthAfter(0)) === 6000 && termIn(monthAfter(1)) === 6500,
+    `meta mensal PJ por vigencia: PUT ${goalNow.status}/${goalNext.status}, GET ${goalsRes.status}, teto ${termIn(monthAfter(0))} -> ${termIn(monthAfter(1))}`);
+
+  // 24j) Situacao da meta (MET-3): o resultado PJ do mes e o da previsao; "ainda pode gastar" = teto - saidas.
+  const goalStatusRes = await fetch(`${GATEWAY}/api/goals/monthly/status`, { headers: auth });
+  const goalStatus = goalStatusRes.status === 200 ? (await goalStatusRes.json()).business : {};
+  const forecastNow = await (await fetch(`${GATEWAY}/api/reports/cash-forecast?months=1`, { headers: auth })).json();
+  const pjResult = forecastNow.months?.[0]?.business?.result;
+  const expectedLeft = Math.max(Math.round((6000 - goalStatus.outflows) * 100) / 100, 0);
+  ok(goalStatusRes.status === 200 && goalStatus.result === pjResult && goalStatus.canStillSpend === expectedLeft && !!goalStatus.situation,
+    `situacao da meta PJ: resultado ${goalStatus.result} (previsao ${pjResult}), ainda pode gastar ${goalStatus.canStillSpend}, ${goalStatus.situation}`);
+
+  // 24n) Aviso da meta (MET-9): o aviso da meta PJ existe exatamente quando a situacao do mes e "fora".
+  const remindersNow = await (await fetch(`${GATEWAY}/api/reports/reminders`, { headers: auth })).json();
+  const goalReminder = (remindersNow.items ?? []).find((r) => r.kind === 'MonthlyGoal' && r.scope === 'business');
+  ok((goalStatus.situation === 'Outside') === !!goalReminder,
+    `aviso da meta PJ: situacao ${goalStatus.situation}, aviso ${goalReminder ? goalReminder.key : 'nenhum'}`);
+
+  // 24m) Historico da meta (MET-4): os 2 meses fechados antes do atual, do mais antigo ao mais recente.
+  const historyRes = await fetch(`${GATEWAY}/api/goals/monthly/history?months=2`, { headers: auth });
+  const history = historyRes.status === 200 ? await historyRes.json() : [];
+  ok(history.length === 2 && history[0].month === monthAfter(-2) && history[1].month === monthAfter(-1) && 'achieved' in (history[1].business ?? {}),
+    `historico da meta: GET ${historyRes.status}, meses ${history.map((m) => m.month).join(', ')}`);
+
+  // 24k) Objetivo e aportes (MET-5): guarda 300, uma retirada maior que o guardado e barrada, e o objetivo e
+  // arquivado no fim (o demo e persistente; arquivado sai da lista padrao).
+  const objectiveRes = await fetch(`${GATEWAY}/api/goals/objectives`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ scope: 'personal', name: `Smoke objetivo ${Date.now()}`, target: 1000 }),
+  });
+  const objective = objectiveRes.status === 201 ? await objectiveRes.json() : {};
+  const contribute = (amount) => fetch(`${GATEWAY}/api/goals/objectives/${objective.id}/contributions`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ date: new Date().toISOString().slice(0, 10), amount }),
+  });
+  const depositRes = await contribute(300);
+  const afterDeposit = depositRes.status === 200 ? await depositRes.json() : {};
+  const saved = afterDeposit.saved;
+  const overdrawRes = await contribute(-500);
+  const overdraw = overdrawRes.status === 400 ? (await overdrawRes.json()).title : overdrawRes.status;
+  const archiveRes = await fetch(`${GATEWAY}/api/goals/objectives/${objective.id}/archive`, { method: 'POST', headers: auth });
+  ok(objectiveRes.status === 201 && saved === 300 && overdraw === 'goal.balance_negative' && archiveRes.status === 200,
+    `objetivo e aportes: POST ${objectiveRes.status}, guardado ${saved}, retirada maior -> ${overdraw}, arquivar ${archiveRes.status}`);
+  // 24l) Ritmo do objetivo (MET-6): criado hoje, o ritmo e o aporte do mes; falta 700 e chega em 3 meses.
+  ok(afterDeposit.missing === 700 && afterDeposit.pace === 300 && afterDeposit.expectedArrival === monthAfter(3) && afterDeposit.situation === 'OnTrack',
+    `ritmo do objetivo: falta ${afterDeposit.missing}, ritmo ${afterDeposit.pace}, chegada ${afterDeposit.expectedArrival}, ${afterDeposit.situation}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

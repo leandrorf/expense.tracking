@@ -28,11 +28,13 @@ public sealed record ReminderDto(
     decimal Limit,
     decimal? PreviousAmount,
     decimal? Rate,
-    string? Index)
+    string? Index,
+    Guid? ObjectiveId,
+    string? Scope)
 {
     public static ReminderDto From(Reminder r) => new(
         r.Kind.ToString(), r.Key, r.Urgency.ToString(), r.DueOn, r.Amount, r.Title, r.CardId, r.DueMonth, r.RecurrenceId,
-        r.Period, r.Count, r.Limit, r.PreviousAmount, r.Rate, r.Index);
+        r.Period, r.Count, r.Limit, r.PreviousAmount, r.Rate, r.Index, r.ObjectiveId, r.Scope);
 }
 
 /// <param name="Overdue">Quantos avisos sao de algo ja vencido (o sino os destaca).</param>
@@ -51,8 +53,9 @@ public sealed class GetRemindersHandler(
     {
         var today = CardInvoiceSource.Today(timeProvider, options);
         var settings = await store.FindSettingsAsync(ownerUserId, cancellationToken) ?? ReminderSettings.Default(ownerUserId);
-        IReadOnlyList<CardInfo> userCards = settings.Invoices
-            ? (await cards.ListWithScopesAsync(cancellationToken)).Select(c => c.Card).ToList()
+        // MET-9: a meta do mes tambem precisa das faturas (com o escopo de cada cartao).
+        IReadOnlyList<ScopedCard> userCards = settings.Invoices || settings.Budgets
+            ? await cards.ListWithScopesAsync(cancellationToken)
             : [];
 
         var reminders = await composer.ComposeAsync(ownerUserId, userCards, settings, today, cancellationToken);

@@ -2682,7 +2682,7 @@ ponta. Should = CYC-2 (3 pts): editar nome, final e limite. Could = CYC-6 (2 pts
 
 **Ordem sugerida:** CYC-1 → CYC-3 → CYC-4 → CYC-2 → CYC-5 → CYC-7 (fecha o Must) → CYC-6.
 
-## 🔵 EPIC MET — Metas de gastos e de economia  · *To Do*
+## 🟢 EPIC MET — Metas de gastos e de economia  · *Done*
 **Problema:** o app mostra o que já entrou e saiu (Resumo), quanto cada categoria pode gastar
 (orçamentos, BDG) e o que vem pela frente (previsão, INV/REC). Mas não responde às duas perguntas de quem
 quer guardar dinheiro: "quanto sobra para guardar este mês?" e "estou no caminho daquele objetivo?". O
@@ -2727,7 +2727,7 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
 - **Gateway:** o `reporting` recebe `/api/reports/**` e `/api/budgets/**`; uma rota nova (`/api/goals/**`)
   precisa de uma entrada no YARP, como os orçamentos tiveram.
 
-**Decisões em aberto (a registrar na ADR-0013, MET-1; a recomendação de cada uma vem com o motivo):**
+**Decisões (aceitas na [ADR-0013](adr/0013-metas-de-gastos-e-de-economia.md), MET-1; ficou a recomendação de cada uma, com os refinamentos da MET-1):**
 1. **Onde mora.** Opções: (a) no `reporting`, em tabelas próprias no `expense_reporting`, como os
    orçamentos; (b) serviço novo `goals`; (c) no `accounts`. *Recomendação: (a)*. O resultado do mês sai
    do mesmo cálculo da previsão, sem chamada entre serviços, e a ADR-0002 já aceitou dado escrito pelo
@@ -2770,13 +2770,44 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
    Rota nova `/api/goals/**` no gateway, apontando para o `reporting`; nada no `identity` (os mesmos
    escopos `expenses.read`/`expenses.write`).
 
-- 🔵 **MET-1** ADR: metas de gastos e de economia. → ADR-0013.
+- ✅ **MET-1** ADR: metas de gastos e de economia. → [ADR-0013](adr/0013-metas-de-gastos-e-de-economia.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0013 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), com exemplos numéricos
     do resultado do mês, do "ainda pode gastar" e do ritmo de um objetivo, e o PO ajusta as histórias
     seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações:
+    - **Tabelas:** `monthly_goals` com `monthly_goal_terms`, onde a forma pode mudar de uma vigência para
+      outra; `savings_objectives` com `savings_contributions`; moeda BRL.
+    - **Mudanças da meta:** valem em qualquer mês a partir do início, como no limite dos orçamentos.
+    - **Situação:** "atenção" quando "ainda pode gastar" fica abaixo de 20% do alvo ou do teto.
+    - **Objetivo:** nome de 1 a 60 caracteres; prazo opcional, igual ou depois do mês atual ao criar; pode
+      ser arquivado e reaberto.
+    - **Aporte:** data até hoje; valor diferente de zero (negativo = retirada); observação de até 120
+      caracteres; o guardado nunca fica negativo, nem ao excluir um aporte.
+    - **Ritmo:** aportes líquidos do primeiro dia de dois meses atrás até hoje ÷ 3 (ou ÷ meses desde a
+      criação, no mínimo 1).
+    - **Previsão de chegada:** mês atual + ⌈falta ÷ ritmo⌉.
+    - **Contas e erros:** arredondamento com o meio para longe do zero; códigos de erro `goal.*`.
+    - **Rotas:** arquivar e reabrir em `POST .../archive` e `.../unarchive`; histórico de 1 a 24 meses
+      (padrão 6).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **MET-2** Meta mensal por escopo, com vigências. → `monthly_goals` no `reporting`, `/goals/monthly`.
+- ✅ **MET-2** Meta mensal por escopo, com vigências. → `monthly_goals` no `reporting`, `/goals/monthly`.
+  - Feito assim:
+    - **Modelo:** `MonthlyGoal` (domínio, `Goals/`) tem escopo, início, encerramento e vigências
+      (`monthly_goal_terms`: mês, forma `SaveAmount`/`SavePercent`/`SpendCeiling`, valor ou percentual). A forma
+      pode mudar de uma vigência para outra; mudar a partir de um mês substitui as vigências seguintes.
+    - **Uma meta aberta por escopo:** garantida por um índice único (`open_scope` fica nulo na meta encerrada).
+      Migration `MonthlyGoals`.
+    - **`PUT /goals/monthly/{personal|business}`** (`{ kind, amount?, percent?, fromMonth }`):
+      - sem meta aberta no escopo, cria (201), a partir do encerramento da anterior, se houver;
+      - com meta aberta, muda a partir do mês (200).
+    - **`DELETE /goals/monthly/{scope}?fromMonth=`** encerra (404 `goal.not_found` sem meta aberta).
+      **`GET /goals/monthly`** lista as abertas e as encerradas com as vigências.
+    - **Erros (400):** `goal.amount_invalid` (de 0,01 a 1 bilhão, 2 casas), `goal.percent_invalid` (1 a 100),
+      `goal.kind_invalid`, `goal.month_invalid`, `goal.scope_invalid`, `goal.month_before_start`.
+    - **Gateway:** rota `/api/goals/**` para o `reporting`, antes do catch-all do `accounts`, com teste.
+    - **Scripts:** o `reset-demo-data` apaga as metas. Smoke passo 24i: teto PJ de 6.000 neste mês e 6.500 a
+      partir do seguinte, e a rodada seguinte muda a mesma meta (56 passos).
   - *Dado* o escopo PF, *quando* defino "guardar R$ 1.000 por mês" a partir de dezembro, *então* a meta fica
     guardada com a forma, o valor e a vigência, e o `GET` a devolve; *e* mudar para "guardar 20% das
     entradas" a partir de março mantém R$ 1.000 de dezembro a fevereiro.
@@ -2784,7 +2815,21 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     recebo 400 com um código de erro (`goal.amount_invalid`, `goal.percent_invalid`, `goal.month_invalid`);
     *e* encerrar a partir de um mês para de cobrar a meta dali em diante.
   - Estimativa: 3 · **Must** · Dependências: MET-1
-- 🔵 **MET-3** Situação do mês e "ainda pode gastar". → `GET /goals/monthly/status`.
+- ✅ **MET-3** Situação do mês e "ainda pode gastar". → `GET /goals/monthly/status`.
+  - Feito assim:
+    - **Fonte dos números:** `GET /goals/monthly/status?month=` (padrão: o mês atual) roda a própria previsão
+      (`GetCashForecastHandler`) até o mês pedido e lê PF e PJ dela. O resultado é o mesmo da previsão por
+      construção: o lançado, as recorrências ainda não lançadas e as faturas que vencem no mês.
+    - **Cálculo:** `MonthlyGoalStatusCalculator` (domínio) calcula, para a vigência do mês, o alvo (no
+      percentual, arredondado em 2 casas com o meio para longe do zero), o "ainda pode gastar" (nunca
+      negativo) e a situação `Inside`/`Attention`/`Outside`. Folga de exatamente 20% do alvo ainda é
+      `Inside`; meta atingida exatamente é `Attention`, com zero para gastar.
+    - **Resposta:** cada escopo traz entradas, saídas, faturas, `outflows` e `result`; os campos da meta
+      vêm nulos no escopo sem meta. A resposta traz também um aviso de que o cartão entra pelo vencimento.
+    - **Erros (400):** mês passado = `goal.month_in_past` (fica para o histórico, MET-4); além dos 12 meses
+      da previsão = `goal.month_out_of_range`.
+    - **Smoke passo 24j:** o resultado PJ é igual ao da previsão, e "ainda pode gastar" = teto − saídas
+      (57 passos).
   - *Dado* a meta PF de guardar R$ 1.000, entradas previstas de R$ 5.000 e saídas mais faturas do mês de
     R$ 3.500, *quando* consulto o mês, *então* vejo resultado previsto de R$ 1.500, situação **dentro** e
     "ainda pode gastar" R$ 500; *e* um gasto de R$ 350 lançado agora deixa R$ 150 (folga de 15% da meta) e a situação **atenção**.
@@ -2792,12 +2837,44 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     situação é **fora** e "ainda pode gastar" é zero; *e* o resultado bate com o da previsão para o mesmo
     mês e escopo.
   - Estimativa: 5 · **Must** · Dependências: MET-2
-- 🔵 **MET-4** Histórico da meta mensal. → `GET /goals/monthly/history`.
+- ✅ **MET-4** Histórico da meta mensal. → `GET /goals/monthly/history`.
+  - Feito assim:
+    - **Rota:** `GET /goals/monthly/history?months=` (padrão 6, de 1 a 24; fora disso 400
+      `goal.months_invalid`) devolve os meses fechados antes do atual, do mais antigo ao mais recente.
+    - **Cálculo:** as mesmas peças da previsão (lançamentos fora do cartão pela data, total das faturas pelo
+      mês de vencimento, `CashForecastCalculator`), só com o que foi lançado.
+    - **Resposta:** para PF e PJ, a vigência que valia, o alvo, os números e `achieved`, calculado por
+      `MonthlyGoalStatusCalculator.IsAchieved`: resultado ≥ alvo para guardar, saídas ≤ teto para o teto.
+      Sem meta no mês, `achieved` vem nulo.
+    - **Na aba Metas:** a tabela "Últimos meses" (6, do mais recente ao mais antigo) aparece quando algum
+      deles teve meta, com "Atingida/Não atingida" e "guardou X de Y" ou "gastou X de Y".
+    - **Smoke passo 24m:** os 2 meses fechados, na ordem (60 passos).
   - *Dado* metas de guardar R$ 1.000 desde setembro, *quando* consulto os últimos 6 meses, *então* cada mês
     fechado mostra a meta que valia, o resultado só com o lançado e **atingida** ou **não atingida**; meses
     sem meta aparecem sem situação.
   - Estimativa: 3 · **Should** · Dependências: MET-3
-- 🔵 **MET-5** Objetivos e aportes. → `savings_objectives` e `savings_contributions` no `reporting`, `/goals/objectives`.
+- ✅ **MET-5** Objetivos e aportes. → `savings_objectives` e `savings_contributions` no `reporting`, `/goals/objectives`.
+  - Feito assim:
+    - **Modelo:** `SavingsObjective` (domínio) tem escopo, nome, alvo, prazo opcional (mês) e os aportes
+      (`SavingsContribution`: data, valor, observação). O guardado é a soma dos aportes e nunca fica
+      negativo, nem com uma retirada nem ao excluir um aporte. Migration `SavingsObjectives`.
+    - **Rotas:**
+      - `GET /goals/objectives`: os ativos; com `?includeArchived=true`, também os arquivados.
+      - `POST /goals/objectives` (`{ scope, name, target, deadline? }`) e `PUT /goals/objectives/{id}`
+        (nome, alvo, prazo; prazo nulo tira o prazo).
+      - `POST .../archive` e `.../unarchive`, ambos idempotentes; o objetivo arquivado não muda até ser reaberto
+        (400 `goal.archived`).
+      - `POST .../contributions` (`{ date, amount, note? }`) e `DELETE .../contributions/{id}`.
+    - **Prazo ao editar:** manter um prazo que já passou é permitido; mudar para um mês passado, não.
+    - **"Hoje":** no fuso do app.
+    - **Erros:**
+      - 400: `goal.name_invalid`, `goal.target_invalid`, `goal.deadline_invalid`, `goal.contribution_invalid`
+        (também para data fora do formato), `goal.contribution_in_future`, `goal.balance_negative`,
+        `goal.scope_invalid`;
+      - 404: `goal.not_found` (também para objetivo de outro dono) e `goal.contribution_not_found`.
+    - **Aporte não é lançamento:** a previsão não muda com ele (teste de integração).
+    - **Scripts:** o `reset-demo-data` apaga os objetivos. Smoke passo 24k: guarda 300, a retirada maior
+      que o guardado é barrada e o objetivo é arquivado no fim (58 passos).
   - *Dado* o escopo PF, *quando* crio "Reserva de emergência, R$ 30.000 até dez/2027" e registro um aporte
     de R$ 2.000, *então* o objetivo mostra R$ 2.000 guardados; *e* o aporte não aparece no Resumo, nos
     orçamentos nem na previsão.
@@ -2805,34 +2882,124 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     `goal.balance_negative`; *e* editar o nome, o alvo ou o prazo, excluir um aporte e arquivar o objetivo
     funcionam só para o dono (404 para os outros).
   - Estimativa: 3 · **Must** · Dependências: MET-1
-- 🔵 **MET-6** Ritmo e previsão de chegada do objetivo. → no `GET /goals/objectives`.
+- ✅ **MET-6** Ritmo e previsão de chegada do objetivo. → no `GET /goals/objectives`.
+  - Feito assim:
+    - **Cálculo:** `SavingsPaceCalculator` (domínio) calcula, para hoje no fuso do app:
+      - **falta** = alvo − guardado (nunca negativo);
+      - **meses restantes**: do atual ao do prazo, contando os dois;
+      - **precisa por mês** = falta ÷ meses restantes;
+      - **ritmo**: aportes líquidos do dia 1 de dois meses atrás até hoje ÷ 3, ou ÷ meses desde a criação
+        (no mínimo 1);
+      - **previsão de chegada** = mês atual + ⌈falta ÷ ritmo⌉.
+    - **Situação:** `OnTrack`, `Behind`, `Reached` ou `DeadlinePassed`.
+    - **Onde aparece:** os campos `missing`, `monthsLeft`, `neededPerMonth`, `pace`, `expectedArrival`
+      (`yyyy-MM`) e `situation` vêm em cada objetivo, na lista e nas respostas das alterações.
+    - **Campos nulos:**
+      - sem prazo ou com o prazo vencido, não há meses restantes nem precisa por mês;
+      - objetivo atingido, ou ritmo zero ou negativo, não tem chegada;
+      - objetivo atingido também não tem precisa por mês.
+    - **Exemplo da ADR em teste:** R$ 30.000 até dez/2027 com R$ 6.000 guardados → falta R$ 24.000, precisa
+      R$ 1.714,29 em 14 meses; ritmo de R$ 1.000 → `Behind`, chegada nov/2028.
+    - **Fica para a MET-10:** a soma do "precisa por mês" por escopo (decisão 8), quando o botão "usar como
+      meta" precisar dela. A lista continua um array.
+    - **Smoke passo 24l:** o objetivo de 1.000 com aporte de 300 tem falta 700, ritmo 300, chegada em 3 meses
+      e `OnTrack` (59 passos).
   - *Dado* um objetivo de R$ 30.000 até dez/2027 com R$ 6.000 guardados em nov/2026, *quando* consulto,
     *então* vejo falta R$ 24.000 e precisa R$ 1.714,29 por mês (14 meses, de nov/2026 a dez/2027); *e* com aportes de R$ 1.000 por mês
     nos últimos 3 meses, situação **atrasado** e previsão de chegada em nov/2028.
   - *Dado* um objetivo sem prazo, *quando* consulto, *então* vejo só o ritmo e a previsão de chegada; *e*
     guardado ≥ alvo dá **atingido**, prazo passado sem atingir dá **prazo vencido**.
   - Estimativa: 3 · **Must** · Dependências: MET-5
-- 🔵 **MET-7** Aba Metas na SPA. → `GoalsView`.
+- ✅ **MET-7** Aba Metas na SPA. → `GoalsView`, `goals.cy.ts`.
+  - Feito assim:
+    - **Aba "Metas"** (depois de Orçamentos), em duas partes.
+    - **Meta do mês**, do mês atual aos 11 seguintes, com "atualizar". Para PF e PJ:
+      - a forma em uma frase (no percentual, com o alvo em reais do mês), o selo da situação e os números
+        (entradas, saídas + faturas, resultado previsto, alvo ou teto, "ainda pode gastar");
+      - "definir/mudar meta" (forma, valor ou percentual, a partir de um mês) e "encerrar a partir de".
+    - **Objetivos:**
+      - criar (escopo, nome, alvo, prazo opcional);
+      - cada objetivo mostra barra de progresso, guardado de alvo, falta, prazo, precisa por mês, ritmo,
+        chegada prevista e situação;
+      - "registrar aporte" (guardei/retirei, valor, data até hoje, observação), "editar" e
+        "arquivar"/"reabrir"; a lista de aportes pode ser expandida e cada aporte excluído;
+      - "mostrar arquivados" traz os arquivados.
+    - **Erros da API:** aparecem junto do formulário que os causou.
+    - **E2E `goals.cy.ts`:** define a meta PF pela tela, cria um objetivo, registra um aporte de 300 (ritmo
+      300, `OnTrack`), recusa a retirada de 500, arquiva e reabre.
   - *Dado* o usuário logado, *quando* abre a aba Metas, *então* vê, para PF e PJ, a meta do mês com a
     situação, o resultado previsto e "ainda pode gastar", e pode definir, mudar ou encerrar a meta; *e* vê os
     objetivos com barra de progresso, falta, precisa por mês e situação, cria objetivos e registra ou exclui
     aportes.
   - *Dado* o histórico (MET-4), *quando* existe, *então* a aba mostra os últimos 6 meses da meta mensal.
   - Estimativa: 5 · **Must** · Dependências: MET-3, MET-6
-- 🔵 **MET-8** Meta na previsão e no Resumo. → coluna na previsão, cartão no Resumo.
+- ✅ **MET-8** Meta na previsão e no Resumo. → coluna na previsão, cartão no Resumo.
+  - Feito assim:
+    - **Previsão:** em PF ou PJ, a coluna "Meta" aparece quando algum mês tem meta. Ela mostra "guardar X" ou
+      "teto X" e "sobra Y" (ou "faltam Y", em vermelho), e "sem meta" nos meses sem ela; no Total, a coluna
+      não aparece.
+    - **Conta da previsão:** a vigência e o alvo de cada mês saem de `goalMath.ts`, uma cópia da regra do
+      `reporting` (`TermFor`, alvo no percentual com o meio para longe do zero), sobre os números que a própria
+      previsão já trouxe. A tela só busca a lista de metas a mais.
+    - **Resumo:** o cartão "Meta do mês" aparece quando PF ou PJ têm meta no mês atual, com a situação e o
+      "ainda pode gastar" de cada um, e "ver metas" leva à aba Metas. Ele fica fora dos totais do Resumo.
+    - **E2E:** o `goals.cy.ts` confere a coluna na previsão PF e a ausência dela no Total, o cartão no Resumo
+      e o link.
   - *Dado* uma meta mensal no escopo, *quando* abro a previsão, *então* cada mês mostra a meta e a sobra
     depois dela (resultado − meta); *e* o Resumo do mês mostra a situação da meta com um link para a aba Metas.
   - Estimativa: 3 · **Should** · Dependências: MET-3
-- 🔵 **MET-9** Aviso de meta em risco. → `ReminderKind` novo.
+- ✅ **MET-9** Aviso de meta em risco. → `ReminderKind.MonthlyGoal` e `ReminderKind.SavingsObjective`.
+  - Feito assim:
+    - **Dois tipos novos no `ReminderCalculator`:**
+      - `MonthlyGoal`: a meta do mês atual está `Outside`. Urgente, como o orçamento estourado; vence no fim do
+        mês; chave `goal:{escopo}:{mês}:outside`. Mostra o alvo e o resultado (no teto, o que saiu).
+      - `SavingsObjective`: objetivo ativo `Behind` a 3 meses ou menos do prazo. Em breve; vence no fim do mês
+        do prazo; chave `objective:{id}:{mês}:behind`. Mostra o que precisa por mês e o ritmo.
+    - **Mesmo cálculo da aba Metas:** o `ReminderComposer` usa o fluxo da previsão (`GetCashForecastHandler.FlowsAsync`,
+      com os cartões dados) e `SavingsPaceCalculator`, no app e no resumo por e-mail.
+    - **Cartões no e-mail:** o job do e-mail passa a ler o escopo de cada cartão do endpoint interno do
+      `accounts` (`accountScope`, que já vinha).
+    - **Preferência:** os avisos de metas seguem a de orçamentos (o rótulo no sino virou "orçamentos e metas"),
+      sem migration.
+    - **SPA:** o sino descreve os dois avisos e o clique leva à aba Metas.
+    - **Testes:**
+      - unitários das regras e das linhas do e-mail;
+      - integração: o aviso aparece com a meta fora e o objetivo atrasado, e some com uma receita e um aporte;
+      - E2E `goals.cy.ts`: objetivo atrasado → aviso → aba Metas; arquivado, para de avisar;
+      - smoke passo 24n: o aviso da meta PJ existe exatamente quando a situação é "fora" (61 passos).
   - *Dado* a meta do mês em **fora**, ou um objetivo **atrasado** a 3 meses do prazo, *quando* abro o app (ou
     chega o resumo por e-mail), *então* aparece um aviso que leva à aba Metas; *e* o aviso some quando a
     situação volta a **dentro** ou **no ritmo**.
   - Estimativa: 3 · **Could** · Dependências: MET-3, MET-6
-- 🔵 **MET-10** "Usar como meta" a soma dos objetivos. → botão na aba Metas.
+- ✅ **MET-10** "Usar como meta" a soma dos objetivos. → botão na aba Metas.
+  - Feito assim:
+    - **Na aba Metas:** para cada escopo com objetivos em andamento com prazo, a tela mostra quanto eles
+      precisam somados por mês e o botão "usar como meta PF/PJ". O botão define a meta mensal "guardar esse
+      valor" a partir do mês atual (`PUT /goals/monthly/{escopo}`), e a meta do mês e o histórico se
+      atualizam.
+    - **De onde vem a soma:** a tela soma o `neededPerMonth` que cada objetivo já traz (MET-6), em vez de a
+      lista devolver a soma por escopo (decisão 8 da ADR). Assim a lista continua um array e nada muda no
+      `reporting`.
+    - **Independência:** a meta e os objetivos continuam independentes; o botão só copia o valor.
+    - **E2E `goals.cy.ts`:** um objetivo PF de 1.200 com prazo em 3 meses soma 400 ao total, que vira o alvo
+      da meta PF.
   - *Dado* objetivos PF em andamento que precisam de R$ 1.200 por mês somados, *quando* clico em "usar como
     meta", *então* a meta mensal PF passa a ser guardar R$ 1.200 a partir do mês atual.
   - Estimativa: 2 · **Could** · Dependências: MET-6, MET-7
-- 🔵 **MET-11** E2E Cypress: jornada da meta e do objetivo. → `goals-journey.cy.ts`.
+- ✅ **MET-11** E2E Cypress: jornada da meta e do objetivo. → `goals-journey.cy.ts`.
+  - Feito assim:
+    - **Números relativos:** o usuário demo tem outros lançamentos PF no mês, então os valores saem do
+      resultado lido na tela.
+    - **Meta do mês:**
+      - a meta PF passa a ser guardar 1.000;
+      - uma receita deixa o resultado em pelo menos 6.000 e a situação fica `Inside`, com "ainda pode gastar"
+        = resultado − 1.000;
+      - um gasto que deixa só 100 para gastar muda a situação para `Attention`.
+    - **Espera da projeção:** a tela recarrega ("atualizar") até cada número bater.
+    - **Objetivo:** 3.000 com prazo daqui a 5 meses e um aporte de 600 dão falta 2.400, precisa 400 por mês
+      (6 meses), ritmo 600 e `OnTrack`.
+    - **Resumo:** os totais lidos antes e depois do aporte são iguais.
+    - **Fecha o Must do épico.**
   - *Dado* uma conta PF nova, *quando* defino a meta de guardar um valor, lanço uma receita e um gasto, crio
     um objetivo e registro um aporte pela SPA, *então* a situação e o "ainda pode gastar" mudam a cada
     lançamento, o objetivo mostra o progresso e o ritmo, e o Resumo não muda com o aporte.

@@ -12,6 +12,7 @@ import { AccountsView } from './views/AccountsView';
 import { BudgetsView } from './views/BudgetsView';
 import { CardsView } from './views/CardsView';
 import { ForecastView } from './views/ForecastView';
+import { GoalsView } from './views/GoalsView';
 import { ImportView } from './views/ImportView';
 import { RecurrencesView } from './views/RecurrencesView';
 import { RemindersBell } from './views/RemindersBell';
@@ -24,7 +25,7 @@ import { SummaryView } from './views/SummaryView';
 import { TransactionsView } from './views/TransactionsView';
 
 type Status = 'loading' | 'anonymous' | 'authenticated' | 'error';
-type Tab = 'summary' | 'forecast' | 'budgets' | 'accounts' | 'cards' | 'transactions' | 'recurrences' | 'import' | 'accounting';
+type Tab = 'summary' | 'forecast' | 'budgets' | 'goals' | 'accounts' | 'cards' | 'transactions' | 'recurrences' | 'import' | 'accounting';
 
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
@@ -50,6 +51,9 @@ export function App() {
       setTab('cards');
     } else if (r.kind === 'Budget') {
       setTab('budgets');
+    } else if (r.kind === 'MonthlyGoal' || r.kind === 'SavingsObjective') {
+      // MET-9: meta do mês fora ou objetivo atrasado abrem a aba Metas.
+      setTab('goals');
     } else if (r.kind === 'RecurrenceAdjustment' && r.recurrenceId) {
       // RJT-9: abre os valores da regra, onde o reajuste e confirmado.
       setAdjustTarget(r.recurrenceId);
@@ -151,6 +155,9 @@ export function App() {
           <button data-cy="tab-budgets" className={tab === 'budgets' ? 'active' : ''} onClick={() => setTab('budgets')}>
             Orçamentos
           </button>
+          <button data-cy="tab-goals" className={tab === 'goals' ? 'active' : ''} onClick={() => setTab('goals')}>
+            Metas
+          </button>
           <button data-cy="tab-accounts" className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
             Contas
           </button>
@@ -183,7 +190,7 @@ export function App() {
             </button>
           </p>
         )}
-        {tab === 'summary' && <SummaryView />}
+        {tab === 'summary' && <SummaryView onOpenGoals={() => setTab('goals')} />}
         {tab === 'forecast' && <ForecastView />}
         {tab === 'transactions' && (
           <TransactionsView
@@ -205,6 +212,7 @@ export function App() {
         )}
         {tab === 'import' && <ImportView onShowTransactions={() => setTab('transactions')} />}
         {tab === 'budgets' && <BudgetsView />}
+        {tab === 'goals' && <GoalsView />}
         {tab === 'accounts' && <AccountsView />}
         {tab === 'cards' && (
           <CardsView

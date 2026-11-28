@@ -6,7 +6,9 @@ export type ReminderKind =
   | 'RecurrenceDue'
   | 'RecurrencesToLaunch'
   | 'Budget'
-  | 'RecurrenceAdjustment';
+  | 'RecurrenceAdjustment'
+  | 'MonthlyGoal'
+  | 'SavingsObjective';
 export type ReminderUrgency = 'Overdue' | 'Today' | 'Soon';
 
 /** NTF-2 (ADR-0009): um aviso, calculado na hora pelo reporting. */
@@ -33,6 +35,10 @@ export interface Reminder {
   previousAmount: number | null;
   rate: number | null;
   index: string | null;
+  /** MET-9, objetivo atrasado: o objetivo (`amount` é o que precisa por mês, `limit` o ritmo). */
+  objectiveId: string | null;
+  /** MET-9: escopo da meta (`personal`/`business`). */
+  scope: string | null;
 }
 
 export interface Reminders {
