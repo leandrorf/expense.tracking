@@ -208,7 +208,7 @@ export function App() {
         </Toolbar>
       </AppBar>
 
-      <main className="content">
+      <Box component="main" sx={{ maxWidth: 980, mx: 'auto', px: { xs: 2, sm: 2.5 }, py: 3 }}>
         {emailConfirmation && (
           <Notice
             severity={emailConfirmation.ok ? 'success' : 'warning'}
@@ -255,7 +255,7 @@ export function App() {
           />
         )}
         {tab === 'accounting' && <AccountingExportView />}
-      </main>
+      </Box>
     </Box>
   );
 }
