@@ -4,6 +4,8 @@ import {
   goalsApi,
   type GoalScope,
   type MonthlyGoal,
+  type MonthlyGoalHistoryMonth,
+  type MonthlyGoalHistoryScope,
   type MonthlyGoalKind,
   type MonthlyGoalScopeStatus,
   type MonthlyGoalSituation,
@@ -88,6 +90,8 @@ function parseAmount(text: string): number {
 
 /** MET-7 (ADR-0013): meta do mês de PF e PJ e os objetivos com aportes. */
 export function GoalsView() {
+  // Muda quando a meta muda, para o histórico buscar de novo.
+  const [revision, setRevision] = useState(0);
   return (
     <section>
       <h2>Metas</h2>
@@ -95,14 +99,15 @@ export function GoalsView() {
         A meta do mês compara o resultado da previsão (entradas − saídas − faturas que vencem no mês) com o que você quer
         guardar ou com um teto de gastos. Os objetivos somam o que você registra como guardado para cada um.
       </p>
-      <MonthlyGoals />
+      <MonthlyGoals onChanged={() => setRevision((r) => r + 1)} />
+      <GoalHistory revision={revision} />
       <Objectives />
     </section>
   );
 }
 
 /** MET-3/MET-7: situação do mês, "ainda pode gastar" e a meta de cada escopo. */
-function MonthlyGoals() {
+function MonthlyGoals({ onChanged }: { onChanged: () => void }) {
   const [month, setMonth] = useState(currentMonth());
   const [status, setStatus] = useState<MonthlyGoalStatus | null>(null);
   const [goals, setGoals] = useState<MonthlyGoal[]>([]);
@@ -134,6 +139,7 @@ function MonthlyGoals() {
   function changed(text: string) {
     setNotice(text);
     setRevision((r) => r + 1);
+    onChanged();
   }
 
   return (
@@ -360,6 +366,75 @@ function MonthlyScope(props: {
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/** MET-4: os últimos 6 meses fechados, com a meta que valia e se foi atingida. */
+function GoalHistory({ revision }: { revision: number }) {
+  const [months, setMonths] = useState<MonthlyGoalHistoryMonth[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    goalsApi
+      .history(6)
+      .then((list) => !cancelled && setMonths(list))
+      .catch((err) => !cancelled && setError(messageOf(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [revision]);
+
+  if (error) {
+    return (
+      <p className="error" role="alert">
+        {error}
+      </p>
+    );
+  }
+
+  if (!months.some((m) => m.personal.achieved !== null || m.business.achieved !== null)) {
+    return null;
+  }
+
+  const cell = (h: MonthlyGoalHistoryScope) =>
+    h.achieved === null ? (
+      <td className="muted" data-cy={`history-${h.scope}`} data-achieved="none">
+        sem meta
+      </td>
+    ) : (
+      <td data-cy={`history-${h.scope}`} data-achieved={h.achieved}>
+        <span className={`health-badge ${h.achieved ? 'ontrack' : 'exceeded'}`}>
+          <span aria-hidden="true">{h.achieved ? '✓' : '✕'}</span> {h.achieved ? 'Atingida' : 'Não atingida'}
+        </span>{' '}
+        {h.kind === 'SpendCeiling'
+          ? `gastou ${money(h.outflows)} de ${money(h.target ?? 0)}`
+          : `guardou ${money(h.result)} de ${money(h.target ?? 0)}`}
+      </td>
+    );
+
+  return (
+    <div className="goal-history" data-cy="goal-history">
+      <h4>Últimos meses</h4>
+      <table className="data">
+        <thead>
+          <tr>
+            <th>Mês</th>
+            <th>Pessoal (PF)</th>
+            <th>Empresa (PJ)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...months].reverse().map((m) => (
+            <tr key={m.month} data-cy="goal-history-row" data-month={m.month}>
+              <td>{monthLabel(m.month)}</td>
+              {cell(m.personal)}
+              {cell(m.business)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

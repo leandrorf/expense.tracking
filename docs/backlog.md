@@ -2837,7 +2837,18 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     situação é **fora** e "ainda pode gastar" é zero; *e* o resultado bate com o da previsão para o mesmo
     mês e escopo.
   - Estimativa: 5 · **Must** · Dependências: MET-2
-- 🔵 **MET-4** Histórico da meta mensal. → `GET /goals/monthly/history`.
+- ✅ **MET-4** Histórico da meta mensal. → `GET /goals/monthly/history`.
+  - Feito assim:
+    - **Rota:** `GET /goals/monthly/history?months=` (padrão 6, de 1 a 24; fora disso 400
+      `goal.months_invalid`) devolve os meses fechados antes do atual, do mais antigo ao mais recente.
+    - **Cálculo:** as mesmas peças da previsão (lançamentos fora do cartão pela data, total das faturas pelo
+      mês de vencimento, `CashForecastCalculator`), só com o que foi lançado.
+    - **Resposta:** para PF e PJ, a vigência que valia, o alvo, os números e `achieved`, calculado por
+      `MonthlyGoalStatusCalculator.IsAchieved`: resultado ≥ alvo para guardar, saídas ≤ teto para o teto.
+      Sem meta no mês, `achieved` vem nulo.
+    - **Na aba Metas:** a tabela "Últimos meses" (6, do mais recente ao mais antigo) aparece quando algum
+      deles teve meta, com "Atingida/Não atingida" e "guardou X de Y" ou "gastou X de Y".
+    - **Smoke passo 24m:** os 2 meses fechados, na ordem (60 passos).
   - *Dado* metas de guardar R$ 1.000 desde setembro, *quando* consulto os últimos 6 meses, *então* cada mês
     fechado mostra a meta que valia, o resultado só com o lançado e **atingida** ou **não atingida**; meses
     sem meta aparecem sem situação.

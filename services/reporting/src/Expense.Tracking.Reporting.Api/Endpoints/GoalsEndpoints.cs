@@ -64,6 +64,18 @@ public static class GoalsEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
         }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
 
+        // MET-4: os meses fechados (padrao 6) com a meta que valia e se foi atingida.
+        group.MapGet("/monthly/history", async (int? months, ClaimsPrincipal user, GetMonthlyGoalHistoryHandler handler, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var ownerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(ownerUserId, months ?? GetMonthlyGoalHistoryHandler.DefaultMonths, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : HttpResults.Problem(result.Error);
+        }).RequireAuthorization(AuthenticationSetup.ReadPolicy);
+
         // MET-2: cria a meta do escopo (201) ou muda a forma e o valor a partir do mes (200).
         group.MapPut("/monthly/{scope}", async (
             string scope, SetMonthlyGoalRequest request, ClaimsPrincipal user, SetMonthlyGoalHandler handler, CancellationToken ct) =>

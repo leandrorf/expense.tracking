@@ -52,6 +52,14 @@ public static class MonthlyGoalStatusCalculator
         return new MonthlyGoalEvaluation(target, Math.Max(slack, 0m), situation);
     }
 
+    /// <summary>
+    /// MET-4 (ADR-0013, regra 5): num mes fechado, a meta foi atingida? Guardar = resultado ≥ alvo; teto = saidas ≤ teto.
+    /// </summary>
+    public static bool IsAchieved(MonthlyGoalTerm term, MonthFigures figures) =>
+        term.Kind == MonthlyGoalKind.SpendCeiling
+            ? figures.Outflows <= TargetOf(term, figures)
+            : figures.Result >= TargetOf(term, figures);
+
     /// <summary>O alvo do mes; no percentual, arredondado em 2 casas com o meio para longe do zero.</summary>
     public static decimal TargetOf(MonthlyGoalTerm term, MonthFigures figures) => term.Kind switch
     {

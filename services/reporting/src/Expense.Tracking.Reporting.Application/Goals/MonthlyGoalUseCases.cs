@@ -1,4 +1,5 @@
 using System.Globalization;
+using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Invoices;
 using Expense.Tracking.Reporting.Domain.Common;
@@ -226,5 +227,74 @@ public sealed class GetMonthlyGoalStatusHandler(
             GoalScopes.ToRoute(scope), term?.Kind.ToString(), term?.Amount, term?.Percent, evaluation?.Target,
             figures.Income, figures.Expense, figures.Invoices, figures.Outflows, figures.Result,
             evaluation?.CanStillSpend, evaluation?.Situation.ToString());
+    }
+}
+
+/// <param name="Achieved">MET-4: se a meta do mes foi atingida; nulo se o escopo nao tinha meta nele.</param>
+public sealed record MonthlyGoalHistoryScopeDto(
+    string Scope, string? Kind, decimal? Amount, int? Percent, decimal? Target,
+    decimal Income, decimal Expense, decimal Invoices, decimal Outflows, decimal Result, bool? Achieved);
+
+/// <param name="Month">Mes fechado, <c>yyyy-MM</c>.</param>
+public sealed record MonthlyGoalHistoryMonthDto(string Month, MonthlyGoalHistoryScopeDto Personal, MonthlyGoalHistoryScopeDto Business);
+
+/// <summary>
+/// MET-4 (ADR-0013, regras 2 e 5): <c>GET /goals/monthly/history?months=</c>, os meses fechados antes do atual (do mais
+/// antigo ao mais recente), com a meta que valia, o resultado so com o que foi lancado (sem recorrencias previstas) e
+/// se a meta foi atingida. As mesmas pecas da previsao: lancamentos fora do cartao pela data e o total das faturas
+/// pelo mes de vencimento.
+/// </summary>
+public sealed class GetMonthlyGoalHistoryHandler(
+    IMonthlyGoalRepository goals, ICardDirectory cards, IProjectionQueries projection, InvoiceOptions options, TimeProvider timeProvider)
+{
+    public const int DefaultMonths = 6;
+    public const int MaxMonths = 24;
+
+    public static readonly Error MonthsInvalid = Error.Validation(
+        "goal.months_invalid", $"Informe de 1 a {MaxMonths} meses.");
+
+    public async Task<Result<IReadOnlyList<MonthlyGoalHistoryMonthDto>>> HandleAsync(
+        Guid ownerUserId, int months, CancellationToken cancellationToken)
+    {
+        if (months is < 1 or > MaxMonths)
+        {
+            return Result.Failure<IReadOnlyList<MonthlyGoalHistoryMonthDto>>(MonthsInvalid);
+        }
+
+        var today = CardInvoiceSource.Today(timeProvider, options);
+        var current = new DateOnly(today.Year, today.Month, 1);
+        var first = current.AddMonths(-months);
+        var last = current.AddDays(-1);
+
+        var movements = (await projection.GetCashMovementsAsync(ownerUserId, first, last, cancellationToken))
+            .Select(m => new CashMovement(m.AccountScope, m.TransactionType == "Income", m.Amount, m.OccurredOn));
+        var invoices = new List<ForecastInvoice>();
+        foreach (var (card, scope) in await cards.ListWithScopesAsync(cancellationToken))
+        {
+            var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
+            invoices.AddRange(loaded.Invoices
+                .Where(i => i.Period.DueMonth >= first && i.Period.DueMonth < current)
+                .Select(i => new ForecastInvoice(scope, i.Period.DueMonth, i.Total, i.Paid, i.Remaining)));
+        }
+
+        var flows = CashForecastCalculator.Calculate(first, months, movements, invoices);
+        var all = await goals.ListAsync(ownerUserId, cancellationToken);
+        return flows
+            .Select(f => new MonthlyGoalHistoryMonthDto(
+                f.Month.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+                HistoryOf(GoalScope.Personal, f.Personal, all, f.Month),
+                HistoryOf(GoalScope.Business, f.Business, all, f.Month)))
+            .ToList();
+    }
+
+    private static MonthlyGoalHistoryScopeDto HistoryOf(GoalScope scope, MonthFlow flow, IReadOnlyList<MonthlyGoal> all, DateOnly month)
+    {
+        var figures = new MonthFigures(flow.Income, flow.Expense, flow.Invoices);
+        var term = all.Where(g => g.Scope == scope).Select(g => g.TermFor(month)).FirstOrDefault(t => t is not null);
+        return new MonthlyGoalHistoryScopeDto(
+            GoalScopes.ToRoute(scope), term?.Kind.ToString(), term?.Amount, term?.Percent,
+            term is null ? null : MonthlyGoalStatusCalculator.TargetOf(term, figures),
+            figures.Income, figures.Expense, figures.Invoices, figures.Outflows, figures.Result,
+            term is null ? null : MonthlyGoalStatusCalculator.IsAchieved(term, figures));
     }
 }

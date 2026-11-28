@@ -58,6 +58,27 @@ export interface MonthlyGoalStatus {
   business: MonthlyGoalScopeStatus;
 }
 
+/** MET-4: um escopo num mês fechado; `achieved` nulo se não havia meta. */
+export interface MonthlyGoalHistoryScope {
+  scope: GoalScope;
+  kind: MonthlyGoalKind | null;
+  amount: number | null;
+  percent: number | null;
+  target: number | null;
+  income: number;
+  expense: number;
+  invoices: number;
+  outflows: number;
+  result: number;
+  achieved: boolean | null;
+}
+
+export interface MonthlyGoalHistoryMonth {
+  month: string;
+  personal: MonthlyGoalHistoryScope;
+  business: MonthlyGoalHistoryScope;
+}
+
 export interface SavingsContribution {
   id: string;
   /** `yyyy-MM-dd`. */
@@ -106,6 +127,9 @@ export const goalsApi = {
     apiFetch<MonthlyGoal>(`/api/goals/monthly/${scope}?fromMonth=${encodeURIComponent(fromMonth)}`, { method: 'DELETE' }),
 
   status: (month: string) => apiFetch<MonthlyGoalStatus>(`/api/goals/monthly/status?month=${encodeURIComponent(month)}`),
+
+  /** MET-4: meses fechados, do mais antigo ao mais recente. */
+  history: (months = 6) => apiFetch<MonthlyGoalHistoryMonth[]>(`/api/goals/monthly/history?months=${months}`),
 
   listObjectives: (includeArchived = false) =>
     apiFetch<SavingsObjective[]>(`/api/goals/objectives${includeArchived ? '?includeArchived=true' : ''}`),

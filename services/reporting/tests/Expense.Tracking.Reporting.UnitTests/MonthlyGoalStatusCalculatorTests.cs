@@ -56,4 +56,18 @@ public sealed class MonthlyGoalStatusCalculatorTests
 
         Assert.Equal((6000m, canStillSpend, situation), (evaluation.Target, evaluation.CanStillSpend, evaluation.Situation));
     }
+
+    [Theory]
+    [InlineData(MonthlyGoalKind.SaveAmount, 1000, null, 5000, 4000, true)]
+    [InlineData(MonthlyGoalKind.SaveAmount, 1000, null, 5000, 4000.01, false)]
+    [InlineData(MonthlyGoalKind.SavePercent, null, 20, 5000, 4000, true)]
+    [InlineData(MonthlyGoalKind.SavePercent, null, 20, 5000, 4100, false)]
+    [InlineData(MonthlyGoalKind.SpendCeiling, 6000, null, 0, 6000, true)]
+    [InlineData(MonthlyGoalKind.SpendCeiling, 6000, null, 9000, 6000.01, false)]
+    public void IsAchieved_InAClosedMonth(MonthlyGoalKind kind, int? amount, int? percent, double income, double outflows, bool achieved)
+    {
+        var term = Term(kind, amount, percent);
+
+        Assert.Equal(achieved, MonthlyGoalStatusCalculator.IsAchieved(term, new MonthFigures((decimal)income, (decimal)outflows, 0m)));
+    }
 }

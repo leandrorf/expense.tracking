@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddScoped<CloseMonthlyGoalHandler>();
         services.AddScoped<ListMonthlyGoalsHandler>();
         services.AddScoped<GetMonthlyGoalStatusHandler>();
+        services.AddScoped<GetMonthlyGoalHistoryHandler>();
         // MET-5: objetivos e aportes.
         services.AddScoped<ISavingsObjectiveRepository, SavingsObjectiveRepository>();
         services.AddScoped<SavingsObjectiveHandler>();

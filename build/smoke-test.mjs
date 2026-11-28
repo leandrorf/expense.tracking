@@ -667,6 +667,12 @@ async function main() {
   ok(goalStatusRes.status === 200 && goalStatus.result === pjResult && goalStatus.canStillSpend === expectedLeft && !!goalStatus.situation,
     `situacao da meta PJ: resultado ${goalStatus.result} (previsao ${pjResult}), ainda pode gastar ${goalStatus.canStillSpend}, ${goalStatus.situation}`);
 
+  // 24m) Historico da meta (MET-4): os 2 meses fechados antes do atual, do mais antigo ao mais recente.
+  const historyRes = await fetch(`${GATEWAY}/api/goals/monthly/history?months=2`, { headers: auth });
+  const history = historyRes.status === 200 ? await historyRes.json() : [];
+  ok(history.length === 2 && history[0].month === monthAfter(-2) && history[1].month === monthAfter(-1) && 'achieved' in (history[1].business ?? {}),
+    `historico da meta: GET ${historyRes.status}, meses ${history.map((m) => m.month).join(', ')}`);
+
   // 24k) Objetivo e aportes (MET-5): guarda 300, uma retirada maior que o guardado e barrada, e o objetivo e
   // arquivado no fim (o demo e persistente; arquivado sai da lista padrao).
   const objectiveRes = await fetch(`${GATEWAY}/api/goals/objectives`, {

@@ -84,6 +84,45 @@ public sealed class MonthlyGoalStatusApiTests(InvoicesApiFactory factory) : ICla
                 december.GetProperty("situation").GetString()));
     }
 
+    [Fact]
+    public async Task History_ShowsTheClosedMonths_WithTheGoalThatApplied_AndWhetherItWasAchieved()
+    {
+        // MET-4: hoje = 2026-11-21; os 3 meses fechados sao ago, set e out/2026.
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        var card = _factory.Cards.Add(owner, closingDay: 10, dueDay: 17, scope: "Personal");
+        var feed = _factory.EventFeed;
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 3000m, "Salario", occurredOn: "2026-09-05", transactionType: "Income");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 1500m, "Aluguel", occurredOn: "2026-09-10", paymentMethod: "Boleto");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 3000m, "Salario", occurredOn: "2026-10-05", transactionType: "Income");
+        // Compra de 20/09 depois do fechamento: fatura que vence em 17/10.
+        feed.CardPurchase(Guid.NewGuid(), owner, card.Id, 2500m, "2026-09-20");
+        await _factory.DrainFeedAsync();
+        await client.PutAsJsonAsync("/goals/monthly/personal", new { kind = "SaveAmount", amount = 1000m, fromMonth = "2026-09" });
+
+        var history = await client.GetFromJsonAsync<JsonElement[]>("/goals/monthly/history?months=3");
+
+        Assert.Equal(
+            [("2026-08", 0m, "null"), ("2026-09", 1500m, "true"), ("2026-10", 500m, "false")],
+            history!.Select(m => (m.GetProperty("month").GetString()!, m.GetProperty("personal").GetProperty("result").GetDecimal(),
+                m.GetProperty("personal").GetProperty("achieved").GetRawText())).ToArray());
+        var october = history![2].GetProperty("personal");
+        Assert.Equal((1000m, 2500m, 2500m), (october.GetProperty("target").GetDecimal(), october.GetProperty("invoices").GetDecimal(),
+            october.GetProperty("outflows").GetDecimal()));
+        Assert.Equal(6, (await client.GetFromJsonAsync<JsonElement[]>("/goals/monthly/history"))!.Length);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public async Task History_OutsideOneTo24Months_IsRejected(int months)
+    {
+        var response = await ClientFor(Guid.NewGuid()).GetAsync($"/goals/monthly/history?months={months}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("goal.months_invalid", await ProblemCode(response));
+    }
+
     [Theory]
     [InlineData("2026-10", "goal.month_in_past")]
     [InlineData("2027-11", "goal.month_out_of_range")]
