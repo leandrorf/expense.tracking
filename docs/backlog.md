@@ -2682,7 +2682,7 @@ ponta. Should = CYC-2 (3 pts): editar nome, final e limite. Could = CYC-6 (2 pts
 
 **Ordem sugerida:** CYC-1 → CYC-3 → CYC-4 → CYC-2 → CYC-5 → CYC-7 (fecha o Must) → CYC-6.
 
-## 🔵 EPIC MET — Metas de gastos e de economia  · *To Do*
+## 🟡 EPIC MET — Metas de gastos e de economia  · *In Progress*
 **Problema:** o app mostra o que já entrou e saiu (Resumo), quanto cada categoria pode gastar
 (orçamentos, BDG) e o que vem pela frente (previsão, INV/REC). Mas não responde às duas perguntas de quem
 quer guardar dinheiro: "quanto sobra para guardar este mês?" e "estou no caminho daquele objetivo?". O
@@ -2727,7 +2727,7 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
 - **Gateway:** o `reporting` recebe `/api/reports/**` e `/api/budgets/**`; uma rota nova (`/api/goals/**`)
   precisa de uma entrada no YARP, como os orçamentos tiveram.
 
-**Decisões em aberto (a registrar na ADR-0013, MET-1; a recomendação de cada uma vem com o motivo):**
+**Decisões (aceitas na [ADR-0013](adr/0013-metas-de-gastos-e-de-economia.md), MET-1; ficou a recomendação de cada uma, com os refinamentos da MET-1):**
 1. **Onde mora.** Opções: (a) no `reporting`, em tabelas próprias no `expense_reporting`, como os
    orçamentos; (b) serviço novo `goals`; (c) no `accounts`. *Recomendação: (a)*. O resultado do mês sai
    do mesmo cálculo da previsão, sem chamada entre serviços, e a ADR-0002 já aceitou dado escrito pelo
@@ -2770,11 +2770,26 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
    Rota nova `/api/goals/**` no gateway, apontando para o `reporting`; nada no `identity` (os mesmos
    escopos `expenses.read`/`expenses.write`).
 
-- 🔵 **MET-1** ADR: metas de gastos e de economia. → ADR-0013.
+- ✅ **MET-1** ADR: metas de gastos e de economia. → [ADR-0013](adr/0013-metas-de-gastos-e-de-economia.md), Aceita.
   - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0013 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), com exemplos numéricos
     do resultado do mês, do "ainda pode gastar" e do ritmo de um objetivo, e o PO ajusta as histórias
     seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações:
+    - **Tabelas:** `monthly_goals` com `monthly_goal_terms`, onde a forma pode mudar de uma vigência para
+      outra; `savings_objectives` com `savings_contributions`; moeda BRL.
+    - **Mudanças da meta:** valem em qualquer mês a partir do início, como no limite dos orçamentos.
+    - **Situação:** "atenção" quando "ainda pode gastar" fica abaixo de 20% do alvo ou do teto.
+    - **Objetivo:** nome de 1 a 60 caracteres; prazo opcional, igual ou depois do mês atual ao criar; pode
+      ser arquivado e reaberto.
+    - **Aporte:** data até hoje; valor diferente de zero (negativo = retirada); observação de até 120
+      caracteres; o guardado nunca fica negativo, nem ao excluir um aporte.
+    - **Ritmo:** aportes líquidos do primeiro dia de dois meses atrás até hoje ÷ 3 (ou ÷ meses desde a
+      criação, no mínimo 1).
+    - **Previsão de chegada:** mês atual + ⌈falta ÷ ritmo⌉.
+    - **Contas e erros:** arredondamento com o meio para longe do zero; códigos de erro `goal.*`.
+    - **Rotas:** arquivar e reabrir em `POST .../archive` e `.../unarchive`; histórico de 1 a 24 meses
+      (padrão 6).
   - Estimativa: 2 · **Must** · Dependências: —
 - 🔵 **MET-2** Meta mensal por escopo, com vigências. → `monthly_goals` no `reporting`, `/goals/monthly`.
   - *Dado* o escopo PF, *quando* defino "guardar R$ 1.000 por mês" a partir de dezembro, *então* a meta fica
