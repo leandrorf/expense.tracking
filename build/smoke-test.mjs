@@ -667,6 +667,23 @@ async function main() {
   ok(goalStatusRes.status === 200 && goalStatus.result === pjResult && goalStatus.canStillSpend === expectedLeft && !!goalStatus.situation,
     `situacao da meta PJ: resultado ${goalStatus.result} (previsao ${pjResult}), ainda pode gastar ${goalStatus.canStillSpend}, ${goalStatus.situation}`);
 
+  // 24k) Objetivo e aportes (MET-5): guarda 300, uma retirada maior que o guardado e barrada, e o objetivo e
+  // arquivado no fim (o demo e persistente; arquivado sai da lista padrao).
+  const objectiveRes = await fetch(`${GATEWAY}/api/goals/objectives`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ scope: 'personal', name: `Smoke objetivo ${Date.now()}`, target: 1000 }),
+  });
+  const objective = objectiveRes.status === 201 ? await objectiveRes.json() : {};
+  const contribute = (amount) => fetch(`${GATEWAY}/api/goals/objectives/${objective.id}/contributions`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ date: new Date().toISOString().slice(0, 10), amount }),
+  });
+  const depositRes = await contribute(300);
+  const saved = depositRes.status === 200 ? (await depositRes.json()).saved : undefined;
+  const overdrawRes = await contribute(-500);
+  const overdraw = overdrawRes.status === 400 ? (await overdrawRes.json()).title : overdrawRes.status;
+  const archiveRes = await fetch(`${GATEWAY}/api/goals/objectives/${objective.id}/archive`, { method: 'POST', headers: auth });
+  ok(objectiveRes.status === 201 && saved === 300 && overdraw === 'goal.balance_negative' && archiveRes.status === 200,
+    `objetivo e aportes: POST ${objectiveRes.status}, guardado ${saved}, retirada maior -> ${overdraw}, arquivar ${archiveRes.status}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

@@ -44,6 +44,7 @@ const counts = () => ({
   eventos: sql('expense-transactions-db', `select count(*) from outbox_events where ${mine};`),
   orcamentos: sql('expense-reporting-db', `select count(*) from budgets where ${mine};`),
   metas: sql('expense-reporting-db', `select count(*) from monthly_goals where ${mine};`),
+  objetivos: sql('expense-reporting-db', `select count(*) from savings_objectives where ${mine};`),
   projecao: sql('expense-reporting-db', `select count(*) from projected_transactions where ${mine};`),
 });
 
@@ -83,6 +84,8 @@ delete from budget_limits where budget_id in (select id from budgets where ${min
 delete from budgets where ${mine};
 delete from monthly_goal_terms where goal_id in (select id from monthly_goals where ${mine});
 delete from monthly_goals where ${mine};
+delete from savings_contributions where objective_id in (select id from savings_objectives where ${mine});
+delete from savings_objectives where ${mine};
 delete from projected_recurrence_amounts where recurrence_id in (${myProjectedRules});
 delete from projected_recurrence_occurrences where ${mine};
 delete from projected_recurrences where ${mine};

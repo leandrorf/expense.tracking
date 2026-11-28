@@ -244,4 +244,31 @@ public static class GoalErrors
     public static readonly Error AlreadyClosed = Error.Conflict("goal.already_closed", "A meta ja esta encerrada.");
 
     public static readonly Error NotFound = Error.NotFound("goal.not_found", "Meta nao encontrada.");
+
+    public static readonly Error NameInvalid =
+        Error.Validation("goal.name_invalid", "Nome obrigatorio, com no maximo 60 caracteres.");
+
+    public static readonly Error TargetInvalid = Error.Validation(
+        "goal.target_invalid", "Alvo deve ser maior que zero, ate R$ 1.000.000.000, com no maximo 2 casas decimais.");
+
+    public static readonly Error DeadlineInvalid =
+        Error.Validation("goal.deadline_invalid", "O prazo precisa ser o mes atual ou um mes seguinte, no formato 'yyyy-MM'.");
+
+    public static readonly Error ContributionInvalid = Error.Validation(
+        "goal.contribution_invalid",
+        "Aporte deve ser diferente de zero, ate R$ 1.000.000.000, com no maximo 2 casas decimais, e observacao de ate 120 caracteres.");
+
+    public static readonly Error ContributionInFuture =
+        Error.Validation("goal.contribution_in_future", "O aporte nao pode ter data futura.");
+
+    public static readonly Error BalanceNegative =
+        Error.Validation("goal.balance_negative", "O guardado do objetivo nao pode ficar negativo.");
+
+    public static readonly Error Archived =
+        Error.Validation("goal.archived", "O objetivo esta arquivado; reabra para alterar.");
+
+    public static readonly Error ObjectiveNotFound = Error.NotFound("goal.not_found", "Objetivo nao encontrado.");
+
+    public static readonly Error ContributionNotFound =
+        Error.NotFound("goal.contribution_not_found", "Aporte nao encontrado.");
 }

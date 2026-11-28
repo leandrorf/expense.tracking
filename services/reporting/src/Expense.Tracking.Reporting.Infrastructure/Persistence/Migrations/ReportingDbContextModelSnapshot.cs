@@ -133,6 +133,53 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("monthly_goals", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Goals.SavingsObjective", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("datetime")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetime")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("date")
+                        .HasColumnName("deadline");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("scope");
+
+                    b.Property<decimal>("Target")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("target");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_savings_objectives_owner");
+
+                    b.ToTable("savings_objectives", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Invoices.InvoiceReconciliation", b =>
                 {
                     b.Property<Guid>("OwnerUserId")
@@ -606,6 +653,49 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("_terms");
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Goals.SavingsObjective", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Reporting.Domain.Goals.SavingsContribution", "_contributions", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("id");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.Property<DateTimeOffset>("CreatedAt")
+                                .HasColumnType("datetime")
+                                .HasColumnName("created_at");
+
+                            b1.Property<string>("Note")
+                                .HasMaxLength(120)
+                                .HasColumnType("varchar(120)")
+                                .HasColumnName("note");
+
+                            b1.Property<Guid>("ObjectiveId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("objective_id");
+
+                            b1.Property<DateTime>("OccurredOn")
+                                .HasColumnType("date")
+                                .HasColumnName("occurred_on");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ObjectiveId");
+
+                            b1.ToTable("savings_contributions", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ObjectiveId");
+                        });
+
+                    b.Navigation("_contributions");
                 });
 
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrence", b =>

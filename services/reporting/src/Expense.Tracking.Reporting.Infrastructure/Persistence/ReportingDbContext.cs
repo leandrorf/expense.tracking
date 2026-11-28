@@ -34,6 +34,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
 
     public DbSet<MonthlyGoal> MonthlyGoals => Set<MonthlyGoal>();
 
+    public DbSet<SavingsObjective> SavingsObjectives => Set<SavingsObjective>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateOnly>().HaveConversion<DateOnlyConverter>();
@@ -252,6 +254,39 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
                 t.HasKey("GoalId", nameof(MonthlyGoalTerm.EffectiveFrom));
             });
             b.Navigation("_terms").AutoInclude();
+        });
+
+        // MET-5 (ADR-0013, regras 1 e 6): objetivos de economia e os aportes; dado escrito pelo usuario.
+        modelBuilder.Entity<SavingsObjective>(b =>
+        {
+            b.ToTable("savings_objectives");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            b.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(x => x.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(16).IsRequired();
+            b.Property(x => x.Name).HasColumnName("name").HasMaxLength(SavingsObjective.NameMaxLength).IsRequired();
+            b.Property(x => x.Target).HasColumnName("target").HasPrecision(18, 2).IsRequired();
+            b.Property(x => x.Deadline).HasColumnName("deadline").HasColumnType("date");
+            b.Property(x => x.ArchivedAt).HasColumnName("archived_at");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+            b.Ignore(x => x.IsArchived);
+            b.Ignore(x => x.Contributions);
+            b.Ignore(x => x.Saved);
+            b.HasIndex(x => x.OwnerUserId).HasDatabaseName("ix_savings_objectives_owner");
+
+            b.OwnsMany<SavingsContribution>("_contributions", c =>
+            {
+                c.ToTable("savings_contributions");
+                c.WithOwner().HasForeignKey("ObjectiveId");
+                c.Property<Guid>("ObjectiveId").HasColumnName("objective_id");
+                c.HasKey(x => x.Id);
+                c.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+                c.Property(x => x.OccurredOn).HasColumnName("occurred_on").HasColumnType("date").IsRequired();
+                c.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2).IsRequired();
+                c.Property(x => x.Note).HasColumnName("note").HasMaxLength(SavingsObjective.NoteMaxLength);
+                c.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+            });
+            b.Navigation("_contributions").AutoInclude();
         });
 
         modelBuilder.Entity<ProjectionCheckpoint>(b =>

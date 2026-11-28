@@ -2842,7 +2842,28 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     fechado mostra a meta que valia, o resultado só com o lançado e **atingida** ou **não atingida**; meses
     sem meta aparecem sem situação.
   - Estimativa: 3 · **Should** · Dependências: MET-3
-- 🔵 **MET-5** Objetivos e aportes. → `savings_objectives` e `savings_contributions` no `reporting`, `/goals/objectives`.
+- ✅ **MET-5** Objetivos e aportes. → `savings_objectives` e `savings_contributions` no `reporting`, `/goals/objectives`.
+  - Feito assim:
+    - **Modelo:** `SavingsObjective` (domínio) tem escopo, nome, alvo, prazo opcional (mês) e os aportes
+      (`SavingsContribution`: data, valor, observação). O guardado é a soma dos aportes e nunca fica
+      negativo, nem com uma retirada nem ao excluir um aporte. Migration `SavingsObjectives`.
+    - **Rotas:**
+      - `GET /goals/objectives`: os ativos; com `?includeArchived=true`, também os arquivados.
+      - `POST /goals/objectives` (`{ scope, name, target, deadline? }`) e `PUT /goals/objectives/{id}`
+        (nome, alvo, prazo; prazo nulo tira o prazo).
+      - `POST .../archive` e `.../unarchive`, ambos idempotentes; o objetivo arquivado não muda até ser reaberto
+        (400 `goal.archived`).
+      - `POST .../contributions` (`{ date, amount, note? }`) e `DELETE .../contributions/{id}`.
+    - **Prazo ao editar:** manter um prazo que já passou é permitido; mudar para um mês passado, não.
+    - **"Hoje":** no fuso do app.
+    - **Erros:**
+      - 400: `goal.name_invalid`, `goal.target_invalid`, `goal.deadline_invalid`, `goal.contribution_invalid`
+        (também para data fora do formato), `goal.contribution_in_future`, `goal.balance_negative`,
+        `goal.scope_invalid`;
+      - 404: `goal.not_found` (também para objetivo de outro dono) e `goal.contribution_not_found`.
+    - **Aporte não é lançamento:** a previsão não muda com ele (teste de integração).
+    - **Scripts:** o `reset-demo-data` apaga os objetivos. Smoke passo 24k: guarda 300, a retirada maior
+      que o guardado é barrada e o objetivo é arquivado no fim (58 passos).
   - *Dado* o escopo PF, *quando* crio "Reserva de emergência, R$ 30.000 até dez/2027" e registro um aporte
     de R$ 2.000, *então* o objetivo mostra R$ 2.000 guardados; *e* o aporte não aparece no Resumo, nos
     orçamentos nem na previsão.
