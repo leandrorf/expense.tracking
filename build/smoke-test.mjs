@@ -667,6 +667,12 @@ async function main() {
   ok(goalStatusRes.status === 200 && goalStatus.result === pjResult && goalStatus.canStillSpend === expectedLeft && !!goalStatus.situation,
     `situacao da meta PJ: resultado ${goalStatus.result} (previsao ${pjResult}), ainda pode gastar ${goalStatus.canStillSpend}, ${goalStatus.situation}`);
 
+  // 24n) Aviso da meta (MET-9): o aviso da meta PJ existe exatamente quando a situacao do mes e "fora".
+  const remindersNow = await (await fetch(`${GATEWAY}/api/reports/reminders`, { headers: auth })).json();
+  const goalReminder = (remindersNow.items ?? []).find((r) => r.kind === 'MonthlyGoal' && r.scope === 'business');
+  ok((goalStatus.situation === 'Outside') === !!goalReminder,
+    `aviso da meta PJ: situacao ${goalStatus.situation}, aviso ${goalReminder ? goalReminder.key : 'nenhum'}`);
+
   // 24m) Historico da meta (MET-4): os 2 meses fechados antes do atual, do mais antigo ao mais recente.
   const historyRes = await fetch(`${GATEWAY}/api/goals/monthly/history?months=2`, { headers: auth });
   const history = historyRes.status === 200 ? await historyRes.json() : [];

@@ -2948,7 +2948,25 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
   - *Dado* uma meta mensal no escopo, *quando* abro a previsão, *então* cada mês mostra a meta e a sobra
     depois dela (resultado − meta); *e* o Resumo do mês mostra a situação da meta com um link para a aba Metas.
   - Estimativa: 3 · **Should** · Dependências: MET-3
-- 🔵 **MET-9** Aviso de meta em risco. → `ReminderKind` novo.
+- ✅ **MET-9** Aviso de meta em risco. → `ReminderKind.MonthlyGoal` e `ReminderKind.SavingsObjective`.
+  - Feito assim:
+    - **Dois tipos novos no `ReminderCalculator`:**
+      - `MonthlyGoal`: a meta do mês atual está `Outside`. Urgente, como o orçamento estourado; vence no fim do
+        mês; chave `goal:{escopo}:{mês}:outside`. Mostra o alvo e o resultado (no teto, o que saiu).
+      - `SavingsObjective`: objetivo ativo `Behind` a 3 meses ou menos do prazo. Em breve; vence no fim do mês
+        do prazo; chave `objective:{id}:{mês}:behind`. Mostra o que precisa por mês e o ritmo.
+    - **Mesmo cálculo da aba Metas:** o `ReminderComposer` usa o fluxo da previsão (`GetCashForecastHandler.FlowsAsync`,
+      com os cartões dados) e `SavingsPaceCalculator`, no app e no resumo por e-mail.
+    - **Cartões no e-mail:** o job do e-mail passa a ler o escopo de cada cartão do endpoint interno do
+      `accounts` (`accountScope`, que já vinha).
+    - **Preferência:** os avisos de metas seguem a de orçamentos (o rótulo no sino virou "orçamentos e metas"),
+      sem migration.
+    - **SPA:** o sino descreve os dois avisos e o clique leva à aba Metas.
+    - **Testes:**
+      - unitários das regras e das linhas do e-mail;
+      - integração: o aviso aparece com a meta fora e o objetivo atrasado, e some com uma receita e um aporte;
+      - E2E `goals.cy.ts`: objetivo atrasado → aviso → aba Metas; arquivado, para de avisar;
+      - smoke passo 24n: o aviso da meta PJ existe exatamente quando a situação é "fora" (61 passos).
   - *Dado* a meta do mês em **fora**, ou um objetivo **atrasado** a 3 meses do prazo, *quando* abro o app (ou
     chega o resumo por e-mail), *então* aparece um aviso que leva à aba Metas; *e* o aviso some quando a
     situação volta a **dentro** ou **no ritmo**.

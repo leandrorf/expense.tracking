@@ -1,6 +1,7 @@
 using System.Globalization;
 using Expense.Tracking.Reporting.Domain.Budgets;
 using Expense.Tracking.Reporting.Domain.Forecast;
+using Expense.Tracking.Reporting.Domain.Goals;
 using Expense.Tracking.Reporting.Domain.Invoices;
 
 namespace Expense.Tracking.Reporting.Domain.Reminders;
@@ -16,7 +17,19 @@ public enum ReminderKind
 
     /// <summary>RJT-9 (ADR-0010, decisao 10): reajuste anual chegado e ainda nao confirmado.</summary>
     RecurrenceAdjustment = 6,
+
+    /// <summary>MET-9 (ADR-0013, regra 10): a meta do mes atual esta fora.</summary>
+    MonthlyGoal = 7,
+
+    /// <summary>MET-9 (ADR-0013, regra 10): objetivo atrasado a 3 meses ou menos do prazo.</summary>
+    SavingsObjective = 8,
 }
+
+/// <summary>MET-9: a meta do mes atual num escopo, ja avaliada (<see cref="MonthlyGoalStatusCalculator"/>).</summary>
+public sealed record MonthlyGoalCheck(GoalScope Scope, MonthlyGoalKind Kind, MonthlyGoalSituation Situation, decimal Target, MonthFigures Figures);
+
+/// <summary>MET-9: um objetivo ativo com o ritmo calculado (<see cref="SavingsPaceCalculator"/>).</summary>
+public sealed record SavingsObjectiveCheck(Guid ObjectiveId, string Name, GoalScope Scope, DateOnly? Deadline, SavingsPace Pace);
 
 /// <summary>Urgencia do aviso, da maior para a menor: vencido, vence hoje, vence em breve.</summary>
 public enum ReminderUrgency
@@ -62,7 +75,9 @@ public sealed record Reminder(
     decimal Limit = 0m,
     decimal? PreviousAmount = null,
     decimal? Rate = null,
-    string? Index = null);
+    string? Index = null,
+    Guid? ObjectiveId = null,
+    string? Scope = null);
 
 /// <summary>
 /// NTF-2 (ADR-0009, decisao 3): o que o usuario precisa resolver. Calculado a cada consulta e nunca
@@ -79,9 +94,13 @@ public static class ReminderCalculator
     /// <summary>Mesma janela do "a lancar" do transactions (REC-3).</summary>
     public const int ToLaunchWindowDays = 60;
 
+    /// <summary>MET-9: o objetivo atrasado avisa a partir de quantos meses do prazo (contando o atual).</summary>
+    public const int ObjectiveWarningMonths = 3;
+
     public static IReadOnlyList<Reminder> Calculate(
         DateOnly today, int leadDays, IEnumerable<ReminderInvoice> invoices, IEnumerable<ReminderRecurrence> recurrences,
-        bool includeInvoices = true, bool includeRecurrences = true, IEnumerable<BudgetMonthStatus>? budgets = null)
+        bool includeInvoices = true, bool includeRecurrences = true, IEnumerable<BudgetMonthStatus>? budgets = null,
+        IEnumerable<MonthlyGoalCheck>? monthlyGoals = null, IEnumerable<SavingsObjectiveCheck>? objectives = null)
     {
         var horizon = today.AddDays(leadDays);
         var reminders = new List<Reminder>();
@@ -171,6 +190,27 @@ public static class ReminderCalculator
             reminders.Add(new Reminder(ReminderKind.Budget, $"budget:{budget.BudgetId}:{month}:{(exceeded ? "exceeded" : "warning")}",
                 exceeded ? ReminderUrgency.Overdue : ReminderUrgency.Soon, endOfMonth, budget.Spent,
                 $"Orçamento {budget.Category} ({scope})", Limit: budget.Limit));
+        }
+
+        // MET-9 (ADR-0013, regra 10): meta do mes fora (urgente, como o orcamento estourado). A chave e por escopo
+        // e mes: dispensar vale ate o mes seguinte; voltar a "dentro" tira o aviso.
+        foreach (var goal in (monthlyGoals ?? []).Where(g => g.Situation == MonthlyGoalSituation.Outside))
+        {
+            var scope = goal.Scope == GoalScope.Business ? "PJ" : "PF";
+            var ceiling = goal.Kind == MonthlyGoalKind.SpendCeiling;
+            reminders.Add(new Reminder(ReminderKind.MonthlyGoal, $"goal:{goal.Scope.ToString().ToLowerInvariant()}:{month}:outside",
+                ReminderUrgency.Overdue, endOfMonth, ceiling ? goal.Figures.Outflows : goal.Figures.Result,
+                $"Meta do mês ({scope})", Limit: goal.Target, Period: month, Scope: goal.Scope.ToString().ToLowerInvariant()));
+        }
+
+        // MET-9: objetivo atrasado a 3 meses ou menos do prazo (em breve). A chave muda a cada mes.
+        foreach (var objective in (objectives ?? []).Where(o => o.Pace.Situation == SavingsObjectiveSituation.Behind
+                     && o.Pace.MonthsLeft is <= ObjectiveWarningMonths && o.Deadline is not null))
+        {
+            var deadlineEnd = objective.Deadline!.Value.AddMonths(1).AddDays(-1);
+            reminders.Add(new Reminder(ReminderKind.SavingsObjective, $"objective:{objective.ObjectiveId}:{month}:behind",
+                ReminderUrgency.Soon, deadlineEnd, objective.Pace.NeededPerMonth ?? 0m, $"Objetivo {objective.Name}",
+                Limit: objective.Pace.Pace, ObjectiveId: objective.ObjectiveId, Scope: objective.Scope.ToString().ToLowerInvariant()));
         }
 
         return reminders.OrderBy(r => r.Urgency).ThenBy(r => r.DueOn).ThenBy(r => r.Title, StringComparer.Ordinal).ToList();

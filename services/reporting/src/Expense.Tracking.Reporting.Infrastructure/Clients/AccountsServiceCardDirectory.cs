@@ -11,10 +11,20 @@ namespace Expense.Tracking.Reporting.Infrastructure.Clients;
 /// </summary>
 internal sealed class AccountsServiceCardDirectory(HttpClient httpClient) : IServiceCardDirectory
 {
-    public async Task<IReadOnlyList<CardInfo>> ListForOwnerAsync(Guid ownerUserId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ScopedCard>> ListForOwnerAsync(Guid ownerUserId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync($"internal/credit-cards?ownerUserId={ownerUserId}", cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<CardInfo>>(cancellationToken) ?? [];
+        // MET-9: o escopo da conta do cartao (accountScope) vem junto, para a meta do mes no resumo por e-mail.
+        var cards = await response.Content.ReadFromJsonAsync<List<ServiceCard>>(cancellationToken) ?? [];
+        return cards
+            .Select(c => new ScopedCard(
+                new CardInfo(c.Id, c.AccountId, c.Label, c.LastFourDigits, c.CreditLimit, c.ClosingDay, c.DueDay, c.IsActive, c.Cycles),
+                c.AccountScope))
+            .ToList();
     }
+
+    private sealed record ServiceCard(
+        Guid Id, Guid AccountId, string? AccountScope, string Label, string LastFourDigits, decimal CreditLimit, int ClosingDay,
+        int DueDay, bool IsActive, IReadOnlyList<CardCycleInfo>? Cycles = null);
 }

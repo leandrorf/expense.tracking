@@ -65,6 +65,42 @@ public sealed class MonthlyGoalStatusApiTests(InvoicesApiFactory factory) : ICla
     }
 
     [Fact]
+    public async Task Reminders_WarnAboutAGoalOutside_AndAnObjectiveBehindNearTheDeadline_UntilTheyRecover()
+    {
+        // MET-9: hoje = 2026-11-21. PF: entradas 1.000 e saidas 900, meta de guardar 500 -> fora.
+        var owner = Guid.NewGuid();
+        var client = ClientFor(owner);
+        var feed = _factory.EventFeed;
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 1000m, "Salario", occurredOn: "2026-11-05", transactionType: "Income");
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 900m, "Mercado", occurredOn: "2026-11-06");
+        await _factory.DrainFeedAsync();
+        await client.PutAsJsonAsync("/goals/monthly/personal", new { kind = "SaveAmount", amount = 500m, fromMonth = "2026-11" });
+        // Objetivo de 3.000 ate jan/2027 (3 meses) sem aporte: precisa 1.000 por mes, ritmo 0 -> atrasado.
+        var objective = await (await client.PostAsJsonAsync("/goals/objectives", new { scope = "personal", name = "Viagem", target = 3000m, deadline = "2027-01" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var objectiveId = objective.GetProperty("id").GetGuid();
+
+        var items = (await client.GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray().ToList();
+
+        var goal = Assert.Single(items, i => i.GetProperty("kind").GetString() == "MonthlyGoal");
+        Assert.Equal(("goal:personal:2026-11:outside", "Overdue", 100m, 500m, "personal"),
+            (goal.GetProperty("key").GetString(), goal.GetProperty("urgency").GetString(), goal.GetProperty("amount").GetDecimal(),
+                goal.GetProperty("limit").GetDecimal(), goal.GetProperty("scope").GetString()));
+        var behind = Assert.Single(items, i => i.GetProperty("kind").GetString() == "SavingsObjective");
+        Assert.Equal((objectiveId, 1000m), (behind.GetProperty("objectiveId").GetGuid(), behind.GetProperty("amount").GetDecimal()));
+
+        // Uma receita de 500 deixa resultado 600, sobra 100 (atencao, nao fora), e um aporte de 3.000 atinge o objetivo.
+        feed.Registered(Guid.NewGuid(), owner, "Personal", 500m, "Extra", occurredOn: "2026-11-20", transactionType: "Income");
+        await _factory.DrainFeedAsync();
+        await client.PostAsJsonAsync($"/goals/objectives/{objectiveId}/contributions", new { date = "2026-11-21", amount = 3000m });
+
+        var after = (await client.GetFromJsonAsync<JsonElement>("/reports/reminders")).GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("kind").GetString()).ToList();
+        Assert.DoesNotContain("MonthlyGoal", after);
+        Assert.DoesNotContain("SavingsObjective", after);
+    }
+
+    [Fact]
     public async Task Status_OfAFutureMonth_UsesThatMonthTerm_AndItsInvoices()
     {
         var owner = Guid.NewGuid();

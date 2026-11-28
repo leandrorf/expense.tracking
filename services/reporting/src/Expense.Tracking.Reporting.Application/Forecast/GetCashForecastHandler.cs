@@ -145,6 +145,32 @@ public sealed class GetCashForecastHandler(
             accounts.Count(a => a.IsActive && a.OpeningBalance is null));
     }
 
+    /// <summary>
+    /// MET-9: so o fluxo mes a mes (sem saldo), com os cartoes dados: o job do resumo por e-mail le os cartoes pelo
+    /// endpoint interno do accounts, sem token de usuario. Mesmas pecas do <see cref="HandleAsync"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<ForecastMonth>> FlowsAsync(
+        Guid ownerUserId, IReadOnlyList<ScopedCard> scopedCards, DateOnly today, int months, CancellationToken cancellationToken)
+    {
+        var first = new DateOnly(today.Year, today.Month, 1);
+        var last = first.AddMonths(months).AddDays(-1);
+        var movements = (await projection.GetCashMovementsAsync(ownerUserId, first, last, cancellationToken))
+            .Select(m => new CashMovement(m.AccountScope, m.TransactionType == "Income", m.Amount, m.OccurredOn));
+
+        var invoices = new List<ForecastInvoice>();
+        foreach (var (card, scope) in scopedCards)
+        {
+            var loaded = await CardInvoiceSource.LoadAsync(projection, ownerUserId, card, today, cancellationToken);
+            invoices.AddRange(loaded.Invoices
+                .Where(i => i.Period.DueMonth >= first && i.Period.DueMonth <= last)
+                .Select(i => new ForecastInvoice(scope, i.Period.DueMonth, i.Total, i.Paid, i.Remaining)));
+        }
+
+        var recurring = await RecurringAsync(ownerUserId, today, last, scopedCards, cancellationToken);
+        invoices.AddRange(recurring.Invoices.Where(i => i.Invoice.DueMonth >= first && i.Invoice.DueMonth <= last).Select(i => i.Invoice));
+        return CashForecastCalculator.Calculate(first, months, movements.Concat(recurring.Movements), invoices);
+    }
+
     private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
 
     private sealed record RecurringInvoice(ForecastInvoice Invoice, Guid CardAccountId);

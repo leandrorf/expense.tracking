@@ -51,6 +51,9 @@ export function App() {
       setTab('cards');
     } else if (r.kind === 'Budget') {
       setTab('budgets');
+    } else if (r.kind === 'MonthlyGoal' || r.kind === 'SavingsObjective') {
+      // MET-9: meta do mês fora ou objetivo atrasado abrem a aba Metas.
+      setTab('goals');
     } else if (r.kind === 'RecurrenceAdjustment' && r.recurrenceId) {
       // RJT-9: abre os valores da regra, onde o reajuste e confirmado.
       setAdjustTarget(r.recurrenceId);

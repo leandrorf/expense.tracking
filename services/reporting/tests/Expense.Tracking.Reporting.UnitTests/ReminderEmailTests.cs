@@ -93,4 +93,21 @@ public sealed class ReminderEmailTests
         Assert.Contains("Reajuste de Escola: aguardando o IPCA; confirme na recorrência", email.TextBody);
         Assert.Contains("Reajuste de Seguro: R$ 500,00 → R$ 525,00 (5%)", email.TextBody);
     }
+    [Fact]
+    public void Digest_DescribesTheGoalOutside_AndTheObjectiveBehind()
+    {
+        // MET-9: as duas linhas novas do resumo.
+        var reminders = new List<Reminder>
+        {
+            new(ReminderKind.MonthlyGoal, "goal:personal:2026-11:outside", ReminderUrgency.Overdue, new DateOnly(2026, 11, 30), 100m,
+                "Meta do mês (PF)", Limit: 500m),
+            new(ReminderKind.SavingsObjective, "objective:x:2026-11:behind", ReminderUrgency.Soon, new DateOnly(2027, 1, 31), 1000m,
+                "Objetivo Viagem"),
+        };
+
+        var email = ReminderEmails.Digest("pessoa@exemplo.com", reminders, "http://app/");
+
+        Assert.Contains("Meta do mês (PF): fora da meta (alvo de R$ 500,00, mês em R$ 100,00)", email.TextBody);
+        Assert.Contains("Objetivo Viagem: atrasado, precisa de R$ 1.000,00 por mês até 01/2027", email.TextBody);
+    }
 }

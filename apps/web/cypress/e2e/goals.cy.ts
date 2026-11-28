@@ -75,4 +75,28 @@ describe('Metas', () => {
     row().should('have.attr', 'data-archived', 'false');
     row().find('[data-cy=objective-archive]').click();
   });
+
+  it('avisa do objetivo atrasado perto do prazo e leva a aba Metas', () => {
+    // MET-9: 1.000 ate o mes que vem, sem aporte: precisa de 500 por mes com ritmo zero (atrasado, 2 meses do prazo).
+    const name = `Atrasado ${Date.now()}`;
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    cy.get('[data-cy=objective-name]').type(name);
+    cy.get('[data-cy=objective-target]').type('1000');
+    cy.get('[data-cy=objective-deadline]').type(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+    cy.get('[data-cy=objective-submit]').click();
+    cy.get(`[data-cy=objective-row][data-name="${name}"]`).should('have.attr', 'data-situation', 'Behind');
+
+    cy.get('[data-cy=tab-summary]').click();
+    cy.get('[data-cy=reminders-bell]').click();
+    cy.contains('[data-cy=reminder-item]', `Objetivo ${name}`).should('have.attr', 'data-kind', 'SavingsObjective').click();
+    cy.get('[data-cy=objectives]').should('exist');
+
+    // Arquivado, o objetivo para de avisar.
+    cy.get(`[data-cy=objective-row][data-name="${name}"] [data-cy=objective-archive]`).click();
+    cy.get(`[data-cy=objective-row][data-name="${name}"]`).should('not.exist');
+    cy.get('[data-cy=tab-summary]').click();
+    cy.get('[data-cy=reminders-bell]').click();
+    cy.get('[data-cy=reminders-panel]').should('not.contain', `Objetivo ${name}`);
+  });
 });

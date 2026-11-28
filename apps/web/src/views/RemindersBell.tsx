@@ -29,6 +29,11 @@ function detailOf(r: Reminder, money: (v: number) => string): string {
       return r.urgency === 'Overdue'
         ? `estourou: ${money(r.amount)} de ${money(r.limit)}`
         : `${Math.round((r.amount / r.limit) * 100)}% de ${money(r.limit)} gastos`;
+    case 'MonthlyGoal':
+      // MET-9: meta do mês fora (no teto, `amount` é o que saiu; nas outras, o resultado).
+      return `fora da meta: alvo de ${money(r.limit)}, mês em ${money(r.amount)}`;
+    case 'SavingsObjective':
+      return `atrasado: precisa de ${money(r.amount)} por mês, ritmo de ${money(r.limit)}`;
     default:
       return shortDate(r.dueOn);
   }
@@ -212,7 +217,7 @@ export function RemindersBell({ refreshKey, onOpen }: Props) {
                   checked={settings.budgets}
                   onChange={(e) => setSettings({ ...settings, budgets: e.target.checked })}
                 />{' '}
-                orçamentos
+                orçamentos e metas
               </label>
               <fieldset className="reminders-email" data-cy="reminders-email-section">
                 <legend>Resumo diário por e-mail</legend>
