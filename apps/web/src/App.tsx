@@ -187,7 +187,7 @@ export function App() {
             </button>
           </p>
         )}
-        {tab === 'summary' && <SummaryView />}
+        {tab === 'summary' && <SummaryView onOpenGoals={() => setTab('goals')} />}
         {tab === 'forecast' && <ForecastView />}
         {tab === 'transactions' && (
           <TransactionsView

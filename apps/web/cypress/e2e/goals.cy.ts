@@ -27,6 +27,20 @@ describe('Metas', () => {
     // O PJ mostra os numeros do mes, com ou sem meta.
     cy.get('[data-cy=goal-scope-business] [data-cy=goal-result]').should('exist');
 
+    // MET-8: a previsao PF mostra a meta do mes e a sobra; o Resumo mostra a situacao e leva a aba Metas.
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    cy.get('[data-cy=tab-forecast]').click();
+    cy.get('[data-cy=forecast-scope]').select('personal');
+    cy.get(`[data-cy=forecast-row][data-month="${month}"] [data-cy=forecast-goal]`).should('contain', 'guardar').and('contain', '1.000,00');
+    cy.get(`[data-cy=forecast-row][data-month="${month}"] [data-cy=forecast-goal-left]`).invoke('text').should('match', /sobra|faltam/);
+    cy.get('[data-cy=forecast-scope]').select('total');
+    cy.get('[data-cy=forecast-goal]').should('not.exist');
+    cy.get('[data-cy=tab-summary]').click();
+    cy.get('[data-cy=summary-goal-personal]').should('have.attr', 'data-situation');
+    cy.get('[data-cy=summary-goal-open]').click();
+    cy.get('[data-cy=goal-month]').should('exist');
+
     // Um objetivo de 1.200, sem prazo: aporte de 300 e uma retirada maior que o guardado.
     cy.get('[data-cy=objective-scope]').select('personal');
     cy.get('[data-cy=objective-name]').type(name);

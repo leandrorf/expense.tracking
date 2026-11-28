@@ -2933,7 +2933,18 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     aportes.
   - *Dado* o histórico (MET-4), *quando* existe, *então* a aba mostra os últimos 6 meses da meta mensal.
   - Estimativa: 5 · **Must** · Dependências: MET-3, MET-6
-- 🔵 **MET-8** Meta na previsão e no Resumo. → coluna na previsão, cartão no Resumo.
+- ✅ **MET-8** Meta na previsão e no Resumo. → coluna na previsão, cartão no Resumo.
+  - Feito assim:
+    - **Previsão:** em PF ou PJ, a coluna "Meta" aparece quando algum mês tem meta. Ela mostra "guardar X" ou
+      "teto X" e "sobra Y" (ou "faltam Y", em vermelho), e "sem meta" nos meses sem ela; no Total, a coluna
+      não aparece.
+    - **Conta da previsão:** a vigência e o alvo de cada mês saem de `goalMath.ts`, uma cópia da regra do
+      `reporting` (`TermFor`, alvo no percentual com o meio para longe do zero), sobre os números que a própria
+      previsão já trouxe. A tela só busca a lista de metas a mais.
+    - **Resumo:** o cartão "Meta do mês" aparece quando PF ou PJ têm meta no mês atual, com a situação e o
+      "ainda pode gastar" de cada um, e "ver metas" leva à aba Metas. Ele fica fora dos totais do Resumo.
+    - **E2E:** o `goals.cy.ts` confere a coluna na previsão PF e a ausência dela no Total, o cartão no Resumo
+      e o link.
   - *Dado* uma meta mensal no escopo, *quando* abro a previsão, *então* cada mês mostra a meta e a sobra
     depois dela (resultado − meta); *e* o Resumo do mês mostra a situação da meta com um link para a aba Metas.
   - Estimativa: 3 · **Should** · Dependências: MET-3

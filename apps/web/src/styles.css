@@ -1084,3 +1084,21 @@ table.data td.negative,
 .objective-contributions .negative {
   color: #f87171;
 }
+
+/* MET-8: meta do mes no Resumo. */
+.goal-summary {
+  margin: 1rem 0;
+}
+
+.goal-summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0;
+}
+
+.goal-summary li {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.2rem 0;
+}
