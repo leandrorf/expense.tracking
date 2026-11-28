@@ -647,6 +647,17 @@ async function main() {
   ok(editRes.status === 200 && Math.round((availableAfter - availableBefore) * 100) / 100 === 3000,
     `editar o cartao: PUT ${editRes.status}, disponivel ${availableBefore} -> ${availableAfter}`);
 
+  // 24i) Meta mensal (MET-2): teto PJ de 6.000 a partir deste mes e 6.500 a partir do seguinte. O demo e
+  // persistente: a primeira execucao cria (201), as outras mudam a mesma meta aberta (200).
+  const goalPut = (body) => fetch(`${GATEWAY}/api/goals/monthly/business`, { method: 'PUT', headers: auth, body: JSON.stringify(body) });
+  const goalNow = await goalPut({ kind: 'SpendCeiling', amount: 6000, fromMonth: monthAfter(0) });
+  const goalNext = await goalPut({ kind: 'SpendCeiling', amount: 6500, fromMonth: monthAfter(1) });
+  const goalsRes = await fetch(`${GATEWAY}/api/goals/monthly`, { headers: auth });
+  const openGoal = goalsRes.status === 200 ? (await goalsRes.json()).find((g) => g.scope === 'business' && g.closedFromMonth === null) : undefined;
+  const termIn = (month) => openGoal?.terms.filter((t) => t.fromMonth <= month).at(-1)?.amount;
+  ok([200, 201].includes(goalNow.status) && goalNext.status === 200 && termIn(monthAfter(0)) === 6000 && termIn(monthAfter(1)) === 6500,
+    `meta mensal PJ por vigencia: PUT ${goalNow.status}/${goalNext.status}, GET ${goalsRes.status}, teto ${termIn(monthAfter(0))} -> ${termIn(monthAfter(1))}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

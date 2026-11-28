@@ -88,6 +88,51 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                     b.ToTable("budgets", (string)null);
                 });
 
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Goals.MonthlyGoal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ClosedFromMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("closed_from_month");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetime")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("OpenScope")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("open_scope");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTime>("StartMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("start_month");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "OpenScope")
+                        .IsUnique()
+                        .HasDatabaseName("ux_monthly_goals_owner_open_scope");
+
+                    b.HasIndex("OwnerUserId", "Scope")
+                        .HasDatabaseName("ix_monthly_goals_owner_scope");
+
+                    b.ToTable("monthly_goals", (string)null);
+                });
+
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Invoices.InvoiceReconciliation", b =>
                 {
                     b.Property<Guid>("OwnerUserId")
@@ -523,6 +568,44 @@ namespace Expense.Tracking.Reporting.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("_limits");
+                });
+
+            modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Goals.MonthlyGoal", b =>
+                {
+                    b.OwnsMany("Expense.Tracking.Reporting.Domain.Goals.MonthlyGoalTerm", "_terms", b1 =>
+                        {
+                            b1.Property<Guid>("GoalId")
+                                .HasColumnType("char(36)")
+                                .HasColumnName("goal_id");
+
+                            b1.Property<DateTime>("EffectiveFrom")
+                                .HasColumnType("date")
+                                .HasColumnName("effective_from");
+
+                            b1.Property<decimal?>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("decimal(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.Property<string>("Kind")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("varchar(16)")
+                                .HasColumnName("kind");
+
+                            b1.Property<int?>("Percent")
+                                .HasColumnType("int")
+                                .HasColumnName("percent");
+
+                            b1.HasKey("GoalId", "EffectiveFrom");
+
+                            b1.ToTable("monthly_goal_terms", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("GoalId");
+                        });
+
+                    b.Navigation("_terms");
                 });
 
             modelBuilder.Entity("Expense.Tracking.Reporting.Domain.Projection.ProjectedRecurrence", b =>

@@ -52,6 +52,7 @@ app.UseAuthorization();
 app.MapHealthEndpoints();
 app.MapReportsEndpoints();
 app.MapBudgetsEndpoints();
+app.MapGoalsEndpoints();
 app.MapInvoicesEndpoints();
 app.MapForecastEndpoints();
 app.MapRemindersEndpoints();

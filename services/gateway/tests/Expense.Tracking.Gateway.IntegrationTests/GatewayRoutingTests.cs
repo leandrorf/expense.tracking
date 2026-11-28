@@ -60,6 +60,20 @@ public sealed class GatewayRoutingTests(GatewayRoutingTests.Factory factory) : I
     }
 
     [Fact]
+    public void GoalsRoute_GoesToReporting_BeforeTheAccountsCatchAll()
+    {
+        // MET-2 (ADR-0013, regra 9): sem esta rota, /api/goals cairia no catch-all /api/** do accounts.
+        var config = _factory.Services.GetRequiredService<IProxyConfigProvider>().GetConfig();
+
+        var goals = Assert.Single(config.Routes, r => r.RouteId == "goals-api");
+        var catchAll = Assert.Single(config.Routes, r => r.RouteId == "accounts-api");
+        Assert.Equal("/api/goals/{**catch-all}", goals.Match.Path);
+        Assert.Equal("reporting", goals.ClusterId);
+        Assert.Equal("authenticated", goals.AuthorizationPolicy);
+        Assert.True(goals.Order < catchAll.Order);
+    }
+
+    [Fact]
     public async Task ImportsRoute_WithoutToken_ReturnsUnauthorized()
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });

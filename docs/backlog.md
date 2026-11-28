@@ -2791,7 +2791,23 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
     - **Rotas:** arquivar e reabrir em `POST .../archive` e `.../unarchive`; histórico de 1 a 24 meses
       (padrão 6).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **MET-2** Meta mensal por escopo, com vigências. → `monthly_goals` no `reporting`, `/goals/monthly`.
+- ✅ **MET-2** Meta mensal por escopo, com vigências. → `monthly_goals` no `reporting`, `/goals/monthly`.
+  - Feito assim:
+    - **Modelo:** `MonthlyGoal` (domínio, `Goals/`) tem escopo, início, encerramento e vigências
+      (`monthly_goal_terms`: mês, forma `SaveAmount`/`SavePercent`/`SpendCeiling`, valor ou percentual). A forma
+      pode mudar de uma vigência para outra; mudar a partir de um mês substitui as vigências seguintes.
+    - **Uma meta aberta por escopo:** garantida por um índice único (`open_scope` fica nulo na meta encerrada).
+      Migration `MonthlyGoals`.
+    - **`PUT /goals/monthly/{personal|business}`** (`{ kind, amount?, percent?, fromMonth }`):
+      - sem meta aberta no escopo, cria (201), a partir do encerramento da anterior, se houver;
+      - com meta aberta, muda a partir do mês (200).
+    - **`DELETE /goals/monthly/{scope}?fromMonth=`** encerra (404 `goal.not_found` sem meta aberta).
+      **`GET /goals/monthly`** lista as abertas e as encerradas com as vigências.
+    - **Erros (400):** `goal.amount_invalid` (de 0,01 a 1 bilhão, 2 casas), `goal.percent_invalid` (1 a 100),
+      `goal.kind_invalid`, `goal.month_invalid`, `goal.scope_invalid`, `goal.month_before_start`.
+    - **Gateway:** rota `/api/goals/**` para o `reporting`, antes do catch-all do `accounts`, com teste.
+    - **Scripts:** o `reset-demo-data` apaga as metas. Smoke passo 24i: teto PJ de 6.000 neste mês e 6.500 a
+      partir do seguinte, e a rodada seguinte muda a mesma meta (56 passos).
   - *Dado* o escopo PF, *quando* defino "guardar R$ 1.000 por mês" a partir de dezembro, *então* a meta fica
     guardada com a forma, o valor e a vigência, e o `GET` a devolve; *e* mudar para "guardar 20% das
     entradas" a partir de março mantém R$ 1.000 de dezembro a fevereiro.

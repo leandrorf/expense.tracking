@@ -1,4 +1,5 @@
 using Expense.Tracking.Reporting.Domain.Budgets;
+using Expense.Tracking.Reporting.Domain.Goals;
 using Expense.Tracking.Reporting.Domain.Projection;
 using Expense.Tracking.Reporting.Domain.Reminders;
 using Expense.Tracking.Reporting.Domain.Invoices;
@@ -30,6 +31,8 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
     public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
 
     public DbSet<InvoiceReconciliation> InvoiceReconciliations => Set<InvoiceReconciliation>();
+
+    public DbSet<MonthlyGoal> MonthlyGoals => Set<MonthlyGoal>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -216,6 +219,39 @@ public sealed class ReportingDbContext(DbContextOptions<ReportingDbContext> opti
                 l.HasKey("BudgetId", nameof(BudgetLimit.EffectiveFrom));
             });
             b.Navigation("_limits").AutoInclude();
+        });
+
+        // MET-2 (ADR-0013, regras 1 e 3): meta mensal por escopo, com vigencias; dado escrito pelo usuario.
+        modelBuilder.Entity<MonthlyGoal>(b =>
+        {
+            b.ToTable("monthly_goals");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            b.Property(x => x.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
+            b.Property(x => x.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(16).IsRequired();
+            b.Property(x => x.OpenScope).HasColumnName("open_scope").HasConversion<string>().HasMaxLength(16);
+            b.Property(x => x.StartMonth).HasColumnName("start_month").HasColumnType("date").IsRequired();
+            b.Property(x => x.ClosedFromMonth).HasColumnName("closed_from_month").HasColumnType("date");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+            b.Ignore(x => x.Terms);
+            // Uma so meta ABERTA por dono + escopo (encerradas tem open_scope nulo).
+            b.HasIndex(x => new { x.OwnerUserId, x.OpenScope })
+                .IsUnique()
+                .HasDatabaseName("ux_monthly_goals_owner_open_scope");
+            b.HasIndex(x => new { x.OwnerUserId, x.Scope }).HasDatabaseName("ix_monthly_goals_owner_scope");
+
+            b.OwnsMany<MonthlyGoalTerm>("_terms", t =>
+            {
+                t.ToTable("monthly_goal_terms");
+                t.WithOwner().HasForeignKey("GoalId");
+                t.Property<Guid>("GoalId").HasColumnName("goal_id");
+                t.Property(x => x.EffectiveFrom).HasColumnName("effective_from").HasColumnType("date").IsRequired();
+                t.Property(x => x.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(16).IsRequired();
+                t.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2);
+                t.Property(x => x.Percent).HasColumnName("percent");
+                t.HasKey("GoalId", nameof(MonthlyGoalTerm.EffectiveFrom));
+            });
+            b.Navigation("_terms").AutoInclude();
         });
 
         modelBuilder.Entity<ProjectionCheckpoint>(b =>

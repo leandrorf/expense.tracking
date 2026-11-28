@@ -1,5 +1,6 @@
 using Expense.Tracking.Reporting.Application.Abstractions;
 using Expense.Tracking.Reporting.Application.Budgets;
+using Expense.Tracking.Reporting.Application.Goals;
 using Expense.Tracking.Reporting.Application.Forecast;
 using Expense.Tracking.Reporting.Application.Reminders;
 using Expense.Tracking.Reporting.Application.Invoices;
@@ -37,6 +38,11 @@ public static class DependencyInjection
         services.AddScoped<ChangeBudgetHandler>();
         services.AddScoped<GetBudgetStatusHandler>();
         services.AddScoped<GetCategorySuggestionsHandler>();
+        // MET-2 (ADR-0013): meta mensal por escopo.
+        services.AddScoped<IMonthlyGoalRepository, MonthlyGoalRepository>();
+        services.AddScoped<SetMonthlyGoalHandler>();
+        services.AddScoped<CloseMonthlyGoalHandler>();
+        services.AddScoped<ListMonthlyGoalsHandler>();
         services.AddScoped<GetCardInvoicesHandler>();
         // RCN-2 (ADR-0011): conferencia da fatura com a do banco.
         services.AddScoped<IInvoiceReconciliationStore, InvoiceReconciliationStore>();
