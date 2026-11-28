@@ -1,13 +1,17 @@
 import { createTheme } from '@mui/material/styles';
 
+/** Contorno do foco por teclado (MUI-11): visível em qualquer superfície do tema escuro. */
+const focusRing = { outline: '2px solid #a5b4fc', outlineOffset: 2 };
+
 /**
- * MUI-2 (ADR-0014, decisão 6): tema escuro com as cores do `styles.css`, fonte do sistema e densidade
- * compacta. Fundo e texto iguais aos de hoje, para as telas ainda não migradas não destoarem.
+ * MUI-2 (ADR-0014, decisão 6): tema escuro com as cores de antes, fonte do sistema e densidade compacta.
+ * MUI-11: o índigo de destaque é o `#818cf8` (contraste AA como texto: 6,0:1 no fundo e 4,9:1 nos cartões; o
+ * `#6366f1` de antes dava 3,3:1), com texto escuro nos botões cheios (6,0:1).
  */
 export const theme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#6366f1', dark: '#4f46e5' },
+    primary: { main: '#818cf8', light: '#a5b4fc', dark: '#6366f1', contrastText: '#0f172a' },
     success: { main: '#4ade80' },
     error: { main: '#f87171' },
     warning: { main: '#fbbf24' },
@@ -24,6 +28,9 @@ export const theme = createTheme({
     h3: { fontSize: '1rem', fontWeight: 700 },
   },
   components: {
+    // MUI-11: foco por teclado explícito em botões, abas, ícones e itens clicáveis (não só o efeito do clique).
+    MuiButtonBase: { styleOverrides: { root: { '&.Mui-focusVisible': focusRing } } },
+    MuiCssBaseline: { styleOverrides: { 'summary:focus-visible': focusRing } },
     MuiTextField: { defaultProps: { size: 'small' } },
     MuiButton: { defaultProps: { size: 'small', disableElevation: true } },
     MuiIconButton: { defaultProps: { size: 'small' } },

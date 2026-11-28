@@ -3140,7 +3140,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   - *Dado* o sino, *quando* abro o painel, dispenso um aviso, mudo as preferências e o e-mail, *então* o painel
     é um `Popover` acessível por teclado (abre, navega e fecha com Esc), com os mesmos atalhos para cada aviso.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-11** Limpeza, acessibilidade e celular. → sem `styles.css`.
+- ✅ **MUI-11** Limpeza, acessibilidade e celular. → sem `styles.css`. O CSS saiu na integração das MUI-5/8/9/10. As 10 abas a 360 px não rolam na horizontal (as tabelas rolam dentro do quadro). Todo campo tem rótulo ou `aria-label`. Foco por teclado com contorno explícito em botões, abas e itens clicáveis. O índigo de destaque passou de `#6366f1` (3,3:1 como texto nos cartões) para `#818cf8` (4,9 a 6,0:1, AA), com texto escuro nos botões cheios. Bundle final: 175,9 KB gzip de JS e nenhum CSS (+90 KB de 150).
   - *Dado* todas as telas migradas, *quando* fecho o épico, *então* o `styles.css` é removido, cada tela é
     usável com 360 px de largura, todo campo tem rótulo, o foco é visível e o bundle está dentro da meta.
   - Estimativa: 3 · **Should** · Dependências: MUI-3 a MUI-10
