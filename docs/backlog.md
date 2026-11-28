@@ -3096,7 +3096,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
     ADR-0014 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), e o PO ajusta as histórias
     seguintes ao que foi decidido.
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **MUI-2** Fundação: tema, barra do app e componentes do projeto. → `src/theme.ts`, `src/ui/`.
+- ✅ **MUI-2** Fundação: tema, barra do app e componentes do projeto. → `src/theme.ts`, `src/ui/`. Bundle medido: 85,8 → 137,8 KB gzip (+52 KB; meta +150 KB). No celular, as abas vão para uma linha própria e o texto "sessão ativa" se esconde (abaixo de 600 px).
   - *Dado* o app, *quando* instalo os pacotes e envolvo a SPA no `ThemeProvider` com o `CssBaseline`, *então* a
     barra do topo (abas, sino, sessão, sair) e a tela de login usam o MUI. As abas rolam no celular. As telas
     ainda não migradas continuam com o visual atual.
