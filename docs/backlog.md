@@ -3018,6 +3018,152 @@ MET-8 (6 pts): histórico e meta na previsão e no Resumo. Could = MET-9 e MET-1
 **Ordem sugerida:** MET-1 → MET-2 → MET-3 → MET-5 → MET-6 → MET-7 → MET-11 (fecha o Must) → MET-4 → MET-8 →
 MET-9 → MET-10.
 
+## 🔵 EPIC MUI — Interface com Material UI  · *To Do*
+**Problema:** a SPA cresceu para 18 telas, mas o visual continua sendo um CSS próprio de 1.100 linhas, escrito
+tela a tela. Cada épico novo reinventa botões, campos, selos de situação, tabelas e avisos. O resultado é uma
+interface irregular (espaçamentos, alturas e estados de foco diferentes), sem padrão de acessibilidade, difícil
+de usar no celular e cara de manter: cada tela nova custa tempo de CSS. O dono do produto pediu para adotar o
+Material UI (2026-11-28).
+**Objetivo (outcome):** todas as telas usam os componentes e o tema do Material UI, com o mesmo comportamento e
+os mesmos fluxos de hoje. Telas novas passam a ser montadas com um conjunto pequeno de componentes do projeto,
+sem CSS novo. A interface fica consistente, acessível por teclado e leitor de tela, e usável num celular.
+**Métricas de sucesso:**
+1. As 18 telas migradas e o `styles.css` removido.
+2. A suíte Cypress continua 100% verde ao fim de cada história, sem trocar nenhum `data-cy` (só os ajustes
+   decididos na ADR).
+3. O bundle JS cresce no máximo 150 KB gzip (hoje 84 KB).
+4. Todas as telas são usáveis com 360 px de largura, sem rolagem horizontal da página.
+
+**Rastreabilidade:** `docs/PROMPT.md` → SPA React (épico WEB); pedido do dono do produto (2026-11-28); restrição
+de licenças do projeto: nada pago para uso comercial (como FluentAssertions e MediatR, evitados).
+
+**Achados no código que moldam o épico:**
+- **SPA sem biblioteca de UI.** React 18.3 + Vite 5 + TypeScript, só `react` e `react-dom` como dependências.
+  As 18 telas somam cerca de 6.400 linhas em `src/views/`; as maiores são `GoalsView` (823), `RecurrencesView`
+  (710), `ImportView` (699), `TransactionsView` (557) e `BudgetsView` (555). O tema é escuro, com cores fixas no
+  `styles.css` (receita em verde, gasto em `#f87171`, selos `ontrack`/`warning`/`exceeded`).
+- **Os testes dependem de elementos nativos.** São 427 `data-cy` e 29 specs Cypress, com 175 `.select()`,
+  324 `.type()` e 9 `.check()`:
+  - o `<Select>` padrão do MUI não é um `<select>`, então os `.select()` quebrariam;
+  - o `TextField` põe o atributo na `div` de fora, não no `<input>`, então os `.type()` quebrariam;
+  - o `Checkbox` do MUI esconde o `<input>` nativo (opacidade zero), e o `.check()` do Cypress recusa
+    elemento invisível.
+- **Datas e meses são campos nativos.** Há 19 `<input type="date">` e `type="month"`, que o Cypress preenche
+  com `.type('2026-11-28')`. Um seletor de data do MUI X mudaria isso e traria outra dependência.
+- **Peças que se repetem em todas as telas:** campo de valor em reais (com vírgula), seletor de escopo PF/PJ,
+  navegação de mês (‹ mês ›), selo de situação, lista de números (`dl` com rótulo e valor), aviso ("notice"),
+  formulário em linha e tabela de dados. São os candidatos naturais a componentes do projeto.
+- **Painel do sino** (`RemindersBell`): é um `div` posicionado à mão, com preferências e e-mail dentro. No MUI
+  vira um `Popover`.
+- **Bundle hoje:** 84 KB gzip de JS e 3,3 KB de CSS.
+
+**Decisões em aberto (a registrar na ADR-0014, MUI-1; a recomendação de cada uma vem com o motivo):**
+1. **Pacotes.** *Recomendação:* `@mui/material` v7, `@emotion/react`, `@emotion/styled` e `@mui/icons-material`,
+   todos MIT. O MUI X fica de fora: o Data Grid e os Date Pickers Pro/Premium são pagos, e as versões grátis
+   trazem peso e um adaptador de datas que os campos nativos dispensam. A tabela é a `Table` do `@mui/material`.
+2. **Selects.** Opções: (a) `TextField` com `select` em modo **nativo** (`slotProps.select.native`), que
+   continua sendo um `<select>`; (b) o `Select` do MUI, com um comando `cy.selectMui` reescrevendo as 175
+   chamadas. *Recomendação: (a)*. Os testes não mudam, e o select nativo é melhor no celular.
+3. **Datas e meses.** *Recomendação:* `TextField` com `type="date"` e `type="month"` nativos, sem seletor do MUI X.
+4. **`data-cy`.** *Recomendação:* o contrato não muda. Os componentes do projeto põem o `data-cy` no elemento
+   que o teste usa: no `<input>`/`<select>` (`slotProps.htmlInput`), no botão e na linha da tabela. Uma
+   história que precisar trocar um `data-cy` justifica a troca.
+5. **Checkbox.** Opções: (a) `Checkbox` do MUI com o `data-cy` no `<input>` e `.check({ force: true })` nas 9
+   chamadas; (b) clicar no rótulo (`FormControlLabel`) nos testes. *Recomendação: (a)*, a menor mudança. O
+   clique de verdade é no ícone do MUI, que cobre o `<input>`.
+6. **Tema.** *Recomendação:*
+   - escuro como hoje, com a paleta derivada das cores atuais (receita verde, gasto vermelho, atenção amarela);
+   - fonte do sistema, sem Roboto nem Google Fonts (nada externo, nada a mais no bundle);
+   - densidade compacta (`size="small"`) em formulários e tabelas, como o visual atual.
+
+   Alternar entre claro e escuro fica como Could.
+7. **Componentes do projeto.** *Recomendação:* uma pasta `src/ui/` com o mínimo que as telas repetem:
+   - campos: `Field`, `MoneyField`, `DateField`/`MonthField`, `SelectField` (nativo);
+   - navegação e estado: `ScopeSelect`, `MonthNav`, `StatusChip`;
+   - layout: `Figures`, `Notice`, `Section`, `RowForm`.
+
+   As telas usam esses componentes e o MUI direto só para layout (`Stack`, `Grid`, `Box`). Nada de CSS novo
+   por tela: estilo vem do tema ou do `sx`.
+8. **Migração gradual.** *Recomendação:* uma história por grupo de telas, na ordem fundação → telas de
+   leitura → telas de cadastro → importação → sino. O CSS de cada tela sai do `styles.css` na história dela.
+   Durante a migração o app convive com os dois visuais, e o `CssBaseline` não pode desfazer o CSS das telas
+   que ainda não migraram. A história só fecha com o Cypress inteiro verde.
+9. **Escopo.** *Recomendação:* só aparência e componentes. Os fluxos, os textos e as regras continuam iguais,
+   sem roteador novo, sem i18n e sem tela nova; melhorias de fluxo viram histórias de outros épicos.
+
+- 🔵 **MUI-1** ADR: Material UI na SPA. → ADR-0014.
+  - *Dado* as decisões em aberto 1 a 9 deste épico, *quando* o dono do produto revisa as opções, *então* a
+    ADR-0014 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), e o PO ajusta as histórias
+    seguintes ao que foi decidido.
+  - Estimativa: 2 · **Must** · Dependências: —
+- 🔵 **MUI-2** Fundação: tema, barra do app e componentes do projeto. → `src/theme.ts`, `src/ui/`.
+  - *Dado* o app, *quando* instalo os pacotes e envolvo a SPA no `ThemeProvider` com o `CssBaseline`, *então* a
+    barra do topo (abas, sino, sessão, sair) e a tela de login usam o MUI. As abas rolam no celular. As telas
+    ainda não migradas continuam com o visual atual.
+  - *Dado* os componentes de `src/ui/`, *quando* uma tela os usa, *então* o `data-cy` fica no `<input>`, no
+    `<select>` ou no botão, e os selects, datas e meses continuam nativos.
+  - *Dado* o fim da história, *quando* rodo a suíte, *então* o Cypress fica 100% verde e o bundle é medido
+    contra a meta.
+  - Estimativa: 5 · **Must** · Dependências: MUI-1
+- 🔵 **MUI-3** Resumo e Previsão. → `SummaryView`, `ForecastView`.
+  - *Dado* o Resumo e a Previsão, *quando* abro as abas, *então* os cartões de totais, as quebras por
+    categoria, escopo e meio, a tabela da previsão (com "previsto", "falta pagar", meta e saldo) e o cartão da
+    meta do mês usam o tema e os componentes do projeto, com os mesmos números, e a tabela rola dentro do
+    próprio contêiner no celular.
+  - Estimativa: 3 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-4** Lançamentos. → `TransactionsView`.
+  - *Dado* a aba Lançamentos, *quando* cadastro, edito, excluo, recategorizo em lote e "repito todo mês",
+    *então* tudo funciona como hoje, com formulário, tabela, filtros e mensagens do MUI.
+  - Estimativa: 5 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-5** Recorrências. → `RecurrencesView`, `RecurrenceValuesRow`.
+  - *Dado* a aba Recorrências, *quando* cadastro uma regra, lanço, pulo, mudo valores por vigência e confirmo
+    um reajuste, *então* tudo funciona como hoje com os componentes do projeto.
+  - Estimativa: 5 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-6** Contas e Cartões. → `AccountsView`, `CardsView`, `CardEditRow`.
+  - *Dado* as abas Contas e Cartões, *quando* cadastro, informo o saldo, edito o cartão e troco o ciclo (com a
+    prévia), *então* tudo funciona como hoje com os componentes do projeto.
+  - Estimativa: 3 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-7** Faturas e conciliação. → `InvoicesView`, `InvoiceReconciliationPanel`.
+  - *Dado* a fatura de um cartão, *quando* navego entre os meses, pago e confiro com o arquivo do banco ou com
+    o total, *então* os grupos da conciliação, os selos e as ações usam o MUI, com o mesmo comportamento.
+  - Estimativa: 5 · **Must** · Dependências: MUI-6
+- 🔵 **MUI-8** Orçamentos e Metas. → `BudgetsView`, `GoalsView`.
+  - *Dado* as abas Orçamentos e Metas, *quando* acompanho o mês, cadastro e altero orçamentos, defino a meta e
+    registro aportes, *então* as barras de progresso (`LinearProgress`), os selos (`StatusChip`) e os
+    formulários usam o MUI.
+  - Estimativa: 5 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-9** Importar e Contador. → `ImportView`, `CsvMappingStep`, `AccountingExportView`, `LedgerAccountsSection`.
+  - *Dado* a importação (envio, mapeamento do CSV, prévia, confirmação) e a exportação contábil, *quando* faço
+    cada passo, *então* tudo funciona como hoje, com o envio de arquivo e as tabelas do MUI.
+  - Estimativa: 5 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-10** Sino de avisos e preferências. → `RemindersBell` com `Badge` e `Popover`.
+  - *Dado* o sino, *quando* abro o painel, dispenso um aviso, mudo as preferências e o e-mail, *então* o painel
+    é um `Popover` acessível por teclado (abre, navega e fecha com Esc), com os mesmos atalhos para cada aviso.
+  - Estimativa: 3 · **Must** · Dependências: MUI-2
+- 🔵 **MUI-11** Limpeza, acessibilidade e celular. → sem `styles.css`.
+  - *Dado* todas as telas migradas, *quando* fecho o épico, *então* o `styles.css` é removido, cada tela é
+    usável com 360 px de largura, todo campo tem rótulo, o foco é visível e o bundle está dentro da meta.
+  - Estimativa: 3 · **Should** · Dependências: MUI-3 a MUI-10
+- 🔵 **MUI-12** Alternar tema claro e escuro. → botão na barra do app.
+  - *Dado* o tema escuro, *quando* clico no botão da barra, *então* o app troca para o claro e lembra a
+    escolha no navegador; sem escolha, segue a preferência do sistema.
+  - Estimativa: 2 · **Could** · Dependências: MUI-2
+- 🔵 **MUI-13** Verificação automática de acessibilidade no E2E. → `cypress-axe` (MIT).
+  - *Dado* as abas principais, *quando* a suíte roda, *então* uma checagem axe falha o teste em violação
+    "serious" ou "critical".
+  - Estimativa: 2 · **Could** · Dependências: MUI-11
+
+**Fora do escopo (Won't, nesta versão):** MUI X (Data Grid, Date Pickers); redesenho de fluxos ou de textos;
+roteador e URLs por tela; internacionalização; tela nova; trocar o Cypress ou reescrever os testes além dos
+ajustes da ADR; tema configurável pelo usuário além de claro e escuro.
+
+**Priorização (MoSCoW):** Must = MUI-1 a MUI-10 (41 pts): o app inteiro no Material UI com os mesmos fluxos e o
+Cypress verde a cada passo. Should = MUI-11 (3 pts): sem o CSS antigo, com acessibilidade e celular conferidos.
+Could = MUI-12 e MUI-13 (4 pts). Total: 48 pts.
+
+**Ordem sugerida:** MUI-1 → MUI-2 → MUI-3 → MUI-6 → MUI-7 → MUI-4 → MUI-5 → MUI-8 → MUI-9 → MUI-10 (fecha o Must)
+→ MUI-11 → MUI-12 → MUI-13.
+
 ## Ideias de produto (fora do escopo atual — backlog de descoberta)
 Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (A exportação contábil virou o épico CTB, em 2026-11-22.)
@@ -3028,3 +3174,4 @@ Não estão no briefing; registrar como épicos candidatos se o PO priorizar.
 - (Conciliação da fatura virou o épico RCN, em 2026-11-26.)
 - (Editar o cartão e o ciclo da fatura virou o épico CYC, em 2026-11-26.)
 - (Metas de gastos e de economia viraram o épico MET, em 2026-11-28.)
+- (A interface com Material UI virou o épico MUI, em 2026-11-28.)
