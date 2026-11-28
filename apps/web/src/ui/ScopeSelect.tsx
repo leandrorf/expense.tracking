@@ -13,7 +13,7 @@ export function ScopeSelect({
       {...rest}
       options={[
         { value: personal, label: 'Pessoal (PF)' },
-        { value: business, label: 'Empresarial (PJ)' },
+        { value: business, label: 'Empresa (PJ)' },
       ]}
     />
   );

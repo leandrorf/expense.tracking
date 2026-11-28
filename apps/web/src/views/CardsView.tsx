@@ -1,4 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { invoicesApi, type CardLimit } from '../api/reports';
@@ -6,6 +14,7 @@ import type { Account, CreditCard } from '../api/types';
 import { monthLabel, pendingChanges, todayIso } from '../cardCycle';
 import { CardEditRow } from './CardEditRow';
 import { InvoicesView } from './InvoicesView';
+import { Field, Notice, RowForm, SelectField, TableBox, TextAction } from '../ui';
 
 /**
  * `openInvoice` (NTF-3): fatura que um aviso pediu para abrir; a aba vai direto para ela depois de
@@ -80,8 +89,7 @@ export function CardsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreate() {
     setSubmitting(true);
     setError(null);
     try {
@@ -128,127 +136,139 @@ export function CardsView({
 
   return (
     <section>
-      <h2>Cartões de crédito</h2>
+      <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+        Cartões de crédito
+      </Typography>
 
       {accounts.length === 0 ? (
-        <p className="muted">Crie uma conta antes de cadastrar cartões.</p>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Crie uma conta antes de cadastrar cartões.
+        </Typography>
       ) : (
-        <form className="row-form wrap" onSubmit={handleCreate} data-cy="card-form">
-          <select data-cy="card-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <input data-cy="card-label" placeholder="Apelido" value={label} onChange={(e) => setLabel(e.target.value)} required />
-          <input data-cy="card-brand" placeholder="Bandeira" value={brand} onChange={(e) => setBrand(e.target.value)} />
-          <input
-            data-cy="card-lastfour"
-            placeholder="4 dígitos"
-            value={lastFour}
-            maxLength={4}
-            onChange={(e) => setLastFour(e.target.value)}
-            required
+        <RowForm onSubmit={() => void handleCreate()} dataCy="card-form">
+          <SelectField
+            dataCy="card-account"
+            label="Conta"
+            value={accountId}
+            onChange={setAccountId}
+            options={accounts.map((a) => ({ value: a.id, label: a.name }))}
           />
-          <input data-cy="card-limit" placeholder="Limite" type="number" step="0.01" value={limit} onChange={(e) => setLimit(e.target.value)} required />
-          <input data-cy="card-closing" placeholder="Fecha" type="number" min={1} max={28} value={closingDay} onChange={(e) => setClosingDay(e.target.value)} />
-          <input data-cy="card-due" placeholder="Vence" type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
-          <button data-cy="card-submit" className="primary" type="submit" disabled={submitting}>
+          <Field dataCy="card-label" label="Apelido" value={label} onChange={setLabel} required />
+          <Field dataCy="card-brand" label="Bandeira" value={brand} onChange={setBrand} />
+          <Field
+            dataCy="card-lastfour"
+            label="4 dígitos"
+            value={lastFour}
+            onChange={setLastFour}
+            required
+            slotProps={{ htmlInput: { maxLength: 4, inputMode: 'numeric' } }}
+          />
+          <Field dataCy="card-limit" label="Limite" type="number" value={limit} onChange={setLimit} required slotProps={{ htmlInput: { step: '0.01' } }} />
+          <Field dataCy="card-closing" label="Fecha" type="number" value={closingDay} onChange={setClosingDay} slotProps={{ htmlInput: { min: 1, max: 28 } }} />
+          <Field dataCy="card-due" label="Vence" type="number" value={dueDay} onChange={setDueDay} slotProps={{ htmlInput: { min: 1, max: 28 } }} />
+          <Button data-cy="card-submit" variant="contained" type="submit" disabled={submitting} sx={{ height: 40 }}>
             {submitting ? 'Criando…' : 'Adicionar'}
-          </button>
-        </form>
+          </Button>
+        </RowForm>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {notice && (
-        <p className="notice" data-cy="card-notice">
+        <Notice severity="success" dataCy="card-notice">
           {notice}
-        </p>
+        </Notice>
       )}
       {loading ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : cards.length === 0 ? (
-        <p className="muted">Nenhum cartão ainda.</p>
+        <Typography color="text.secondary">Nenhum cartão ainda.</Typography>
       ) : (
-        <table className="data" data-cy="cards-table">
-          <thead>
-            <tr>
-              <th>Apelido</th>
-              <th>Bandeira</th>
-              <th>Final</th>
-              <th>Limite</th>
-              <th>Disponível</th>
-              <th>Fecha/Vence</th>
-              <th>Conta</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {cards.map((c) => {
-              const today = todayIso();
-              const pending = pendingChanges(c.cycles, c.closingDay, c.dueDay, today);
-              return (
-                <Fragment key={c.id}>
-                  <tr className={c.isActive ? '' : 'inactive'} data-cy="card-row">
-                    <td>{c.label}</td>
-                    <td>{c.brand}</td>
-                    <td>•••• {c.lastFourDigits}</td>
-                    <td>{c.creditLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td
-                      data-cy="card-available"
-                      className={limits[c.id]?.availableLimit < 0 ? 'negative' : ''}
-                      title={limits[c.id] ? `Falta pagar ${limits[c.id].outstanding.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, com parcelas futuras` : undefined}
-                    >
-                      {limits[c.id] ? limits[c.id].availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
-                    </td>
-                    <td data-cy="card-cycle">
-                      {c.closingDay}/{c.dueDay}
-                      {pending.map((p) => (
-                        <span key={p.fromDueMonth} className="sub" data-cy="card-cycle-pending">
-                          a partir de {monthLabel(p.fromDueMonth!)}: {p.closingDay}/{p.dueDay}
-                        </span>
-                      ))}
-                    </td>
-                    <td>{accountName(c.accountId)}</td>
-                    <td>
-                      <button className="ghost small" data-cy="card-invoices" onClick={() => setInvoicesOf(c)}>
-                        Faturas
-                      </button>
-                      {c.isActive && (
-                        <button
-                          className="link"
-                          data-cy="card-edit-open"
-                          aria-expanded={editingId === c.id}
-                          onClick={() => setEditingId(editingId === c.id ? null : c.id)}
-                        >
-                          editar
-                        </button>
-                      )}
-                      {c.isActive && (
-                        <button className="link-danger" onClick={() => void removeCard(c.id, load, setError)}>
-                          desativar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {editingId === c.id && (
-                    <CardEditRow
-                      key={`${c.id}:${JSON.stringify(c.cycles)}:${c.creditLimit}:${c.label}`}
-                      card={c}
-                      colSpan={8}
-                      onClose={() => setEditingId(null)}
-                      onSaved={async (message) => {
-                        setNotice(message);
-                        await load();
-                      }}
-                    />
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+        <TableBox>
+          <Table data-cy="cards-table" sx={{ minWidth: 820 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Apelido</TableCell>
+                <TableCell>Bandeira</TableCell>
+                <TableCell>Final</TableCell>
+                <TableCell align="right">Limite</TableCell>
+                <TableCell align="right">Disponível</TableCell>
+                <TableCell>Fecha/Vence</TableCell>
+                <TableCell>Conta</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {cards.map((c) => {
+                const today = todayIso();
+                const pending = pendingChanges(c.cycles, c.closingDay, c.dueDay, today);
+                return (
+                  <Fragment key={c.id}>
+                    <TableRow data-cy="card-row" sx={{ opacity: c.isActive ? 1 : 0.5 }}>
+                      <TableCell>{c.label}</TableCell>
+                      <TableCell>{c.brand}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>•••• {c.lastFourDigits}</TableCell>
+                      <TableCell align="right">{c.creditLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                      <TableCell
+                        align="right"
+                        data-cy="card-available"
+                        sx={{ color: limits[c.id]?.availableLimit < 0 ? 'error.main' : undefined }}
+                        title={limits[c.id] ? `Falta pagar ${limits[c.id].outstanding.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, com parcelas futuras` : undefined}
+                      >
+                        {limits[c.id] ? limits[c.id].availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                      </TableCell>
+                      <TableCell data-cy="card-cycle">
+                        {c.closingDay}/{c.dueDay}
+                        {pending.map((p) => (
+                          <Box
+                            component="span"
+                            key={p.fromDueMonth}
+                            data-cy="card-cycle-pending"
+                            sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}
+                          >
+                            a partir de {monthLabel(p.fromDueMonth!)}: {p.closingDay}/{p.dueDay}
+                          </Box>
+                        ))}
+                      </TableCell>
+                      <TableCell>{accountName(c.accountId)}</TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        <Button variant="outlined" color="inherit" data-cy="card-invoices" onClick={() => setInvoicesOf(c)}>
+                          Faturas
+                        </Button>
+                        {c.isActive && (
+                          <TextAction
+                            data-cy="card-edit-open"
+                            aria-expanded={editingId === c.id}
+                            onClick={() => setEditingId(editingId === c.id ? null : c.id)}
+                            sx={{ ml: 0.5 }}
+                          >
+                            editar
+                          </TextAction>
+                        )}
+                        {c.isActive && (
+                          <TextAction danger onClick={() => void removeCard(c.id, load, setError)}>
+                            desativar
+                          </TextAction>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    {editingId === c.id && (
+                      <CardEditRow
+                        key={`${c.id}:${JSON.stringify(c.cycles)}:${c.creditLimit}:${c.label}`}
+                        card={c}
+                        colSpan={8}
+                        onClose={() => setEditingId(null)}
+                        onSaved={async (message) => {
+                          setNotice(message);
+                          await load();
+                        }}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
     </section>
   );

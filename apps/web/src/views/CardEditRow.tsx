@@ -1,4 +1,10 @@
 import { useMemo, useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import TableCell from '@mui/material/TableCell';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import { Field, MonthField, Notice, TextAction } from '../ui';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import type { CreditCard } from '../api/types';
@@ -92,64 +98,68 @@ export function CardEditRow({ card, colSpan, onSaved, onClose }: Props) {
     );
   }
 
-  return (
-    <tr className="budget-edit" data-cy="card-edit">
-      <td colSpan={colSpan}>
-        <form className="row-form wrap" onSubmit={handleData} data-cy="card-edit-data" aria-label={`Dados de ${card.label}`}>
-          <input data-cy="card-edit-label" aria-label="Apelido" value={label} onChange={(e) => setLabel(e.target.value)} required />
-          <input data-cy="card-edit-brand" aria-label="Bandeira" value={brand} onChange={(e) => setBrand(e.target.value)} />
-          <input
-            data-cy="card-edit-lastfour"
-            aria-label="4 dígitos"
-            value={lastFour}
-            maxLength={4}
-            onChange={(e) => setLastFour(e.target.value)}
-            required
-          />
-          <input
-            data-cy="card-edit-limit"
-            aria-label="Limite"
-            type="number"
-            step="0.01"
-            min="0"
-            value={limit}
-            onChange={(e) => setLimit(e.target.value)}
-            required
-          />
-          <button data-cy="card-edit-save" className="primary small" type="submit" disabled={saving}>
-            Salvar dados
-          </button>
-          <button className="ghost small" type="button" onClick={onClose} disabled={saving}>
-            Fechar
-          </button>
-        </form>
+  const formSx = { display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-start', mb: 1.5 } as const;
 
-        <form className="row-form wrap" onSubmit={handleCycle} data-cy="card-edit-cycle" aria-label={`Ciclo de ${card.label}`}>
-          <label className="inline-label">
-            fecha dia
-            <input
-              data-cy="card-edit-closing"
-              type="number"
-              min={1}
-              max={28}
-              value={closingDay}
-              onChange={(e) => setClosingDay(e.target.value)}
-              required
-            />
-          </label>
-          <label className="inline-label">
-            vence dia
-            <input data-cy="card-edit-due" type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(e.target.value)} required />
-          </label>
-          <label className="inline-label">
-            a partir da fatura de
-            <input data-cy="card-edit-from" type="month" value={fromMonth} onChange={(e) => setChosenMonth(e.target.value)} required />
-          </label>
-          <button data-cy="card-edit-cycle-save" className="primary small" type="submit" disabled={saving || !possible}>
+  return (
+    <TableRow data-cy="card-edit">
+      <TableCell colSpan={colSpan} sx={{ bgcolor: 'background.default' }}>
+        <Box component="form" sx={formSx} onSubmit={handleData} data-cy="card-edit-data" aria-label={`Dados de ${card.label}`}>
+          <Field dataCy="card-edit-label" label="Apelido" value={label} onChange={setLabel} required />
+          <Field dataCy="card-edit-brand" label="Bandeira" value={brand} onChange={setBrand} />
+          <Field
+            dataCy="card-edit-lastfour"
+            label="4 dígitos"
+            value={lastFour}
+            onChange={setLastFour}
+            required
+            slotProps={{ htmlInput: { maxLength: 4, inputMode: 'numeric' } }}
+            sx={{ width: 110 }}
+          />
+          <Field
+            dataCy="card-edit-limit"
+            label="Limite"
+            type="number"
+            value={limit}
+            onChange={setLimit}
+            required
+            slotProps={{ htmlInput: { step: '0.01', min: '0' } }}
+            sx={{ width: 140 }}
+          />
+          <Button data-cy="card-edit-save" variant="contained" type="submit" disabled={saving} sx={{ height: 40 }}>
+            Salvar dados
+          </Button>
+          <Button variant="outlined" color="inherit" type="button" onClick={onClose} disabled={saving} sx={{ height: 40 }}>
+            Fechar
+          </Button>
+        </Box>
+
+        <Box component="form" sx={formSx} onSubmit={handleCycle} data-cy="card-edit-cycle" aria-label={`Ciclo de ${card.label}`}>
+          <Field
+            dataCy="card-edit-closing"
+            label="fecha dia"
+            type="number"
+            value={closingDay}
+            onChange={setClosingDay}
+            required
+            slotProps={{ htmlInput: { min: 1, max: 28 } }}
+            sx={{ width: 110 }}
+          />
+          <Field
+            dataCy="card-edit-due"
+            label="vence dia"
+            type="number"
+            value={dueDay}
+            onChange={setDueDay}
+            required
+            slotProps={{ htmlInput: { min: 1, max: 28 } }}
+            sx={{ width: 110 }}
+          />
+          <MonthField dataCy="card-edit-from" label="a partir da fatura de" value={fromMonth} onChange={setChosenMonth} required sx={{ width: 200 }} />
+          <Button data-cy="card-edit-cycle-save" variant="contained" type="submit" disabled={saving || !possible} sx={{ height: 40 }}>
             Trocar ciclo
-          </button>
-        </form>
-        <p className={possible ? 'muted' : 'error'} data-cy="card-edit-preview">
+          </Button>
+        </Box>
+        <Typography variant="body2" color={possible ? 'text.secondary' : 'error'} data-cy="card-edit-preview" sx={{ mb: 1.5 }}>
           {!validDays
             ? 'Dias de fechamento e vencimento entre 1 e 28.'
             : preview
@@ -157,30 +167,34 @@ export function CardEditRow({ card, colSpan, onSaved, onClose }: Props) {
               : `A fatura de ${monthLabel(fromMonth)} já fechou: escolha uma fatura seguinte.`}
           {skipped.length > 0 && ` A fatura de ${skipped.map(monthLabel).join(' e ')} deixa de existir (o vencimento pula).`}
           {pending.length > 0 && ' A troca pendente é substituída.'}
-        </p>
+        </Typography>
 
         {pending.map((c) => (
-          <p key={c.fromDueMonth} className="notice" data-cy="card-edit-pending">
-            A partir da fatura de {monthLabel(c.fromDueMonth!)}: fecha dia {c.closingDay}, vence dia {c.dueDay}.{' '}
-            <button
-              className="link"
-              type="button"
-              data-cy="card-edit-undo"
-              disabled={saving}
-              onClick={() =>
-                void run(() => accountsApi.undoCardCycle(card.id, c.fromDueMonth!), `Troca de ciclo de ${card.label} desfeita.`)
-              }
-            >
-              desfazer
-            </button>
-          </p>
+          <Notice
+            key={c.fromDueMonth}
+            dataCy="card-edit-pending"
+            action={
+              <TextAction
+                type="button"
+                data-cy="card-edit-undo"
+                disabled={saving}
+                onClick={() =>
+                  void run(() => accountsApi.undoCardCycle(card.id, c.fromDueMonth!), `Troca de ciclo de ${card.label} desfeita.`)
+                }
+              >
+                desfazer
+              </TextAction>
+            }
+          >
+            A partir da fatura de {monthLabel(c.fromDueMonth!)}: fecha dia {c.closingDay}, vence dia {c.dueDay}.
+          </Notice>
         ))}
         {error && (
-          <p className="error" role="alert" data-cy="card-edit-error">
+          <Notice severity="error" role="alert" dataCy="card-edit-error">
             {error}
-          </p>
+          </Notice>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

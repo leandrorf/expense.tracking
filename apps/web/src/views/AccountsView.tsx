@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import type { Account } from '../api/types';
+import { DateField, Field, Notice, RowForm, ScopeSelect, TableBox, TextAction } from '../ui';
 
 export function AccountsView() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -33,8 +42,7 @@ export function AccountsView() {
     void load();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreate() {
     setSubmitting(true);
     setError(null);
     try {
@@ -60,8 +68,7 @@ export function AccountsView() {
     setError(null);
   }
 
-  async function handleSaveBalance(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSaveBalance() {
     if (!balanceFor) return;
     setError(null);
     try {
@@ -95,117 +102,124 @@ export function AccountsView() {
 
   return (
     <section>
-      <h2>Contas</h2>
+      <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+        Contas
+      </Typography>
 
-      <form className="row-form" onSubmit={handleCreate} data-cy="account-form">
-        <input
-          data-cy="account-name"
-          placeholder="Nome da conta"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <select data-cy="account-scope" value={scope} onChange={(e) => setScope(e.target.value as 'Personal' | 'Business')}>
-          <option value="Personal">Pessoal (PF)</option>
-          <option value="Business">Empresa (PJ)</option>
-        </select>
-        <input
-          data-cy="account-taxid"
-          placeholder={scope === 'Business' ? 'CNPJ (opcional)' : 'CPF (opcional)'}
+      <RowForm onSubmit={() => void handleCreate()} dataCy="account-form">
+        <Field dataCy="account-name" label="Nome da conta" value={name} onChange={setName} required />
+        <ScopeSelect dataCy="account-scope" value={scope} onChange={(v) => setScope(v as 'Personal' | 'Business')} />
+        <Field
+          dataCy="account-taxid"
+          label={scope === 'Business' ? 'CNPJ (opcional)' : 'CPF (opcional)'}
           value={taxId}
-          onChange={(e) => setTaxId(e.target.value)}
+          onChange={setTaxId}
         />
-        <button data-cy="account-submit" className="primary" type="submit" disabled={submitting}>
+        <Button data-cy="account-submit" variant="contained" type="submit" disabled={submitting} sx={{ height: 40 }}>
           {submitting ? 'Criando…' : 'Adicionar'}
-        </button>
-      </form>
+        </Button>
+      </RowForm>
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {loading ? (
-        <p>Carregando…</p>
+        <Typography>Carregando…</Typography>
       ) : accounts.length === 0 ? (
-        <p className="muted">Nenhuma conta ainda.</p>
+        <Typography color="text.secondary">Nenhuma conta ainda.</Typography>
       ) : (
-        <table className="data" data-cy="accounts-table">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Escopo</th>
-              <th>Documento</th>
-              <th>Moeda</th>
-              <th title="Ponto de partida do saldo projetado na Previsão">Saldo</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((a) => (
-              <tr key={a.id} className={a.isActive ? '' : 'inactive'} data-cy="account-row">
-                <td>{a.name}</td>
-                <td>{a.scope === 'Business' ? 'PJ' : 'PF'}</td>
-                <td>{a.taxId ?? '—'}</td>
-                <td>{a.currency}</td>
-                <td data-cy="account-balance">
-                  {balanceFor === a.id ? (
-                    <form className="row-form inline" onSubmit={handleSaveBalance} data-cy="account-balance-form">
-                      <input
-                        data-cy="account-balance-amount"
-                        aria-label="Saldo"
-                        placeholder="Saldo"
-                        type="number"
-                        step="0.01"
-                        value={balanceAmount}
-                        onChange={(e) => setBalanceAmount(e.target.value)}
-                        required
-                      />
-                      <input
-                        data-cy="account-balance-date"
-                        aria-label="No fim do dia"
-                        title="Saldo no fim deste dia; o que vier depois entra na projeção"
-                        type="date"
-                        max={today()}
-                        value={balanceDate}
-                        onChange={(e) => setBalanceDate(e.target.value)}
-                        required
-                      />
-                      <button data-cy="account-balance-save" className="primary small" type="submit">
-                        Salvar
-                      </button>
-                      <button className="ghost small" type="button" onClick={() => setBalanceFor(null)}>
-                        Cancelar
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      {a.openingBalance === null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <span data-cy="account-balance-value">
-                          {a.openingBalance.toLocaleString('pt-BR', { style: 'currency', currency: a.currency })}
-                          <span className="sub">em {dateLabel(a.openingBalanceOn!)}</span>
-                        </span>
-                      )}{' '}
-                      <button className="link" data-cy="account-balance-edit" onClick={() => startBalance(a)}>
-                        {a.openingBalance === null ? 'informar' : 'alterar'}
-                      </button>
-                      {a.openingBalance !== null && (
-                        <button className="link-danger" data-cy="account-balance-clear" onClick={() => void handleClearBalance(a.id)}>
-                          remover
-                        </button>
-                      )}
-                    </>
-                  )}
-                </td>
-                <td>
-                  {a.isActive && (
-                    <button className="link-danger" onClick={() => void handleRemove(a.id)}>
-                      desativar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TableBox>
+          <Table data-cy="accounts-table" sx={{ minWidth: 640 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Nome</TableCell>
+                <TableCell>Escopo</TableCell>
+                <TableCell>Documento</TableCell>
+                <TableCell>Moeda</TableCell>
+                <TableCell title="Ponto de partida do saldo projetado na Previsão">Saldo</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {accounts.map((a) => (
+                <TableRow key={a.id} data-cy="account-row" sx={{ opacity: a.isActive ? 1 : 0.5 }}>
+                  <TableCell>{a.name}</TableCell>
+                  <TableCell>{a.scope === 'Business' ? 'PJ' : 'PF'}</TableCell>
+                  <TableCell>{a.taxId ?? '—'}</TableCell>
+                  <TableCell>{a.currency}</TableCell>
+                  <TableCell data-cy="account-balance">
+                    {balanceFor === a.id ? (
+                      <Box
+                        component="form"
+                        data-cy="account-balance-form"
+                        onSubmit={(e: React.FormEvent) => {
+                          e.preventDefault();
+                          void handleSaveBalance();
+                        }}
+                        sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}
+                      >
+                        <Field
+                          dataCy="account-balance-amount"
+                          label="Saldo"
+                          type="number"
+                          value={balanceAmount}
+                          onChange={setBalanceAmount}
+                          required
+                          slotProps={{ htmlInput: { step: '0.01' } }}
+                          sx={{ width: 130 }}
+                        />
+                        <DateField
+                          dataCy="account-balance-date"
+                          label="No fim do dia"
+                          title="Saldo no fim deste dia; o que vier depois entra na projeção"
+                          value={balanceDate}
+                          onChange={setBalanceDate}
+                          required
+                          slotProps={{ htmlInput: { max: today() } }}
+                          sx={{ width: 160 }}
+                        />
+                        <Button data-cy="account-balance-save" variant="contained" type="submit">
+                          Salvar
+                        </Button>
+                        <Button variant="outlined" color="inherit" type="button" onClick={() => setBalanceFor(null)}>
+                          Cancelar
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
+                        {a.openingBalance === null ? (
+                          <Box component="span" sx={{ color: 'text.secondary' }}>
+                            —
+                          </Box>
+                        ) : (
+                          <span data-cy="account-balance-value">
+                            {a.openingBalance.toLocaleString('pt-BR', { style: 'currency', currency: a.currency })}
+                            <Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>
+                              em {dateLabel(a.openingBalanceOn!)}
+                            </Box>
+                          </span>
+                        )}
+                        <TextAction data-cy="account-balance-edit" onClick={() => startBalance(a)}>
+                          {a.openingBalance === null ? 'informar' : 'alterar'}
+                        </TextAction>
+                        {a.openingBalance !== null && (
+                          <TextAction danger data-cy="account-balance-clear" onClick={() => void handleClearBalance(a.id)}>
+                            remover
+                          </TextAction>
+                        )}
+                      </Box>
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    {a.isActive && (
+                      <TextAction danger onClick={() => void handleRemove(a.id)}>
+                        desativar
+                      </TextAction>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
     </section>
   );

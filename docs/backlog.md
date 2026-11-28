@@ -3119,7 +3119,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
   - *Dado* a aba Recorrências, *quando* cadastro uma regra, lanço, pulo, mudo valores por vigência e confirmo
     um reajuste, *então* tudo funciona como hoje com os componentes do projeto.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-6** Contas e Cartões. → `AccountsView`, `CardsView`, `CardEditRow`.
+- ✅ **MUI-6** Contas e Cartões. → `AccountsView`, `CardsView`, `CardEditRow`. Bundle medido: 165,9 KB gzip (+0,3 KB). Entraram em `src/ui/` o `TextAction` (as ações "editar"/"remover" das linhas) e o `TableBox` (tabela que rola no celular).
   - *Dado* as abas Contas e Cartões, *quando* cadastro, informo o saldo, edito o cartão e troco o ciclo (com a
     prévia), *então* tudo funciona como hoje com os componentes do projeto.
   - Estimativa: 3 · **Must** · Dependências: MUI-2

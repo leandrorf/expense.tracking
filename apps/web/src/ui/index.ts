@@ -7,3 +7,4 @@ export { Figures, type Figure } from './Figures';
 export { Notice } from './Notice';
 export { Section } from './Section';
 export { RowForm } from './RowForm';
+export { TextAction, TableBox } from './Actions';
