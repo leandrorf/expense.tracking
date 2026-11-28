@@ -2899,7 +2899,23 @@ previsão (INV, ADR-0005; REC, ADR-0008); ideia de produto promovida a pedido do
   - *Dado* um objetivo sem prazo, *quando* consulto, *então* vejo só o ritmo e a previsão de chegada; *e*
     guardado ≥ alvo dá **atingido**, prazo passado sem atingir dá **prazo vencido**.
   - Estimativa: 3 · **Must** · Dependências: MET-5
-- 🔵 **MET-7** Aba Metas na SPA. → `GoalsView`.
+- ✅ **MET-7** Aba Metas na SPA. → `GoalsView`, `goals.cy.ts`.
+  - Feito assim:
+    - **Aba "Metas"** (depois de Orçamentos), em duas partes.
+    - **Meta do mês**, do mês atual aos 11 seguintes, com "atualizar". Para PF e PJ:
+      - a forma em uma frase (no percentual, com o alvo em reais do mês), o selo da situação e os números
+        (entradas, saídas + faturas, resultado previsto, alvo ou teto, "ainda pode gastar");
+      - "definir/mudar meta" (forma, valor ou percentual, a partir de um mês) e "encerrar a partir de".
+    - **Objetivos:**
+      - criar (escopo, nome, alvo, prazo opcional);
+      - cada objetivo mostra barra de progresso, guardado de alvo, falta, prazo, precisa por mês, ritmo,
+        chegada prevista e situação;
+      - "registrar aporte" (guardei/retirei, valor, data até hoje, observação), "editar" e
+        "arquivar"/"reabrir"; a lista de aportes pode ser expandida e cada aporte excluído;
+      - "mostrar arquivados" traz os arquivados.
+    - **Erros da API:** aparecem junto do formulário que os causou.
+    - **E2E `goals.cy.ts`:** define a meta PF pela tela, cria um objetivo, registra um aporte de 300 (ritmo
+      300, `OnTrack`), recusa a retirada de 500, arquiva e reabre.
   - *Dado* o usuário logado, *quando* abre a aba Metas, *então* vê, para PF e PJ, a meta do mês com a
     situação, o resultado previsto e "ainda pode gastar", e pode definir, mudar ou encerrar a meta; *e* vê os
     objetivos com barra de progresso, falta, precisa por mês e situação, cria objetivos e registra ou exclui
