@@ -1,4 +1,15 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import InputAdornment from '@mui/material/InputAdornment';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import {
@@ -12,6 +23,7 @@ import {
 import type { Account, CreditCard, PaymentMethod, Transaction } from '../api/types';
 import { adjustmentLabel, periodLabel, RecurrenceValuesRow } from './RecurrenceValuesRow';
 import { CategoryDatalist, useCategorySuggestions } from './useCategorySuggestions';
+import { DateField, Field, Notice, RowForm, SelectField, TableBox, TextAction } from '../ui';
 
 const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
@@ -207,8 +219,7 @@ export function RecurrencesView({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setSubmitting(true);
     setError(null);
     setNotice(null);
@@ -275,8 +286,7 @@ export function RecurrencesView({
     setError(null);
   }
 
-  async function handleLaunch(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleLaunch() {
     if (!launch) return;
     setError(null);
     try {
@@ -318,393 +328,436 @@ export function RecurrencesView({
 
   const launchForm = (key: string) =>
     launch?.key === key && (
-      <form className="row-form inline" onSubmit={handleLaunch} data-cy="rec-launch-form">
-        <input
-          data-cy="rec-launch-amount"
-          aria-label="Valor real"
+      <Box
+        component="form"
+        onSubmit={(e: React.FormEvent) => {
+          e.preventDefault();
+          void handleLaunch();
+        }}
+        data-cy="rec-launch-form"
+        sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}
+      >
+        <Field
+          dataCy="rec-launch-amount"
+          label="Valor real"
           type="number"
-          step="0.01"
           value={launch.amount}
-          onChange={(e) => setLaunch({ ...launch, amount: e.target.value })}
+          onChange={(v) => setLaunch({ ...launch, amount: v })}
           required
+          slotProps={{ htmlInput: { step: '0.01' } }}
+          sx={{ width: 130 }}
         />
-        <input
-          data-cy="rec-launch-date"
-          aria-label="Data"
-          type="date"
+        <DateField
+          dataCy="rec-launch-date"
+          label="Data"
           value={launch.occurredOn}
-          onChange={(e) => setLaunch({ ...launch, occurredOn: e.target.value })}
+          onChange={(v) => setLaunch({ ...launch, occurredOn: v })}
           required
+          sx={{ width: 160 }}
         />
-        <button data-cy="rec-launch-save" className="primary small" type="submit">
+        <Button data-cy="rec-launch-save" variant="contained" type="submit">
           Lançar
-        </button>
-        <button className="ghost small" type="button" onClick={() => setLaunch(null)}>
+        </Button>
+        <Button variant="outlined" color="inherit" type="button" onClick={() => setLaunch(null)}>
           Cancelar
-        </button>
-      </form>
+        </Button>
+      </Box>
     );
+
+  const title = (
+    <Typography variant="h2" component="h2" sx={{ mb: 2 }}>
+      Recorrências
+    </Typography>
+  );
 
   if (loading) {
     return (
       <section>
-        <h2>Recorrências</h2>
-        <p>Carregando…</p>
+        {title}
+        <Typography>Carregando…</Typography>
       </section>
     );
   }
 
   return (
     <section data-cy="recurrences">
-      <h2>Recorrências</h2>
-      <p className="notice">
+      {title}
+      <Notice>
         Salário, aluguel e assinaturas cadastrados aqui entram na Previsão até você lançar ou pular cada ocorrência. Eles
         não aparecem no Resumo, nos orçamentos nem na exportação antes de serem lançados.
-      </p>
+      </Notice>
 
-      {error && <p className="error">{error}</p>}
+      {error && <Notice severity="error">{error}</Notice>}
       {notice && (
-        <p className="notice" data-cy="rec-notice">
+        <Notice severity="success" dataCy="rec-notice">
           {notice}
-        </p>
+        </Notice>
       )}
 
-      <h3>A lançar</h3>
+      <Typography variant="h3" component="h3" sx={{ mb: 1 }}>
+        A lançar
+      </Typography>
       {due.length === 0 ? (
-        <p className="muted" data-cy="rec-due-empty">
+        <Typography color="text.secondary" data-cy="rec-due-empty" sx={{ mb: 2 }}>
           Nada pendente dos últimos 60 dias.
-        </p>
+        </Typography>
       ) : (
-        <table className="data" data-cy="rec-due">
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Descrição</th>
-              <th>Conta</th>
-              <th className="right">Valor estimado</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {due.map((d) => {
-              const key = `${d.recurrenceId}:${d.period}`;
-              return (
-                <tr key={key} data-cy="rec-due-row" data-period={d.period}>
-                  <td>{dateLabel(d.scheduledOn)}</td>
-                  <td>
-                    {d.description}
-                    <span className="sub">{d.category}</span>
-                  </td>
-                  <td>{accountName(d.accountId)}</td>
-                  <td className={`right ${d.type === 'Income' ? 'positive' : 'negative'}`}>{signed(d.type, d.amount, d.currency)}</td>
-                  <td className="row-actions">
-                    {launchForm(key) || (
-                      <>
-                        <button
-                          className="link"
-                          data-cy="rec-due-launch"
-                          onClick={() => openLaunch(d.recurrenceId, d.period, d.amount, d.scheduledOn)}
-                        >
-                          lançar
-                        </button>
-                        <button
-                          className="link"
-                          data-cy="rec-due-skip"
-                          onClick={() => void handleSkip(d.recurrenceId, d.period, d.description)}
-                        >
-                          pular
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <TableBox>
+          <Table data-cy="rec-due" sx={{ minWidth: 720 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Data</TableCell>
+                <TableCell>Descrição</TableCell>
+                <TableCell>Conta</TableCell>
+                <TableCell align="right">Valor estimado</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {due.map((d) => {
+                const key = `${d.recurrenceId}:${d.period}`;
+                return (
+                  <TableRow key={key} data-cy="rec-due-row" data-period={d.period} sx={{ verticalAlign: 'top' }}>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{dateLabel(d.scheduledOn)}</TableCell>
+                    <TableCell>
+                      {d.description}
+                      <Sub>{d.category}</Sub>
+                    </TableCell>
+                    <TableCell>{accountName(d.accountId)}</TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap', color: d.type === 'Income' ? 'success.main' : 'error.main' }}>
+                      {signed(d.type, d.amount, d.currency)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      {launchForm(key) || (
+                        <>
+                          <TextAction data-cy="rec-due-launch" onClick={() => openLaunch(d.recurrenceId, d.period, d.amount, d.scheduledOn)}>
+                            lançar
+                          </TextAction>
+                          <TextAction data-cy="rec-due-skip" onClick={() => void handleSkip(d.recurrenceId, d.period, d.description)}>
+                            pular
+                          </TextAction>
+                        </>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
 
-      <h3>{editing ? `Editando: ${editing.description}` : 'Nova recorrência'}</h3>
+      <Typography variant="h3" component="h3" sx={{ mb: 1, mt: 1 }}>
+        {editing ? `Editando: ${editing.description}` : 'Nova recorrência'}
+      </Typography>
       {accounts.length === 0 ? (
-        <p className="muted">Crie uma conta antes de cadastrar recorrências.</p>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Crie uma conta antes de cadastrar recorrências.
+        </Typography>
       ) : (
         <>
           {fromTransaction && !editing && (
-            <p className="notice" data-cy="rec-from-transaction">
+            <Notice
+              dataCy="rec-from-transaction"
+              action={
+                <TextAction type="button" onClick={resetForm}>
+                  desistir
+                </TextAction>
+              }
+            >
               Repetindo <strong>{fromTransaction.description}</strong>: o lançamento de {dateLabel(fromTransaction.occurredOn)}{' '}
-              conta como a ocorrência daquele mês, e a próxima fica para o mês seguinte.{' '}
-              <button className="link" type="button" onClick={resetForm}>
-                desistir
-              </button>
-            </p>
+              conta como a ocorrência daquele mês, e a próxima fica para o mês seguinte.
+            </Notice>
           )}
           {conflict && (
-            <p className="notice warning" data-cy="rec-conflict">
+            <Notice severity="warning" dataCy="rec-conflict">
               Esta recorrência mudou enquanto você editava. O formulário mostra agora o que está gravado; refaça a
               alteração e salve de novo.
-            </p>
+            </Notice>
           )}
-          <form className="row-form wrap" onSubmit={handleSubmit} data-cy="rec-form">
-            <select
-              data-cy="rec-account"
+          <RowForm onSubmit={() => void handleSubmit()} dataCy="rec-form">
+            <SelectField
+              dataCy="rec-account"
+              label="Conta"
               value={accountId}
               disabled={editing !== null}
               title={editing ? 'A conta de uma recorrência não muda: exclua e crie de novo na outra conta.' : undefined}
-              onChange={(e) => setAccountId(e.target.value)}
-            >
-              {accounts
-                .filter((a) => a.isActive || a.id === accountId)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-            </select>
-            <select data-cy="rec-type" aria-label="Tipo" value={type} onChange={(e) => setType(e.target.value as 'Expense' | 'Income')}>
-              <option value="Expense">Gasto</option>
-              <option value="Income">Receita</option>
-            </select>
-            <select data-cy="rec-payment-method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-              {paymentMethods.map((m) => (
-                <option key={m.code} value={m.code}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+              onChange={setAccountId}
+              options={accounts.filter((a) => a.isActive || a.id === accountId).map((a) => ({ value: a.id, label: a.name }))}
+            />
+            <SelectField
+              dataCy="rec-type"
+              label="Tipo"
+              value={type}
+              onChange={(v) => setType(v as 'Expense' | 'Income')}
+              options={[
+                { value: 'Expense', label: 'Gasto' },
+                { value: 'Income', label: 'Receita' },
+              ]}
+            />
+            <SelectField
+              dataCy="rec-payment-method"
+              label="Meio"
+              value={paymentMethod}
+              onChange={setPaymentMethod}
+              options={paymentMethods.map((m) => ({ value: m.code, label: m.name }))}
+            />
             {requiresCard && (
-              <select data-cy="rec-card" value={creditCardId} onChange={(e) => setCreditCardId(e.target.value)} required>
+              <SelectField dataCy="rec-card" label="Cartão" value={creditCardId} onChange={setCreditCardId} required>
                 <option value="">Selecione o cartão…</option>
                 {accountCards.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label} •••• {c.lastFourDigits}
                   </option>
                 ))}
-              </select>
+              </SelectField>
             )}
-            <input data-cy="rec-description" placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} required />
-            <input
-              data-cy="rec-category"
-              placeholder="Categoria"
-              list="rec-category-suggestions"
-              autoComplete="off"
+            <Field dataCy="rec-description" label="Descrição" value={description} onChange={setDescription} required />
+            <Field
+              dataCy="rec-category"
+              label="Categoria"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={setCategory}
               required
+              slotProps={{ htmlInput: { list: 'rec-category-suggestions', autoComplete: 'off' } }}
             />
             <CategoryDatalist id="rec-category-suggestions" categories={categories} />
-            <input
-              data-cy="rec-amount"
-              placeholder="Valor estimado"
+            <Field
+              dataCy="rec-amount"
+              label="Valor estimado"
               type="number"
-              step="0.01"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={setAmount}
+              required
+              slotProps={{ htmlInput: { step: '0.01' } }}
+            />
+            <SelectField
+              dataCy="rec-frequency"
+              label="Frequência"
+              value={frequency}
+              onChange={(v) => setFrequency(v as Frequency)}
+              options={[
+                { value: 'Monthly', label: 'Todo mês' },
+                { value: 'Yearly', label: 'Todo ano' },
+              ]}
+            />
+            <DateField
+              dataCy="rec-starts-on"
+              label="a partir de"
+              title="O dia (e, na anual, o mês) desta data define quando a recorrência se repete"
+              value={startsOn}
+              onChange={setStartsOn}
               required
             />
-            <select data-cy="rec-frequency" aria-label="Frequência" value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)}>
-              <option value="Monthly">Todo mês</option>
-              <option value="Yearly">Todo ano</option>
-            </select>
-            <label className="inline-label">
-              a partir de
-              <input
-                data-cy="rec-starts-on"
-                type="date"
-                title="O dia (e, na anual, o mês) desta data define quando a recorrência se repete"
-                value={startsOn}
-                onChange={(e) => setStartsOn(e.target.value)}
-                required
-              />
-            </label>
-            <label className="inline-label">
-              até (opcional)
-              <input data-cy="rec-ends-on" type="date" min={startsOn} value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />
-            </label>
-            <input data-cy="rec-notes" placeholder="Observações (opcional)" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <select
-              data-cy="rec-adjust-kind"
-              aria-label="Reajuste anual"
+            <DateField
+              dataCy="rec-ends-on"
+              label="até (opcional)"
+              value={endsOn}
+              onChange={setEndsOn}
+              slotProps={{ htmlInput: { min: startsOn } }}
+            />
+            <Field
+              dataCy="rec-notes"
+              label="Observações (opcional)"
+              value={notes}
+              onChange={setNotes}
+              slotProps={{ htmlInput: { maxLength: 500 } }}
+            />
+            <SelectField
+              dataCy="rec-adjust-kind"
+              label="Reajuste anual"
               value={adjKind}
-              onChange={(e) => setAdjKind(e.target.value as '' | 'Fixed' | 'Index')}
-            >
-              <option value="">Sem reajuste anual</option>
-              <option value="Fixed">Reajuste anual por percentual</option>
-              <option value="Index">Reajuste anual pelo índice</option>
-            </select>
+              onChange={(v) => setAdjKind(v as '' | 'Fixed' | 'Index')}
+              options={[
+                { value: '', label: 'Sem reajuste anual' },
+                { value: 'Fixed', label: 'Reajuste anual por percentual' },
+                { value: 'Index', label: 'Reajuste anual pelo índice' },
+              ]}
+            />
             {adjKind && (
               <>
-                <label className="inline-label">
-                  em
-                  <select
-                    data-cy="rec-adjust-month"
-                    aria-label="Mês do reajuste"
-                    value={frequency === 'Yearly' ? String(startMonth) : adjMonth || String(startMonth)}
-                    disabled={frequency === 'Yearly'}
-                    title={frequency === 'Yearly' ? 'Na recorrência anual, o reajuste é no mês dela.' : undefined}
-                    onChange={(e) => setAdjMonth(e.target.value)}
-                  >
-                    {MONTH_NAMES.map((name, i) => (
-                      <option key={name} value={String(i + 1)}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SelectField
+                  dataCy="rec-adjust-month"
+                  label="Mês do reajuste"
+                  value={frequency === 'Yearly' ? String(startMonth) : adjMonth || String(startMonth)}
+                  disabled={frequency === 'Yearly'}
+                  title={frequency === 'Yearly' ? 'Na recorrência anual, o reajuste é no mês dela.' : undefined}
+                  onChange={setAdjMonth}
+                  options={MONTH_NAMES.map((name, i) => ({ value: String(i + 1), label: name }))}
+                />
                 {adjKind === 'Fixed' ? (
-                  <label className="inline-label">
-                    <input
-                      data-cy="rec-adjust-rate"
-                      className="percent-input"
-                      aria-label="Percentual do reajuste"
-                      type="number"
-                      step="0.0001"
-                      value={adjRate}
-                      onChange={(e) => setAdjRate(e.target.value)}
-                      required
-                    />
-                    %
-                  </label>
-                ) : (
-                  <select
-                    data-cy="rec-adjust-index"
-                    aria-label="Índice do reajuste"
-                    value={adjIndex}
-                    onChange={(e) => setAdjIndex(e.target.value as EconomicIndex)}
-                  >
-                    <option value="IPCA">IPCA</option>
-                    <option value="INPC">INPC</option>
-                    <option value="IGPM">IGP-M</option>
-                  </select>
-                )}
-                <label className="inline-label">
-                  <input
-                    data-cy="rec-adjust-no-reduction"
-                    type="checkbox"
-                    checked={adjNoReduction}
-                    onChange={(e) => setAdjNoReduction(e.target.checked)}
+                  <Field
+                    dataCy="rec-adjust-rate"
+                    label="Percentual do reajuste"
+                    type="number"
+                    value={adjRate}
+                    onChange={setAdjRate}
+                    required
+                    slotProps={{
+                      htmlInput: { step: '0.0001' },
+                      input: { endAdornment: <InputAdornment position="end">%</InputAdornment> },
+                    }}
                   />
-                  não reduzir
-                </label>
+                ) : (
+                  <SelectField
+                    dataCy="rec-adjust-index"
+                    label="Índice do reajuste"
+                    value={adjIndex}
+                    onChange={(v) => setAdjIndex(v as EconomicIndex)}
+                    options={[
+                      { value: 'IPCA', label: 'IPCA' },
+                      { value: 'INPC', label: 'INPC' },
+                      { value: 'IGPM', label: 'IGP-M' },
+                    ]}
+                  />
+                )}
+                <FormControlLabel
+                  label="não reduzir"
+                  sx={{ height: 40, mr: 0 }}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={adjNoReduction}
+                      onChange={(e) => setAdjNoReduction(e.target.checked)}
+                      slotProps={{ input: { 'data-cy': 'rec-adjust-no-reduction' } as object }}
+                    />
+                  }
+                />
               </>
             )}
-            <button data-cy="rec-submit" className="primary" type="submit" disabled={submitting}>
+            <Button data-cy="rec-submit" variant="contained" type="submit" disabled={submitting} sx={{ height: 40 }}>
               {submitting ? 'Salvando…' : editing ? 'Salvar alteração' : 'Cadastrar'}
-            </button>
+            </Button>
             {editing && (
-              <button data-cy="rec-cancel" className="ghost" type="button" onClick={resetForm}>
+              <Button data-cy="rec-cancel" variant="outlined" color="inherit" type="button" onClick={resetForm} sx={{ height: 40 }}>
                 Cancelar
-              </button>
+              </Button>
             )}
-          </form>
+          </RowForm>
         </>
       )}
 
-      <h3>Cadastradas</h3>
+      <Typography variant="h3" component="h3" sx={{ mb: 1 }}>
+        Cadastradas
+      </Typography>
       {rules.length === 0 ? (
-        <p className="muted">Nenhuma recorrência.</p>
+        <Typography color="text.secondary">Nenhuma recorrência.</Typography>
       ) : (
-        <table className="data" data-cy="rec-table">
-          <thead>
-            <tr>
-              <th>Descrição</th>
-              <th>Quando</th>
-              <th>Conta</th>
-              <th className="right">Valor estimado</th>
-              <th>Próxima</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((r) => {
-              const next = r.nextOccurrence;
-              const key = next ? `${r.id}:${next.period}` : r.id;
-              const adjustment = adjustmentLabel(r);
-              return (
-                <Fragment key={r.id}>
-                  <tr data-cy="rec-row" data-type={r.type}>
-                    <td>
-                      {r.description}
-                      <span className="sub">{r.category}</span>
-                    </td>
-                    <td>
-                      {scheduleLabel(r)}
-                      {r.endsOn && <span className="sub">até {dateLabel(r.endsOn)}</span>}
-                      {adjustment && (
-                        <span className="sub" data-cy="rec-adjustment">
-                          {adjustment}
-                        </span>
-                      )}
-                    </td>
-                    <td>{accountName(r.accountId)}</td>
-                    <td className={`right ${r.type === 'Income' ? 'positive' : 'negative'}`} data-cy="rec-value">
-                      {signed(r.type, r.amount, r.currency)}
-                      {r.pendingAdjustment && (
-                        <button
-                          className="link sub"
-                          data-cy="rec-adjust-pending"
-                          title="Confirmar o reajuste deste ano"
-                          onClick={() => setValuesOpen(r.id)}
-                        >
-                          reajuste de {periodLabel(r.pendingAdjustment.period)} pendente
-                        </button>
-                      )}
-                    </td>
-                    <td data-cy="rec-next">{next ? dateLabel(next.scheduledOn) : <span className="muted">encerrada</span>}</td>
-                    <td className="row-actions">
-                      {(next && launchForm(key)) || (
-                        <>
-                          {next && (
-                            <>
-                              <button
-                                className="link"
-                                data-cy="rec-launch-next"
-                                title={`Lançar a ocorrência de ${periodLabel(next.period)}`}
-                                onClick={() => openLaunch(r.id, next.period, next.amount, next.scheduledOn)}
-                              >
-                                lançar {periodLabel(next.period)}
-                              </button>
-                              <button
-                                className="link"
-                                data-cy="rec-skip-next"
-                                onClick={() => void handleSkip(r.id, next.period, r.description)}
-                              >
-                                pular
-                              </button>
-                            </>
-                          )}
-                          <button
-                            className="link"
-                            data-cy="rec-values-toggle"
-                            aria-expanded={valuesOpen === r.id}
-                            onClick={() => setValuesOpen(valuesOpen === r.id ? null : r.id)}
+        <TableBox>
+          <Table data-cy="rec-table" sx={{ minWidth: 860 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Descrição</TableCell>
+                <TableCell>Quando</TableCell>
+                <TableCell>Conta</TableCell>
+                <TableCell align="right">Valor estimado</TableCell>
+                <TableCell>Próxima</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rules.map((r) => {
+                const next = r.nextOccurrence;
+                const key = next ? `${r.id}:${next.period}` : r.id;
+                const adjustment = adjustmentLabel(r);
+                return (
+                  <Fragment key={r.id}>
+                    <TableRow data-cy="rec-row" data-type={r.type} sx={{ verticalAlign: 'top' }}>
+                      <TableCell>
+                        {r.description}
+                        <Sub>{r.category}</Sub>
+                      </TableCell>
+                      <TableCell>
+                        {scheduleLabel(r)}
+                        {r.endsOn && <Sub>até {dateLabel(r.endsOn)}</Sub>}
+                        {adjustment && <Sub dataCy="rec-adjustment">{adjustment}</Sub>}
+                      </TableCell>
+                      <TableCell>{accountName(r.accountId)}</TableCell>
+                      <TableCell
+                        align="right"
+                        data-cy="rec-value"
+                        sx={{ whiteSpace: 'nowrap', color: r.type === 'Income' ? 'success.main' : 'error.main' }}
+                      >
+                        {signed(r.type, r.amount, r.currency)}
+                        {r.pendingAdjustment && (
+                          <TextAction
+                            data-cy="rec-adjust-pending"
+                            title="Confirmar o reajuste deste ano"
+                            onClick={() => setValuesOpen(r.id)}
+                            sx={{ display: 'block', ml: 'auto', fontSize: '0.75rem' }}
                           >
-                            valores
-                          </button>
-                          <button className="link" data-cy="rec-edit" onClick={() => startEdit(r)}>
-                            editar
-                          </button>
-                          <button className="link-danger" data-cy="rec-remove" onClick={() => void handleRemove(r)}>
-                            excluir
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                  {valuesOpen === r.id && (
-                    <RecurrenceValuesRow
-                      key={`${r.id}:${r.version}`}
-                      rule={r}
-                      colSpan={6}
-                      onChanged={handleValuesChanged}
-                      onClose={() => setValuesOpen(null)}
-                    />
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                            reajuste de {periodLabel(r.pendingAdjustment.period)} pendente
+                          </TextAction>
+                        )}
+                      </TableCell>
+                      <TableCell data-cy="rec-next" sx={{ whiteSpace: 'nowrap' }}>
+                        {next ? (
+                          dateLabel(next.scheduledOn)
+                        ) : (
+                          <Box component="span" sx={{ color: 'text.secondary' }}>
+                            encerrada
+                          </Box>
+                        )}
+                      </TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        {(next && launchForm(key)) || (
+                          <>
+                            {next && (
+                              <>
+                                <TextAction
+                                  data-cy="rec-launch-next"
+                                  title={`Lançar a ocorrência de ${periodLabel(next.period)}`}
+                                  onClick={() => openLaunch(r.id, next.period, next.amount, next.scheduledOn)}
+                                >
+                                  lançar {periodLabel(next.period)}
+                                </TextAction>
+                                <TextAction data-cy="rec-skip-next" onClick={() => void handleSkip(r.id, next.period, r.description)}>
+                                  pular
+                                </TextAction>
+                              </>
+                            )}
+                            <TextAction
+                              data-cy="rec-values-toggle"
+                              aria-expanded={valuesOpen === r.id}
+                              onClick={() => setValuesOpen(valuesOpen === r.id ? null : r.id)}
+                            >
+                              valores
+                            </TextAction>
+                            <TextAction data-cy="rec-edit" onClick={() => startEdit(r)}>
+                              editar
+                            </TextAction>
+                            <TextAction danger data-cy="rec-remove" onClick={() => void handleRemove(r)}>
+                              excluir
+                            </TextAction>
+                          </>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    {valuesOpen === r.id && (
+                      <RecurrenceValuesRow
+                        key={`${r.id}:${r.version}`}
+                        rule={r}
+                        colSpan={6}
+                        onChanged={handleValuesChanged}
+                        onClose={() => setValuesOpen(null)}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableBox>
       )}
     </section>
+  );
+}
+
+/** Linha menor dentro da célula (categoria, fim, reajuste). */
+function Sub({ children, dataCy }: { children: ReactNode; dataCy?: string }) {
+  return (
+    <Box component="span" data-cy={dataCy} sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>
+      {children}
+    </Box>
   );
 }
