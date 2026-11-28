@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { accountsApi } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { invoicesApi, type CardLimit } from '../api/reports';
 import type { Account, CreditCard } from '../api/types';
+import { monthLabel, pendingChanges, todayIso } from '../cardCycle';
+import { CardEditRow } from './CardEditRow';
 import { InvoicesView } from './InvoicesView';
 
 /**
@@ -34,6 +36,9 @@ export function CardsView({
   const [closingDay, setClosingDay] = useState('10');
   const [dueDay, setDueDay] = useState('17');
   const [submitting, setSubmitting] = useState(false);
+  // CYC-5: cartão em edição (dados e ciclo) e o recado da última alteração.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // INV-7: cartão cujas faturas estão abertas (a aba mostra a lista ou as faturas).
   const [invoicesOf, setInvoicesOf] = useState<CreditCard | null>(null);
   const [initialDueMonth, setInitialDueMonth] = useState<string | undefined>(undefined);
@@ -156,6 +161,11 @@ export function CardsView({
       )}
 
       {error && <p className="error">{error}</p>}
+      {notice && (
+        <p className="notice" data-cy="card-notice">
+          {notice}
+        </p>
+      )}
       {loading ? (
         <p>Carregando…</p>
       ) : cards.length === 0 ? (
@@ -175,35 +185,68 @@ export function CardsView({
             </tr>
           </thead>
           <tbody>
-            {cards.map((c) => (
-              <tr key={c.id} className={c.isActive ? '' : 'inactive'}>
-                <td>{c.label}</td>
-                <td>{c.brand}</td>
-                <td>•••• {c.lastFourDigits}</td>
-                <td>{c.creditLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                <td
-                  data-cy="card-available"
-                  className={limits[c.id]?.availableLimit < 0 ? 'negative' : ''}
-                  title={limits[c.id] ? `Falta pagar ${limits[c.id].outstanding.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, com parcelas futuras` : undefined}
-                >
-                  {limits[c.id] ? limits[c.id].availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
-                </td>
-                <td>
-                  {c.closingDay}/{c.dueDay}
-                </td>
-                <td>{accountName(c.accountId)}</td>
-                <td>
-                  <button className="ghost small" data-cy="card-invoices" onClick={() => setInvoicesOf(c)}>
-                    Faturas
-                  </button>
-                  {c.isActive && (
-                    <button className="link-danger" onClick={() => void removeCard(c.id, load, setError)}>
-                      desativar
-                    </button>
+            {cards.map((c) => {
+              const today = todayIso();
+              const pending = pendingChanges(c.cycles, c.closingDay, c.dueDay, today);
+              return (
+                <Fragment key={c.id}>
+                  <tr className={c.isActive ? '' : 'inactive'} data-cy="card-row">
+                    <td>{c.label}</td>
+                    <td>{c.brand}</td>
+                    <td>•••• {c.lastFourDigits}</td>
+                    <td>{c.creditLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td
+                      data-cy="card-available"
+                      className={limits[c.id]?.availableLimit < 0 ? 'negative' : ''}
+                      title={limits[c.id] ? `Falta pagar ${limits[c.id].outstanding.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, com parcelas futuras` : undefined}
+                    >
+                      {limits[c.id] ? limits[c.id].availableLimit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                    </td>
+                    <td data-cy="card-cycle">
+                      {c.closingDay}/{c.dueDay}
+                      {pending.map((p) => (
+                        <span key={p.fromDueMonth} className="sub" data-cy="card-cycle-pending">
+                          a partir de {monthLabel(p.fromDueMonth!)}: {p.closingDay}/{p.dueDay}
+                        </span>
+                      ))}
+                    </td>
+                    <td>{accountName(c.accountId)}</td>
+                    <td>
+                      <button className="ghost small" data-cy="card-invoices" onClick={() => setInvoicesOf(c)}>
+                        Faturas
+                      </button>
+                      {c.isActive && (
+                        <button
+                          className="link"
+                          data-cy="card-edit-open"
+                          aria-expanded={editingId === c.id}
+                          onClick={() => setEditingId(editingId === c.id ? null : c.id)}
+                        >
+                          editar
+                        </button>
+                      )}
+                      {c.isActive && (
+                        <button className="link-danger" onClick={() => void removeCard(c.id, load, setError)}>
+                          desativar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {editingId === c.id && (
+                    <CardEditRow
+                      key={`${c.id}:${JSON.stringify(c.cycles)}:${c.creditLimit}:${c.label}`}
+                      card={c}
+                      colSpan={8}
+                      onClose={() => setEditingId(null)}
+                      onSaved={async (message) => {
+                        setNotice(message);
+                        await load();
+                      }}
+                    />
                   )}
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}

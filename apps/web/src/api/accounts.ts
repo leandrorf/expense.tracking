@@ -41,5 +41,17 @@ export const accountsApi = {
 
   removeCard: (id: string) => apiFetch<void>(`/api/credit-cards/${id}`, { method: 'DELETE' }),
 
+  /** CYC-2: corrige nome, bandeira, final e limite (a conta e o ciclo não mudam). */
+  editCard: (id: string, input: { label: string; brand: string; lastFourDigits: string; creditLimit: number }) =>
+    apiFetch<CreditCard>(`/api/credit-cards/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+
+  /** CYC-3: troca o ciclo a partir da fatura que vence em `fromDueMonth` (`yyyy-MM`). */
+  changeCardCycle: (id: string, input: { closingDay: number; dueDay: number; fromDueMonth: string }) =>
+    apiFetch<CreditCard>(`/api/credit-cards/${id}/cycle`, { method: 'PUT', body: JSON.stringify(input) }),
+
+  /** CYC-3: desfaz uma troca de ciclo que ainda não começou. */
+  undoCardCycle: (id: string, fromDueMonth: string) =>
+    apiFetch<CreditCard>(`/api/credit-cards/${id}/cycle/${fromDueMonth}`, { method: 'DELETE' }),
+
   paymentMethods: () => apiFetch<PaymentMethod[]>('/api/payment-methods'),
 };

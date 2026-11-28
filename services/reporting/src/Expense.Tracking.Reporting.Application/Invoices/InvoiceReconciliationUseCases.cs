@@ -167,7 +167,7 @@ public sealed class InvoiceReconciliationHandler(
             batch.StatedTotal,
             linesTotal,
             difference,
-            SuggestedDueMonth(batch, lines, new CardCycle(card.ClosingDay, card.DueDay)),
+            SuggestedDueMonth(batch, lines, card.Schedule()),
             new ReconciliationExplanationDto(explained.OnlyInBank, explained.OnlyInApp, explained.Different,
                 difference - explained.OnlyInBank - explained.OnlyInApp - explained.Different),
             entries
@@ -185,7 +185,7 @@ public sealed class InvoiceReconciliationHandler(
     /// ADR-0011, decisao 6: a fatura do fechamento declarado no OFX (<c>DTEND</c>); sem ele, a que recebe mais
     /// compras das linhas que nao sao parcela.
     /// </summary>
-    private static string? SuggestedDueMonth(ImportBatchSnapshot batch, IReadOnlyList<BankLine> lines, CardCycle cycle)
+    private static string? SuggestedDueMonth(ImportBatchSnapshot batch, IReadOnlyList<BankLine> lines, CardCycleSchedule cycle)
     {
         DateOnly? month = batch.StatementEnd is { } end
             ? cycle.DueMonthOf(end)

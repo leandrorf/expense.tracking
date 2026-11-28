@@ -18,10 +18,20 @@ export interface CreditCard {
   brand: string;
   lastFourDigits: string;
   creditLimit: number;
+  /** CYC-3: fechamento e vencimento do ciclo de hoje. */
   closingDay: number;
   dueDay: number;
   isActive: boolean;
   createdAtUtc: string;
+  /** CYC-3: todos os ciclos, com vigência (`fromDueMonth` nulo = o da criação, desde sempre). */
+  cycles?: CardCycle[];
+}
+
+/** CYC-3 (ADR-0012): um ciclo do cartão valendo a partir da fatura que vence em `fromDueMonth` (`yyyy-MM`). */
+export interface CardCycle {
+  fromDueMonth: string | null;
+  closingDay: number;
+  dueDay: number;
 }
 
 export interface PaymentMethod {

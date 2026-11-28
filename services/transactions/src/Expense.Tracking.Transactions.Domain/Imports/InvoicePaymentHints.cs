@@ -2,8 +2,20 @@ using System.Text;
 
 namespace Expense.Tracking.Transactions.Domain.Imports;
 
-/// <summary>Cartao da conta do extrato, candidato a ter a fatura paga por uma linha (so o que a sugestao usa).</summary>
-public sealed record InvoiceCardHint(Guid CardId, int DueDay);
+/// <summary>CYC-6 (ADR-0012, decisao 9): dia de vencimento valendo a partir da fatura de <see cref="FromDueMonth"/> (nulo = desde sempre).</summary>
+public sealed record CardDueDayFrom(DateOnly? FromDueMonth, int DueDay);
+
+/// <summary>
+/// Cartao da conta do extrato, candidato a ter a fatura paga por uma linha (so o que a sugestao usa).
+/// <see cref="DueDay"/> e o de hoje; <see cref="DueDays"/> (CYC-6), o historico dos ciclos.
+/// </summary>
+public sealed record InvoiceCardHint(Guid CardId, int DueDay, IReadOnlyList<CardDueDayFrom>? DueDays = null)
+{
+    /// <summary>CYC-6: o dia de vencimento do ciclo da fatura que vence em <paramref name="dueMonth"/>.</summary>
+    public int DueDayOf(DateOnly dueMonth) =>
+        DueDays?.Where(d => d.FromDueMonth is null || d.FromDueMonth <= dueMonth).OrderBy(d => d.FromDueMonth ?? DateOnly.MinValue)
+            .LastOrDefault()?.DueDay ?? DueDay;
+}
 
 /// <summary>
 /// INV-11 (ADR-0005, decisao 10): pistas no memo de um extrato de conta de que a saida e o
@@ -34,11 +46,14 @@ public static class InvoicePaymentHints
     /// Fatura que o pagamento provavelmente quita: a de vencimento mais proximo da data paga (o mes
     /// anterior, o mesmo ou o seguinte). Devolve o mes de vencimento (dia 1).
     /// </summary>
-    public static DateOnly SuggestDueMonth(DateOnly paidOn, int dueDay)
+    public static DateOnly SuggestDueMonth(DateOnly paidOn, int dueDay) => SuggestDueMonth(paidOn, _ => dueDay);
+
+    /// <summary>CYC-6 (ADR-0012, decisao 9): o mesmo, com o dia de vencimento do ciclo de cada mes candidato.</summary>
+    public static DateOnly SuggestDueMonth(DateOnly paidOn, Func<DateOnly, int> dueDayOf)
     {
         var month = new DateOnly(paidOn.Year, paidOn.Month, 1);
         return new[] { month.AddMonths(-1), month, month.AddMonths(1) }
-            .MinBy(m => Math.Abs(new DateOnly(m.Year, m.Month, Math.Min(dueDay, DateTime.DaysInMonth(m.Year, m.Month))).DayNumber - paidOn.DayNumber));
+            .MinBy(m => Math.Abs(new DateOnly(m.Year, m.Month, Math.Min(dueDayOf(m), DateTime.DaysInMonth(m.Year, m.Month))).DayNumber - paidOn.DayNumber));
     }
 
     /// <summary>

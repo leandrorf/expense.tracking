@@ -17,3 +17,4 @@ mudança de decisão vira um novo ADR que substitui o anterior.
 | [0009](0009-lembretes-de-vencimento.md) | Lembretes de vencimento calculados no reporting, no app e por e-mail diário confirmado (épico NTF) | Aceito | 2026-11-23 |
 | [0010](0010-reajuste-das-recorrencias.md) | Reajuste das recorrências com valor por vigência, sugerido pelo índice oficial e confirmado pelo usuário (épico RJT) | Aceito | 2026-11-25 |
 | [0011](0011-conciliacao-da-fatura-do-cartao.md) | Conciliação da fatura do cartão calculada no reporting, com o arquivo do banco lido do lote de importação (épico RCN) | Aceito | 2026-11-26 |
+| [0012](0012-editar-cartao-e-ciclo-da-fatura.md) | Edição do cartão e ciclo da fatura com vigência, guardado no accounts e lido na hora pelo reporting (épico CYC) | Aceito | 2026-11-26 |

@@ -2511,7 +2511,7 @@ reconhecidos e o selo de alterada depois da conferência. Total: 28 pts.
 
 **Ordem sugerida:** RCN-1 → RCN-3 → RCN-2 → RCN-4 → RCN-5 → RCN-6 → RCN-9 (fecha o Must) → RCN-7 → RCN-8.
 
-## 🔵 EPIC CYC — Editar o cartão e o ciclo da fatura  · *To Do*
+## 🟢 EPIC CYC — Editar o cartão e o ciclo da fatura  · *Done*
 **Problema:** o cartão não tem edição nenhuma: nome, final, limite e ciclo (dia de fechamento e de
 vencimento) são definidos ao criar, e para mudar qualquer um o usuário precisa criar outro cartão. O
 outro cartão não traz as compras, as parcelas, os pagamentos nem as conferências do antigo, e a fatura
@@ -2547,7 +2547,7 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
 - **O `accounts` não publica eventos.** O ciclo chega a quem precisa pela leitura na hora; não há projeção
   para atualizar.
 
-**Decisões em aberto (a CYC-1 registra a ADR-0012; recomendação do PO em cada uma):**
+**Decisões (aceitas na [ADR-0012](adr/0012-editar-cartao-e-ciclo-da-fatura.md), CYC-1; ficou a recomendação de cada uma, com os refinamentos da CYC-1):**
 1. **Como guardar a mudança de ciclo.** Opções: (a) **ciclo com vigência**: o cartão guarda uma lista de
    ciclos, cada um valendo a partir de um mês de vencimento; (b) trocar o ciclo e recalcular tudo
    (simples, mas reescreve o passado); (c) guardar as faturas fechadas (cópia dos períodos e dos totais) e
@@ -2573,25 +2573,61 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
    desfazer uma troca que ainda não valeu. Nada novo no gateway (`/api/credit-cards/**` já passa) nem no
    `identity`.
 
-- 🔵 **CYC-1** ADR: editar o cartão e o ciclo da fatura.
+- ✅ **CYC-1** ADR: editar o cartão e o ciclo da fatura. → [ADR-0012](adr/0012-editar-cartao-e-ciclo-da-fatura.md), Aceita.
   - *Dado* as decisões em aberto 1 a 6 deste épico, *quando* o dono do produto revisa as opções, *então* a
     ADR-0012 é registrada como **Aceita** em `docs/adr/` (com o índice atualizado), reabrindo a ADR-0005
     (decisão 3 e regra 4), e o PO ajusta as histórias seguintes ao que foi decidido.
+  - Refinamentos registrados na ADR além das recomendações: o primeiro ciclo continua nas colunas do cartão
+    (vale desde sempre) e as trocas vão para `card_cycles`; a fatura antiga que fecharia no mesmo dia ou
+    depois do primeiro fechamento novo deixa de existir (o mês de vencimento pula, achado ao escrever os
+    exemplos da CYC-3), então a da troca nunca fica vazia; a troca vale de um mês em que o primeiro
+    fechamento novo não passou e a fatura substituída não fechou, senão 400 `card.cycle_change_invalid` com a
+    próxima fatura possível; "hoje" no fuso do app, que o `accounts` passa a ler (`TimeZone`). Pendente
+    = vigência cuja fatura ainda não começou (trocar de novo substitui; `DELETE` desfaz). O cartão sai com o
+    ciclo de hoje em `closingDay`/`dueDay` e o histórico em `cycles` (o primeiro com `fromDueMonth` nulo),
+    também no `/internal/credit-cards`. A regra dos períodos encadeados fica no `reporting` e, para validar,
+    uma cópia no `accounts`, com os mesmos testes de exemplo. Cartão desativado não é editado (400
+    `card.inactive`).
   - Estimativa: 2 · **Must** · Dependências: —
-- 🔵 **CYC-2** Editar nome, bandeira, final e limite.
+- ✅ **CYC-2** Editar nome, bandeira, final e limite. → `PUT /credit-cards/{id}`.
+  - Feito assim: `PUT /credit-cards/{id}` (`{ label, brand, lastFourDigits, creditLimit }`) corrige os dados com as
+    regras e os códigos da criação (`card.label_required`, `card.label_too_long`, `card.last_four_invalid`,
+    `card.limit_negative`); a conta e o ciclo não mudam aqui. Cartão de outro dono = 404 `card.not_found`;
+    desativado = 400 `card.inactive`. Sem histórico do limite: o `reporting` lê o cartão a cada consulta, então o
+    disponível muda na hora. Smoke passo 24h (limite 5.000 → 8.000 sobe o disponível em 3.000; 55 passos).
   - *Dado* um cartão com limite de R$ 5.000, *quando* corrijo o nome e mudo o limite para R$ 8.000, *então*
     a lista e a fatura mostram o nome novo e o disponível sobe R$ 3.000 na hora.
   - *Dado* dados inválidos (final sem 4 dígitos, limite negativo, nome vazio), *quando* salvo, *então* recebo
     400 com as mesmas regras da criação.
   - Estimativa: 3 · **Should** · Dependências: —
-- 🔵 **CYC-3** Ciclo com vigência no `accounts`.
+- ✅ **CYC-3** Ciclo com vigência no `accounts`. → `card_cycles`, `PUT/DELETE /credit-cards/{id}/cycle`.
+  - Feito assim: o ciclo da criação continua nas colunas do cartão e as trocas ficam em `card_cycles` (cartão +
+    mês de vencimento de início, migration `CardCycles`). `CardCycleSchedule` (domínio) encadeia os períodos: a
+    fatura antiga que fecharia no mesmo dia ou depois do primeiro fechamento novo não existe (o mês pula), e o
+    início de cada fatura é o dia seguinte ao fechamento da anterior que existe; a ADR-0012 foi corrigida com
+    essa regra, achada ao escrever os exemplos. `PUT /credit-cards/{id}/cycle` (`{ closingDay, dueDay,
+    fromDueMonth }`) troca a partir de um mês em que o primeiro fechamento novo não passou e a fatura substituída
+    não fechou (senão 400 `card.cycle_change_invalid`, com a próxima fatura possível), substituindo as trocas
+    pendentes; `DELETE .../cycle/{yyyy-MM}` desfaz uma pendente (400 `card.cycle_already_started`, 404
+    `card.cycle_not_found`); mês inválido = 400 `card.month_invalid`, dias fora de 1 a 28 = 400
+    `card.day_invalid`, cartão desativado = 400 `card.inactive`. O cartão sai com o ciclo de hoje em
+    `closingDay`/`dueDay` e o histórico em `cycles`, também no `/internal/credit-cards`. O `accounts` passa a ler
+    `TimeZone` (compose: `APP_TIME_ZONE`). Smoke passo 24g (troca pendente e desfeita; 54 passos).
   - *Dado* um cartão que fecha dia 10 e vence dia 17, *quando* mudo para fechar dia 25 e vencer dia 5 a
     partir da fatura de março, *então* o cartão guarda os dois ciclos (o antigo desde sempre, o novo desde
     março) e o `GET` devolve `cycles` e o ciclo de hoje em `closingDay`/`dueDay`.
   - *Dado* uma fatura já fechada, *quando* tento mudar o ciclo a partir dela, *então* recebo 400; *e* mudar
     de novo antes de valer substitui a mudança pendente, que também pode ser desfeita.
   - Estimativa: 3 · **Must** · Dependências: CYC-1
-- 🔵 **CYC-4** Faturas pelo ciclo de cada período.
+- ✅ **CYC-4** Faturas pelo ciclo de cada período. → `CardCycleSchedule` no `reporting`.
+  - Feito assim: o `CardInfo` lido do `accounts` traz `cycles` (sem eles, o ciclo de hoje vale desde sempre) e
+    `CardInfo.Schedule()` monta a sequência de ciclos, com a mesma regra e os mesmos exemplos de teste do
+    `accounts`. O `InvoiceCalculator` usa o ciclo de cada período: compra na fatura que existe e cujo período
+    contém a data, e cada parcela na fatura seguinte que existe (pula o mês de vencimento que some). Faturas,
+    limite, avisos (pelas faturas carregadas, também no resumo por e-mail), previsão (compras e recorrências no
+    cartão) e a fatura sugerida na conciliação passam a usar a sequência. Pagamentos e conferências continuam
+    no mês de vencimento deles. Smoke passo 24g: uma compra em 3x tem a 3ª parcela na fatura da troca, que fecha
+    no dia 25 do ciclo novo.
   - *Dado* compras antes e depois da troca, *quando* consulto as faturas, *então* as fechadas continuam
     iguais (itens, total, pagamento, conferência), a da troca vai do dia seguinte ao último fechamento
     antigo até o primeiro fechamento novo, e as seguintes seguem o ciclo novo.
@@ -2599,18 +2635,37 @@ ciclo, reabrir esta decisão e a regra 4"); ideia de produto promovida a pedido 
     de vencimento (no app e no resumo por e-mail) e a fatura sugerida na conciliação, *então* todos usam o
     ciclo de cada período.
   - Estimativa: 5 · **Must** · Dependências: CYC-3
-- 🔵 **CYC-5** Editar o cartão e o ciclo na SPA.
+- ✅ **CYC-5** Editar o cartão e o ciclo na SPA. → `CardEditRow`, `card-edit.cy.ts`.
+  - Feito assim: "editar" no cartão (aba Cartões) abre uma linha com os dados (nome, bandeira, final, limite) e a
+    troca de ciclo (fecha dia, vence dia, a partir da fatura de). A fatura sugerida é a primeira possível e
+    acompanha os dias digitados até o usuário escolher o mês (o E2E pegou a sugestão presa ao ciclo antigo). A
+    prévia mostra o período e o vencimento da fatura da troca, avisa quando uma fatura deixa de existir (o
+    vencimento pula) e quando a troca pendente será substituída; com a fatura já fechada, a prévia diz isso e o
+    botão fica desligado. A prévia usa uma terceira cópia da regra, em TypeScript (`cardCycle.ts`), só
+    informativa: quem valida é o `accounts`. A troca pendente aparece na coluna Fecha/Vence ("a partir de
+    03/2027: 25/5") e na edição, com "desfazer". E2E: corrige nome e limite, recusa a fatura do mês passado,
+    troca a partir da sugerida e desfaz.
   - *Dado* a aba Cartões, *quando* edito um cartão, *então* corrijo nome, bandeira, final e limite; *e* ao
     mudar o fechamento e o vencimento escolho a partir de qual fatura vale e vejo a fatura da troca ("a
     fatura de março vai de 26/01 a 25/02 e vence 05/03") antes de confirmar.
   - *Dado* uma troca pendente, *quando* abro o cartão, *então* vejo "a partir da fatura de março: fecha dia
     25, vence dia 5" e posso desfazer.
   - Estimativa: 5 · **Must** · Dependências: CYC-3, CYC-4
-- 🔵 **CYC-6** Sugestão do mês da fatura paga pelo ciclo do período.
+- ✅ **CYC-6** Sugestão do mês da fatura paga pelo ciclo do período. → `InvoiceCardHint.DueDayOf`.
+  - Feito assim: o `transactions` lê o histórico dos ciclos no cartão do `accounts` e a sugestão de qual fatura
+    o pagamento importado quita compara a data paga com o vencimento de cada mês candidato pelo ciclo daquele
+    mês (sem histórico, o vencimento de hoje); a tela de importação faz o mesmo ao trocar a linha para
+    pagamento de fatura. Ex.: vence 17 hoje e 5 a partir de fev/2027; um pagamento em 30/01/2027 sugere a fatura
+    de fevereiro (5/2 está mais perto que 17/1).
   - *Dado* um pagamento de fatura no extrato, *quando* o app sugere qual fatura ele paga (importação no
     `transactions` e na SPA), *então* usa o vencimento do ciclo que vale para aquela data.
   - Estimativa: 2 · **Could** · Dependências: CYC-3
-- 🔵 **CYC-7** E2E Cypress: mudar o vencimento e conferir as faturas.
+- ✅ **CYC-7** E2E Cypress: mudar o vencimento e conferir as faturas. → `card-cycle-journey.cy.ts`.
+  - Feito assim: com as datas calculadas a partir de hoje, um cartão que fecha 10/vence 17 tem uma compra numa
+    fatura já fechada, paga pela tela; o limite vai de 5.000 para 8.000 (o disponível fica 8.000, nada em
+    aberto) e o ciclo passa a fechar 25/vencer 5 a partir da fatura sugerida, conferindo a prévia; uma compra
+    no dia 20 do mês do primeiro fechamento novo cai na fatura da troca, que fecha no dia 25 e vence no dia 5;
+    a fatura paga continua com o mesmo total, pagamento e situação. Fecha o Must do épico.
   - *Dado* um cartão com compras e uma fatura paga, *quando* mudo o fechamento e o vencimento a partir da
     próxima fatura pela SPA, *então* a fatura paga continua igual, a da troca tem o período e o vencimento
     novos, uma compra nova cai na fatura do ciclo novo e o limite novo aparece no disponível.

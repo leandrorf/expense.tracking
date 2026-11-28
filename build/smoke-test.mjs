@@ -607,6 +607,46 @@ async function main() {
   ok(reconRes.status === 200 && recon.difference === 12.34 && shown?.difference === 12.34 && undoRecon === 204,
     `conferencia da fatura ${reconMonth}: PUT ${reconRes.status}, diferenca ${recon.difference}, na fatura ${shown?.difference}, desfeita ${undoRecon}`);
 
+  // 24g) Troca de ciclo do cartao (CYC-3): a partir de duas faturas depois da atual, fica pendente com o
+  // historico; desfeita, volta ao ciclo da criacao.
+  const [cy, cm] = reconMonth.split('-').map(Number);
+  const cycleFrom = `${cm >= 11 ? cy + 1 : cy}-${String(((cm + 1) % 12) + 1).padStart(2, '0')}`;
+  const cycleRes = await fetch(`${GATEWAY}/api/credit-cards/${card.id}/cycle`, {
+    method: 'PUT', headers: auth, body: JSON.stringify({ closingDay: 25, dueDay: 5, fromDueMonth: cycleFrom }),
+  });
+  const cycled = cycleRes.status === 200 ? await cycleRes.json() : {};
+  // CYC-4: uma compra em 3x hoje tem a 3a parcela na fatura da troca, que fecha no dia 25 do mes anterior.
+  const cycleParcel = await (await installmentPurchase('CreditCard', card.id, 3)).json().catch(() => ({}));
+  const [fy, fm] = cycleFrom.split('-').map(Number);
+  const expectedClosing = `${fm === 1 ? fy - 1 : fy}-${String(fm === 1 ? 12 : fm - 1).padStart(2, '0')}-25`;
+  let transition;
+  for (let i = 0; i < 30 && transition?.closingDate !== expectedClosing; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    transition = (await (await fetch(`${GATEWAY}/api/reports/cards/${card.id}/invoices`, { headers: auth })).json())
+      .invoices?.find((inv) => inv.dueMonth === cycleFrom);
+  }
+  if (cycleParcel.id) await fetch(`${GATEWAY}/api/transactions/${cycleParcel.id}`, { method: 'DELETE', headers: auth });
+  const cycleUndo = await fetch(`${GATEWAY}/api/credit-cards/${card.id}/cycle/${cycleFrom}`, { method: 'DELETE', headers: auth });
+  const uncycled = cycleUndo.status === 200 ? await cycleUndo.json() : {};
+  ok(cycleRes.status === 200 && cycled.cycles?.length === 2 && cycled.cycles?.[1]?.fromDueMonth === cycleFrom
+    && cycled.closingDay === 10 && transition?.closingDate === expectedClosing && uncycled.cycles?.length === 1,
+    `troca de ciclo a partir de ${cycleFrom}: PUT ${cycleRes.status} (${cycled.cycles?.length} ciclos, hoje fecha ${cycled.closingDay}); `
+      + `fatura da troca fecha ${transition?.closingDate}; desfeita ${cycleUndo.status}`);
+
+  // 24h) Editar o cartao (CYC-2): limite de 5.000 para 8.000 sobe o disponivel em 3.000 na hora; volta a 5.000.
+  const availableOf = async () => ((await (await fetch(`${GATEWAY}/api/reports/cards/limits`, { headers: auth })).json())
+    .find((l) => l.cardId === card.id) ?? {}).availableLimit;
+  const availableBefore = await availableOf();
+  const editCard = (creditLimit) => fetch(`${GATEWAY}/api/credit-cards/${card.id}`, {
+    method: 'PUT', headers: auth,
+    body: JSON.stringify({ label: card.label, brand: card.brand, lastFourDigits: card.lastFourDigits, creditLimit }),
+  });
+  const editRes = await editCard(8000);
+  const availableAfter = await availableOf();
+  await editCard(5000);
+  ok(editRes.status === 200 && Math.round((availableAfter - availableBefore) * 100) / 100 === 3000,
+    `editar o cartao: PUT ${editRes.status}, disponivel ${availableBefore} -> ${availableAfter}`);
+
   // 25) Avisos (NTF-2): uma saida recorrente que vence amanha vira aviso; pulada, o aviso some.
   const tomorrow = isoDay(new Date(Date.now() + 86400000));
   const dueRule = await (await fetch(`${GATEWAY}/api/transactions/recurrences`, {

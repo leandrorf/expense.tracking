@@ -36,6 +36,11 @@ public static class DependencyInjection
         services.AddScoped<ListCreditCardsHandler>();
         services.AddScoped<GetCreditCardHandler>();
         services.AddScoped<DeactivateCreditCardHandler>();
+        // CYC-3 (ADR-0012): troca de ciclo com vigencia; "hoje" no fuso do app.
+        services.AddSingleton(AppCalendar.FromId(configuration["TimeZone"]));
+        services.AddScoped<ChangeCreditCardCycleHandler>();
+        services.AddScoped<EditCreditCardHandler>();
+        services.AddScoped<RemoveCreditCardCycleHandler>();
 
         if (!services.Any(d => d.ServiceType == typeof(TimeProvider)))
         {

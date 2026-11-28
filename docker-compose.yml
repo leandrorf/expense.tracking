@@ -90,6 +90,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
       ConnectionStrings__AccountsDb: "server=accounts-db;port=3306;database=${ACCOUNTS_DB_NAME:-expense_accounts};user=${ACCOUNTS_DB_USER:-expense};password=${ACCOUNTS_DB_PASSWORD:-expense};"
+      # CYC-3 (ADR-0012, decisao 3): "hoje" no mesmo fuso do transactions e do reporting (troca de ciclo do cartao).
+      TimeZone: ${APP_TIME_ZONE:-America/Sao_Paulo}
       # Issuer publico (para validar o 'iss' do token) + metadados pela rede interna.
       Jwt__Authority: ${IDENTITY_ISSUER:-http://localhost:5080}
       Jwt__MetadataAddress: "http://identity:8080/.well-known/openid-configuration"

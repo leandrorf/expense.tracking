@@ -27,5 +27,19 @@ internal sealed class CreditCardConfiguration : IEntityTypeConfiguration<CreditC
 
         builder.HasIndex(c => c.OwnerUserId);
         builder.HasIndex(c => c.AccountId);
+
+        // CYC-3 (ADR-0012, decisao 1): trocas de ciclo com vigencia por mes de vencimento.
+        builder.Ignore(c => c.Cycles);
+        builder.OwnsMany<CardCycleChange>("_cycleChanges", cycle =>
+        {
+            cycle.ToTable("card_cycles");
+            cycle.WithOwner().HasForeignKey("CardId");
+            cycle.Property<Guid>("CardId").HasColumnName("card_id");
+            cycle.Property(x => x.FromDueMonth).HasColumnName("from_due_month").HasColumnType("date");
+            cycle.Property(x => x.ClosingDay).HasColumnName("closing_day").IsRequired();
+            cycle.Property(x => x.DueDay).HasColumnName("due_day").IsRequired();
+            cycle.HasKey("CardId", nameof(CardCycleChange.FromDueMonth));
+        });
+        builder.Navigation("_cycleChanges").AutoInclude();
     }
 }

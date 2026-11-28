@@ -55,7 +55,12 @@ public sealed record Invoice(
 public static class InvoiceCalculator
 {
     public static IReadOnlyList<Invoice> Calculate(
-        CardCycle cycle, IEnumerable<CardCharge> charges, IEnumerable<InvoicePayment> payments, DateOnly today)
+        CardCycle cycle, IEnumerable<CardCharge> charges, IEnumerable<InvoicePayment> payments, DateOnly today) =>
+        Calculate(CardCycleSchedule.Single(cycle.ClosingDay, cycle.DueDay), charges, payments, today);
+
+    /// <summary>CYC-4 (ADR-0012, decisao 2): o mesmo calculo com os ciclos de cada periodo.</summary>
+    public static IReadOnlyList<Invoice> Calculate(
+        CardCycleSchedule cycle, IEnumerable<CardCharge> charges, IEnumerable<InvoicePayment> payments, DateOnly today)
     {
         var items = charges
             .SelectMany(charge => ItemsOf(cycle, charge))
@@ -107,7 +112,8 @@ public static class InvoiceCalculator
         return paid > 0 ? InvoiceStatus.PartiallyPaid : InvoiceStatus.Closed;
     }
 
-    private static IEnumerable<(DateOnly DueMonth, InvoiceItem Item)> ItemsOf(CardCycle cycle, CardCharge charge)
+    /// <summary>CYC-4: cada parcela cai na fatura seguinte que existe (um mes de vencimento pode pular na troca de ciclo).</summary>
+    private static IEnumerable<(DateOnly DueMonth, InvoiceItem Item)> ItemsOf(CardCycleSchedule cycle, CardCharge charge)
     {
         var firstDueMonth = cycle.DueMonthOf(charge.OccurredOn);
         if (charge.IsRefund)
@@ -118,10 +124,12 @@ public static class InvoiceCalculator
         }
 
         var parts = Installments.Split(charge.Amount, charge.Installments);
+        var dueMonth = firstDueMonth;
         for (var i = 0; i < parts.Count; i++)
         {
-            yield return (firstDueMonth.AddMonths(i), new InvoiceItem(
+            yield return (dueMonth, new InvoiceItem(
                 charge.TransactionId, charge.Category, charge.OccurredOn, parts[i], i + 1, parts.Count, charge.Description));
+            dueMonth = cycle.NextDueMonth(dueMonth);
         }
     }
 }

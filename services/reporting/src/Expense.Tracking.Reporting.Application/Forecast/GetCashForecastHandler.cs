@@ -187,7 +187,7 @@ public sealed class GetCashForecastHandler(
                 }
 
                 // A vista, na fatura da regra de corte (ADR-0005, decisao 4); receita no cartao e estorno.
-                var dueMonth = new CardCycle(scoped.Card.ClosingDay, scoped.Card.DueDay).DueMonthOf(occurrence.ScheduledOn);
+                var dueMonth = scoped.Card.Schedule().DueMonthOf(occurrence.ScheduledOn);
                 var (periodAmount, cardEstimatedPart) = rule.ForecastAmountFor(occurrence.Period, estimate);
                 var signed = isIncome ? -periodAmount : periodAmount;
                 invoices.Add(new RecurringInvoice(
