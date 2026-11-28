@@ -167,12 +167,6 @@ table.data tr.inactive {
 }
 
 /* LNC-5: o formulario de lancamento em modo edicao. */
-.editing-banner {
-  border-left: 3px solid #93c5fd;
-  padding: 0.4rem 0.8rem;
-  margin-bottom: 0.5rem;
-}
-
 /* INV-13: saldo da conta editado na propria linha. */
 .row-form.inline {
   display: inline-flex;
@@ -185,21 +179,6 @@ table.data tr.inactive {
 }
 
 /* LNC-7: recategorizar em lote. */
-.bulk-bar {
-  border-left: 3px solid #93c5fd;
-  padding: 0.4rem 0.8rem;
-  margin: 0.5rem 0;
-  align-items: center;
-}
-
-.select-cell {
-  width: 2rem;
-}
-
-table.data tr.selected td {
-  background: rgba(147, 197, 253, 0.08);
-}
-
 .notice .warning {
   border-left: 3px solid #f59e0b;
   padding-left: 0.6rem;

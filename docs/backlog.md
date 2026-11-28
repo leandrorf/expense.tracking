@@ -3111,7 +3111,7 @@ de licenças do projeto: nada pago para uso comercial (como FluentAssertions e M
     meta do mês usam o tema e os componentes do projeto, com os mesmos números, e a tabela rola dentro do
     próprio contêiner no celular.
   - Estimativa: 3 · **Must** · Dependências: MUI-2
-- 🔵 **MUI-4** Lançamentos. → `TransactionsView`.
+- ✅ **MUI-4** Lançamentos. → `TransactionsView`. Bundle medido: 168,6 KB gzip (+2,2 KB, com o `Checkbox`). Os 5 `.check()` da recategorização em lote viraram `.check({ force: true })` (ADR-0014, decisão 5); a célula do valor mantém as classes `positive`/`negative`, que um teste lê.
   - *Dado* a aba Lançamentos, *quando* cadastro, edito, excluo, recategorizo em lote e "repito todo mês",
     *então* tudo funciona como hoje, com formulário, tabela, filtros e mensagens do MUI.
   - Estimativa: 5 · **Must** · Dependências: MUI-2
